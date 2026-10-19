@@ -35,7 +35,8 @@ window.G = window.G || {};
         invis: false, invisUntil: -1, nextInvis: s.spec === 'shadow' ? 2.5 : Infinity, stealthCrit: false,
         bleed: 0, bleedUntil: -1, nextBleed: Infinity,
         firstCrits: Math.max((s.fx && s.fx.firstCrits) || 0, 0), dmgBonus: 0, hurtBonus: 0, nextHitBonus: 0,
-        swUsed: false, reviveAvail: !!spec.revive,
+        swUsed: false, reviveAvail: !!spec.revive, vanishUsed: false,
+        burn: 0, burnUntil: -1, nextBurn: Infinity, kiteNext: 0, dashTo: null,
         steal: spec.steal || 0, stolen: 0, escapeAfter: spec.escapeAfter || 0, split: spec.split || null,
         range: CB.ranges[s.range || 'melee'] || 1,
         ...extra,
@@ -50,7 +51,9 @@ window.G = window.G || {};
 
     const A = mk('a', { s: sa, name: opts.aName || 'You', hp: opts.aHp, revive: opts.aRevive }, 0);
     toSpecs(sb).forEach(sp => mk('b', { ...sp, revive: sp.revive != null ? sp.revive : opts.bRevive }, CB.startGap));
-    const result = { revived: { a: false, b: false }, goldStolen: 0 };
+    const result = { revived: { a: false, b: false }, goldStolen: 0, bloodrage: { a: 0, b: 0 } };
+    const pending = [];   // delayed actions (Echo recasts)
+    const PX = G.CONFIG.phoenix;
 
     const snap = (...fs) => { const h = {}; for (const f of fs) if (f) h[f.id] = [Math.max(0, f.hp), f.shield, Math.round(f.mana)]; return h; };
     const push = (e, ...fs) => { e.t = t; e.h = snap(...fs); events.push(e); };
@@ -84,15 +87,28 @@ window.G = window.G || {};
           const h = heal(def, fx.secondWind);
           if (h) push({ type: 'heal', src: def.id, amount: h, label: 'Second Wind' }, def);
         }
+        // Rogue 6: Vanish
+        if (fx.vanish && !def.vanishUsed && def.hp < def.maxHp / 2) {
+          def.vanishUsed = true; def.invis = true; def.invisUntil = Math.max(def.invisUntil, t + fx.vanish);
+          push({ type: 'stealth_on', src: def.id, label: 'Vanish' });
+        }
         return;
       }
       if (def.reviveAvail) {
         def.reviveAvail = false; def.hp = def.maxHp; result.revived[def.side] = true;
         push({ type: 'revive', src: def.id }, def);
+        if (def.s.gem === 'phoenix') phoenixBurst(def);
         return;
       }
       def.alive = false;
       push({ type: 'death', tgt: def.id, src: att ? att.id : null }, def);
+      // Warrior 6: Bloodrage
+      const afx = att && att.s.fx;
+      if (afx && afx.bloodrage && att.alive) {
+        result.bloodrage[att.side] += afx.bloodrage;
+        const h = heal(att, afx.bloodrage);
+        if (h) push({ type: 'heal', src: att.id, amount: h, label: 'Bloodrage' }, att);
+      }
       if (def.split) {
         const sp = def.split;
         for (let i = 0; i < sp.count; i++) {
@@ -100,6 +116,19 @@ window.G = window.G || {};
           child.nextAtk = t + 0.6 + i * 0.2;
           push({ type: 'spawn', src: child.id, parent: def.id }, child);
         }
+      }
+    }
+
+    // Phoenix rebirth: every enemy takes a burst and starts burning
+    function phoenixBurst(f) {
+      const tgts = foes(f);
+      push({ type: 'burst', src: f.id, tgts: tgts.map(x => x.id) });
+      for (const d of tgts) {
+        if (!d.alive) continue;
+        const r = damage(d, PX.burst, null);
+        push({ type: 'spellhit', src: f.id, tgt: d.id, amount: r.dealt, absorbed: r.absorbed, name: 'Rebirth' }, d);
+        afterDamage(d, f);
+        if (d.alive) { d.burn = PX.burn; d.burnUntil = t + PX.burnSeconds + 0.01; d.nextBurn = t + 1; }
       }
     }
 
@@ -121,8 +150,24 @@ window.G = window.G || {};
         afterDamage(d, f);
       }
       f.mana = 0;
+      if (fx.echo) pending.push({ at: t + 1, f, sp });
       if (fx.spellHeal) { const h = heal(f, fx.spellHeal); if (h) push({ type: 'heal', src: f.id, amount: h }, f); }
       if (fx.spellStack) f.dmgBonus += fx.spellStack;
+    }
+
+    // Mage 6: Echo recasts the spell for half damage, without using mana
+    function echo(f, sp) {
+      if (!f.alive) return;
+      const tgts = sp.aoe ? foes(f) : [target(f)].filter(Boolean);
+      if (!tgts.length) return;
+      const half = Math.max(CB.minHit, 2 * Math.round(sp.dmg / 4));
+      push({ type: 'cast', src: f.id, name: sp.name + ' (Echo)', aoe: sp.aoe, tgts: tgts.map(x => x.id), echo: true }, f);
+      for (const d of tgts) {
+        if (!d.alive) continue;
+        const r = damage(d, Math.max(CB.minHit, half - (d.s.ward || 0)), f);
+        push({ type: 'spellhit', src: f.id, tgt: d.id, amount: r.dealt, absorbed: r.absorbed, name: sp.name }, d);
+        afterDamage(d, f);
+      }
     }
 
     function addMana(f, n) {
@@ -161,13 +206,16 @@ window.G = window.G || {};
         : Math.max(CB.minHit, raw - Math.max(0, (def.s.armor || 0) - (att.s.pierce || 0)));
       let holy = att.s.holy || 0;
       if (fx.executeHoly && def.hp < def.maxHp / 2) holy += fx.executeHoly;
-      if (holy) amt += Math.max(0, holy - (def.s.ward || 0));
+      const holyPart = holy ? Math.max(0, holy - (def.s.ward || 0)) : 0;
+      amt += holyPart;
       if (fx.everyFourthMagic && att.atkCount % 4 === 0) amt += Math.max(0, fx.everyFourthMagic - (def.s.ward || 0));
       const r = damage(def, amt, att);
       push({ type: 'hit', src: att.id, tgt: def.id, amount: r.dealt, absorbed: r.absorbed, crit, counter: !!counter, kind: att.s.type, ranged: att.range > 1 }, att, def);
       att.hitsLanded++;
       if (def.s.fx && def.s.fx.hurtStack) def.hurtBonus = Math.min(def.s.fx.hurtCap, def.hurtBonus + def.s.fx.hurtStack);
-      if (att.s.leech > 0) { const h = heal(att, att.s.leech); if (h) push({ type: 'heal', src: att.id, amount: h }, att); }
+      // Life on Hit, plus Paladin 6: Consecration (holy damage heals you)
+      const lifeOnHit = (att.s.leech || 0) + (fx.consecrate ? holyPart : 0);
+      if (lifeOnHit > 0) { const h = heal(att, lifeOnHit); if (h) push({ type: 'heal', src: att.id, amount: h }, att); }
       if (att.s.healEvery && att.hitsLanded % att.s.healEvery.n === 0) {
         const h = heal(att, att.s.healEvery.amount);
         if (h) push({ type: 'heal', src: att.id, amount: h }, att);
@@ -217,9 +265,16 @@ window.G = window.G || {};
 
     while (t < CB.maxTime && !done()) {
       t = Math.round((t + CB.dt) * 1000) / 1000;
-      // Move into range
+      // Move into range (or finish a Kiting step back)
       for (const f of fighters) {
         if (!f.alive) continue;
+        if (f.dashTo != null) {
+          const d = f.dashTo - f.pos, step = Math.min(Math.abs(d), 10 * CB.dt);
+          f.pos += Math.sign(d) * step;
+          tracks[f.id].push([t, Math.round(f.pos * 100) / 100]);
+          if (Math.abs(f.dashTo - f.pos) < 1e-6) f.dashTo = null;
+          continue;
+        }
         const tg = target(f);
         if (!tg) continue;
         const d = Math.abs(tg.pos - f.pos);
@@ -229,11 +284,29 @@ window.G = window.G || {};
           tracks[f.id].push([t, Math.round(f.pos * 100) / 100]);
         }
       }
+      // Archer 6: Kiting. When a foe reaches melee range, step back 3.
+      for (const f of fighters) {
+        const kite = f.alive && f.s.fx && f.s.fx.kite;
+        if (!kite || f.dashTo != null || t < f.kiteNext) continue;
+        const near = foes(f).some(x => Math.abs(x.pos - f.pos) <= 1 + 1e-6);
+        if (!near) continue;
+        const dir = f.side === 'a' ? -1 : 1;
+        const to = Math.max(-CB.kiteEdge, Math.min(CB.startGap + CB.kiteEdge, f.pos + dir * 3));
+        if (Math.abs(to - f.pos) < 0.8) continue;
+        f.dashTo = to; f.kiteNext = t + kite;
+        push({ type: 'kite', src: f.id });
+      }
+      for (let i = pending.length - 1; i >= 0; i--) if (pending[i].at <= t) { const p = pending.splice(i, 1)[0]; echo(p.f, p.sp); }
       for (const f of fighters) {
         if (!f.alive) continue;
-        if (f.s.spec === 'shadow') {
-          if (!f.invis && t >= f.nextInvis) { f.invis = true; f.invisUntil = t + SH.duration; f.nextInvis = t + SH.every; f.stealthCrit = true; push({ type: 'stealth_on', src: f.id }); }
-          else if (f.invis && t >= f.invisUntil) { f.invis = false; push({ type: 'stealth_off', src: f.id }); }
+        if (f.s.spec === 'shadow' && !f.invis && t >= f.nextInvis) { f.invis = true; f.invisUntil = t + SH.duration; f.nextInvis = t + SH.every; f.stealthCrit = true; push({ type: 'stealth_on', src: f.id }); }
+        else if (f.invis && t >= f.invisUntil) { f.invis = false; push({ type: 'stealth_off', src: f.id }); }
+        if (f.burnUntil >= t && t >= f.nextBurn) {
+          f.nextBurn = t + 1;
+          const r = damage(f, f.burn, null);
+          push({ type: 'burn', tgt: f.id, amount: r.dealt }, f);
+          afterDamage(f, null);
+          if (!f.alive) continue;
         }
         if (f.bleedUntil >= t && t >= f.nextBleed) {
           f.nextBleed = t + 1;
@@ -269,7 +342,7 @@ window.G = window.G || {};
     return {
       events, tracks, fighters: meta, winner, timeout, duration: t,
       aHp: Math.max(0, A.hp), bHp: B0 ? Math.max(0, B0.hp) : 0,
-      revived: result.revived, goldStolen: result.goldStolen,
+      revived: result.revived, goldStolen: result.goldStolen, bloodrage: result.bloodrage,
     };
   }
 

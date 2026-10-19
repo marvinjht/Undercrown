@@ -4,8 +4,8 @@ window.G = window.G || {};
 G.GEMS = {
   phoenix: {
     name: 'Phoenix Heart', color: '#ff8a4c',
-    up: 'Once per run, when you would die (dungeon or tournament), revive at full health.',
-    cost: 'Max Health becomes 50 for the rest of the run (gear Health ignored).',
+    up: 'Once per run, when you would die (dungeon or tournament), you are reborn at full health and explode: every enemy takes 50 damage and burns for 10 a second for 5 seconds.',
+    cost: 'Max Health is capped at 100 for the rest of the run. Gear Health past 100 does nothing.',
   },
   stone: {
     name: 'Heart of Stone', color: '#a8a39a',

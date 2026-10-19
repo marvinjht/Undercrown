@@ -16,10 +16,12 @@ window.G = window.G || {};
     return t;
   }
 
-  // Set counts and which bonuses are active
+  // Set counts and which bonuses are active. All 6 slots count (5 armor + weapon).
+  //   look = the class with 4+ pieces (changes color and silhouette); full = 6 of it
+  //   main = the strongest active class (for labels); trim = the hybrid partner
   function sets(hero) {
     const counts = {}, maxTier = {};
-    for (const slot of G.ARMOR_SLOTS) {
+    for (const slot of G.SLOTS) {
       const it = hero.gear[slot];
       if (!it || !it.set) continue;
       counts[it.set] = (counts[it.set] || 0) + 1;
@@ -27,16 +29,24 @@ window.G = window.G || {};
     }
     const active = [];
     for (const c of G.CLASS_ORDER) {
-      if ((counts[c] || 0) >= 4) active.push({ cls: c, tier: 'four' });
-      else if ((counts[c] || 0) >= 2) active.push({ cls: c, tier: 'two' });
+      const n = counts[c] || 0;
+      if (n >= 6) active.push({ cls: c, tier: 'six' });
+      else if (n >= 4) active.push({ cls: c, tier: 'four' });
+      else if (n >= 2) active.push({ cls: c, tier: 'two' });
     }
-    let hybrid = null;
-    if (active.length === 2) hybrid = G.hybridKey(active[0].cls, active[1].cls);
-    // Look: the class with 3+ pieces; trim from the hybrid partner
-    const main = active.length ? active.slice().sort((a, b) => (counts[b.cls] || 0) - (counts[a.cls] || 0))[0].cls : null;
-    const trim = hybrid ? (hybrid.split('+').find(c => c !== main) || null) : null;
-    return { counts, active, hybrid, main, trim, maxTier };
+    const byCount = active.slice().sort((a, b) => (counts[b.cls] || 0) - (counts[a.cls] || 0));
+    const main = byCount.length ? byCount[0].cls : null;
+    const look = main && counts[main] >= 4 ? main : null;
+    const full = !!(look && counts[look] >= 6);
+    let hybrid = null, trim = null;
+    if (look && !full) {
+      const partner = byCount.find(a => a.cls !== look && counts[a.cls] >= 2);
+      if (partner) { hybrid = G.hybridKey(look, partner.cls); trim = partner.cls; }
+    }
+    return { counts, active, hybrid, main, look, full, trim, maxTier };
   }
+  // Which bonus tiers a class tier turns on (6 = the 4-piece bonus plus the capstone)
+  const TIERS = { two: ['two'], four: ['four'], six: ['four', 'six'] };
 
   function compute(hero, opts = {}) {
     const P = C().player, CB = C().combat;
@@ -47,10 +57,12 @@ window.G = window.G || {};
     const fx = {};
     const add = (stats) => { for (const k in stats || {}) t[k] = (t[k] || 0) + stats[k]; };
     for (const a of st.active) {
-      const b = G.CLASSES[a.cls][a.tier];
-      add(b.stats);
-      for (const k in b) if (k !== 'stats' && k !== 'desc') fx[k] = b[k];
-      if (b.arcane) fx.arcane = even(b.arcane * (1 + ((st.maxTier[a.cls] || 1) - 1) * C().loot.tierGrowth));
+      for (const tier of TIERS[a.tier]) {
+        const b = G.CLASSES[a.cls][tier];
+        add(b.stats);
+        for (const k in b) if (!['stats', 'desc', 'name'].includes(k)) fx[k] = b[k];
+        if (b.arcane) fx.arcane = even(b.arcane * (1 + ((st.maxTier[a.cls] || 1) - 1) * C().loot.tierGrowth));
+      }
     }
     if (st.hybrid) {
       const h = G.HYBRIDS[st.hybrid];
@@ -89,7 +101,7 @@ window.G = window.G || {};
     // Heart gems
     if (hero.gem === 'pure') { s.maxHp += 20; s.dmg += 2; }
     if (hero.gem === 'gaia') s.shield += 50;
-    if (hero.gem === 'phoenix') s.maxHp = 50;
+    if (hero.gem === 'phoenix') s.maxHp = Math.min(s.maxHp, C().phoenix.cap);
     if (hero.gem === 'stone') s.maxHp = 30;
 
     // Bag buffs (next fight only)
@@ -122,12 +134,17 @@ window.G = window.G || {};
     let def = (s.maxHp + s.shield) * REF_HIT / Math.max(2, REF_HIT - s.armor) / (1 - s.dodge / 100);
     def *= 1 + s.ward * 0.02 + s.leech * s.atkSpd * 0.15;
     if (s.fx.secondWind) def += s.fx.secondWind;
+    if (s.fx.echo && s.spell && s.manaGain > 0) off *= 1.2;
+    if (s.fx.kite) def *= 1.15;
+    if (s.fx.consecrate) def *= 1 + Math.min(0.3, s.holy * 0.03);
+    if (s.fx.vanish) def *= 1.1;
+    if (s.fx.bloodrage) def *= 1.08;
     if (s.spec === 'shadow') { def *= 1.4; off *= 1.1; }
     if (s.spec === 'duelist') def *= 1.3;
     if (s.spec === 'berserker') off *= 1.25;
     if (s.gem === 'devil') { off *= 2; def /= 2; }
     if (s.gem === 'stone') def *= 6;
-    if (s.gem === 'phoenix') def *= 1.6;
+    if (s.gem === 'phoenix') def *= 1.7;
     return Math.sqrt(off * def);
   }
 
@@ -161,8 +178,8 @@ window.G = window.G || {};
       hero.gem = id;
       const max = compute(hero).maxHp;
       hero.hp = Math.max(1, Math.min(max, hero.hp));
-      const cap = id === 'stone' ? 30 : id === 'phoenix' ? 50 : 0;
-      if (cap) hero.hp = Math.min(cap, Math.max(1, Math.round(hero.hp * cap / Math.max(1, compute({ ...hero, gem: null }).maxHp))));
+      // Heart of Stone shrinks your health in proportion; Phoenix just caps it
+      if (id === 'stone') hero.hp = Math.min(30, Math.max(1, Math.round(hero.hp * 30 / Math.max(1, compute({ ...hero, gem: null }).maxHp))));
     },
     // All healing outside fights goes through here so heart gems apply
     heal(hero, amount) {

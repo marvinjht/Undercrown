@@ -20,11 +20,11 @@ G.ASSETS = {
 
     weapon_daggers: null, weapon_saber: null, weapon_swordShield: null, weapon_longsword: null,
     weapon_greatAxe: null, weapon_greatHammer: null, weapon_mace: null, weapon_maceShield: null,
-    weapon_shortbow: null, weapon_longbow: null, weapon_wand: null, weapon_wandFocus: null, weapon_staff: null,
+    weapon_shortbow: null, weapon_longbow: null, weapon_wandFocus: null, weapon_staff: null,
 
     proj_arrow: null, proj_bolt: null, fx_ring: null,
 
-    monster_rat: null, monster_slime: null, monster_wolf: null, monster_skeleton: null, monster_goblin: null,
+    monster_rat: null, monster_slime: null, monster_slimeElite: null, monster_wolf: null, monster_skeleton: null, monster_goblin: null,
     monster_thief: null, monster_orc: null, monster_golem: null, monster_wraith: null, monster_troll: null,
     monster_ogre: null, monster_cultist: null,
     monster_boneKing: null, monster_gorehorn: null, monster_warden: null,
@@ -35,7 +35,7 @@ G.ASSETS = {
 
     icon_daggers: null, icon_saber: null, icon_swordShield: null, icon_longsword: null, icon_greatAxe: null,
     icon_greatHammer: null, icon_mace: null, icon_maceShield: null, icon_shortbow: null, icon_longbow: null,
-    icon_wand: null, icon_wandFocus: null, icon_staff: null,
+    icon_wandFocus: null, icon_staff: null,
 
     icon_potion_potion: null, icon_potion_greater: null, icon_potion_antidote: null, icon_potion_iron: null,
     icon_potion_salve: null, icon_potion_fury: null, icon_potion_tonic: null, icon_potion_draught: null,
@@ -43,6 +43,6 @@ G.ASSETS = {
 
     icon_door_fight: null, icon_door_elite: null, icon_door_boss: null, icon_door_treasure: null,
     icon_door_rest: null, icon_door_shop: null, icon_door_mystery: null, icon_door_armory: null,
-    icon_door_venom: null, icon_door_purify: null,
+    icon_door_venom: null, icon_door_purify: null, icon_door_merchant: null,
   },
 };

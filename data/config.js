@@ -25,8 +25,8 @@ G.CONFIG = {
   shop: {
     reviewSeconds: 10,  // everyone looks over the table before picks start
     turnSeconds: 20,    // each player's turn to pick
-    lastCall: 10,       // after the last pick, time left for merchant purchases
     aiPickDelay: 1.4,
+    // Everything below is the merchant door
     passGold: 30,       // gold for passing on the free table (also what happens if your turn runs out)
     extraTableItems: 2,                   // free table = players + this
     potionCost: 30, potionsPerShop: 1,
@@ -36,8 +36,12 @@ G.CONFIG = {
   },
   salvage: { grey: 2, green: 8, gold: 20 },
 
-  doorWeights: { fight: 46, elite: 16, treasure: 10, rest: 12, mystery: 8, venom: 6, purify: 6 },
-  doorMinRoom: { fight: 2, elite: 4, treasure: 3, rest: 4, mystery: 3, venom: 5, purify: 5 },
+  doorWeights: { fight: 46, elite: 16, treasure: 10, rest: 12, mystery: 8, venom: 6, purify: 6, merchant: 24 },
+  doorMinRoom: { fight: 2, elite: 4, treasure: 3, rest: 4, mystery: 3, venom: 5, purify: 5, merchant: 3 },
+  // Merchant door never shows up next to a shop round (the room before or after) or in boss rooms
+  merchantGapFromShop: 1,
+
+  phoenix: { cap: 100, burst: 50, burn: 10, burnSeconds: 5 },
   purifyWeightPoisoned: 18,
 
   gold: { fight: [8, 12], elite: [16, 24], boss: [40, 50], skipItemBase: 10, treasureHunterBonus: 4 },
@@ -71,6 +75,7 @@ G.CONFIG = {
     fastAfter: 10,
     startGap: 6,          // steps between the sides at the start
     moveSpeed: 2,         // steps per second
+    kiteEdge: 1.4,        // how far past the start lines a Kiting archer can step back
     ranges: { melee: 1, near: 4, far: 6 },
     minHit: 2,
     dodgeCap: 30,

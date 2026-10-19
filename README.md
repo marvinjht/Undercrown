@@ -1,19 +1,26 @@
-# Thirty Doors (prototype v2)
+# Thirty Doors (prototype v3)
 
 Single-player prototype of a dungeon auto battler. You and 5 AI rivals each walk 30 rooms.
-Room 1 is the Armory (pick 1 of 3 random weapons). Rooms 8, 16 and 24 are shared shop rounds.
-Every round is timed and ends as soon as everyone is ready. Health never refills on its own.
+Room 1 is the Armory (pick 1 of 3 random weapons). Rooms 8, 16 and 24 are shop rounds (free picks,
+weakest first). Merchant doors show up during the run. Every round is timed and ends as soon as
+everyone is ready. Health never refills on its own.
 
-v2 adds: 13 weapons (bows, wands, staff, maces) with range and physical/magic damage, mana and
-spells, five class sets with 3/5 and 5/5 bonuses and ten hybrid archetypes, heart gems after the
-room 10 boss, monster packs (wolves, golems, thieves, splitting slimes), a 3-slot item bag with
-potions and buffs, poison doors, and the shared shop with weakest-first free picks.
-v1 is kept in git as the tag `v1`.
+v3 adds:
+- Sets counted over 6 slots (5 armor + weapon). Bonuses at 2, 4 and 6 pieces; hybrids at 4 + 2.
+- Weapons roll class tags limited to the classes that fit them (data/weapons.js `classes`).
+- 6-piece capstones: Bloodrage, Echo, Kiting, Consecration, Vanish.
+- Your color and look change at 4 pieces. A preview of your character sits under the doors.
+- Phoenix Heart: 100 max HP cap, reborn at 100 with an explosion and burn.
+- Slimes split once; an Elite Slime (room 15+) splits twice.
+- Merchant moved out of the shop round into its own door.
+- Tournament bracket, rivals panel on the left, bonus stats on their own lines.
+
+v1 and v2 are kept in git as the tags `v1` and `v2`.
 
 ## Stats (all flat, even numbers)
 
 - Health, Damage (per hit), Speed (attacks per 10 seconds), Range (Melee 1 / Near 4 / Far 6 steps)
-- Armor: subtracted from physical hits. Ward: subtracted from magic hits (spells, wands, holy)
+- Armor: subtracted from physical hits. Ward: subtracted from magic hits (spells, wands, staffs, holy)
 - Crit / Dodge / Stun: out of 100. Crits deal double damage plus Crit Damage
 - Shield: soaks damage at the start of each fight. Bleed: damage per second for 3 seconds
 - Mana fills per attack; at 100 you cast your spell

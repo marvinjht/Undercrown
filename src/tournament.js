@@ -1,6 +1,7 @@
 // Tournament rules:
 //  - Enter at the health you left the dungeon with, plus a heal of 30% of max health.
 //  - That number is your "arena health". You start every match at it (winners reset to it).
+//    Warrior 6 (Bloodrage) raises it by the kill heal after each win.
 //  - Seeded by arena health (ties: build power). If the field isn't a power of two,
 //    the top seeds get byes into round two.
 window.G = window.G || {};
@@ -60,6 +61,15 @@ window.G = window.G || {};
     if (result.revived.b) m.b.hero.phoenixUsed = true;
     m.winner = result.winner === 'a' ? m.a : m.b;
     const loser = m.winner === m.a ? m.b : m.a;
+    // Warrior 6 (Bloodrage): the kill heal carries into the winner's next match
+    const rage = result.bloodrage ? result.bloodrage[result.winner] : 0;
+    if (rage) {
+      const g = m.winner.hero.gem;
+      const add = g === 'gaia' ? 0 : g === 'stone' ? 1 : rage;
+      const before = m.winner.entryHp;
+      m.winner.entryHp = Math.min(m.winner.maxHp, m.winner.entryHp + add);
+      m.rageHeal = m.winner.entryHp - before;
+    }
     const round = currentRound(T);
     loser.place = round.size / 2 + 1; // final loser = 2nd, semis = 3rd, quarters = 5th
     if (round.matches.every(x => x.result)) {

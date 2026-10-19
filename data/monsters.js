@@ -9,7 +9,9 @@ window.G = window.G || {};
 G.MONSTERS = [
   { id: 'rat',      name: 'Giant Rat',        minRoom: 2,  maxRoom: 7,  hp: 0.8, hit: 0.7, spd: 14 },
   { id: 'slime',    name: 'Splitting Slime',  minRoom: 2,  maxRoom: 16, hp: 0.5, hit: 0.8, spd: 8, scale: 1.25,
-    split: { count: 2, hp: 0.25, hit: 0.6, scale: 0.9, next: { count: 2, hp: 0.125, hit: 0.45, scale: 0.6 } } },
+    split: { count: 2, hp: 0.25, hit: 0.55, scale: 0.85 } },
+  { id: 'slimeElite', name: 'Elite Slime',    minRoom: 15, maxRoom: 30, hp: 0.6, hit: 0.85, spd: 8, scale: 1.35,
+    split: { count: 2, hp: 0.3, hit: 0.6, scale: 0.95, next: { count: 2, hp: 0.15, hit: 0.45, scale: 0.65 } } },
   { id: 'wolf',     name: 'Wolf Pack',        minRoom: 3,  maxRoom: 14, pack: 3, memberName: 'Wolf', hp: 0.45, hit: 0.5, spd: 14, bleed: 2 },
   { id: 'skeleton', name: 'Skeleton',         minRoom: 3,  maxRoom: 14, hp: 1.0, hit: 1.0, spd: 10, armor: 2 },
   { id: 'goblin',   name: 'Goblin Cutthroat', minRoom: 4,  maxRoom: 16, hp: 0.8, hit: 0.75, spd: 16, dodge: 12, crit: 10 },

@@ -8,10 +8,16 @@ window.G = window.G || {};
   const render = () => G.UI.render();
   const now = () => Date.now();
 
-  // What a hero looks like in the arena (class silhouette + hybrid trim)
+  // What a hero looks like in fights and in the door preview.
+  // 4+ pieces of a class: that class's silhouette and color. 4 + 2: a trim ring in the second class's color.
+  // 6 pieces: the full look (an aura in the class color).
   function visualFor(hero) {
     const st = G.Stats.sets(hero);
-    return { look: st.main, trim: st.trim, weapon: hero.gear.weapon ? 'weapon_' + hero.gear.weapon.weaponType : null, tint: hero.tint };
+    return {
+      look: st.look, trim: st.trim, full: st.full,
+      weapon: hero.gear.weapon ? 'weapon_' + hero.gear.weapon.weaponType : null,
+      tint: st.look ? G.CLASSES[st.look].tint : hero.tint,
+    };
   }
 
   const Game = {
@@ -86,6 +92,7 @@ window.G = window.G || {};
           break;
         case 'spec': { const id = G.AI.autoSpec(p, s.specOptions); auto = `Time ran out. You became a ${G.SPECS[id].name}.`; break; }
         case 'gem': { const id = G.AI.autoGem(p, s.gemOptions); auto = `Time ran out. You took the ${G.GEMS[id].name}.`; break; }
+        case 'merchant': auto = 'Time ran out, so you left the merchant.'; break;
       }
       if (!p.alive) { s.phase = 'dead'; s.roundEnds = 0; s.notice = auto; render(); return; }
       s.notice = auto;
@@ -156,6 +163,7 @@ window.G = window.G || {};
           return;
         }
         case 'mystery': s.mystery = G.Dungeon.rollMystery(s.rng); s.phase = 'mystery'; break;
+        case 'merchant': s.merchant = G.Dungeon.merchantStock(p, s.room, s.rng); s.phase = 'merchant'; break;
       }
       render();
     },
@@ -172,7 +180,7 @@ window.G = window.G || {};
       const res = G.simulateFight(G.Stats.compute(p, { buffs: true }), foes, G.Dungeon.fightOpts(p, s.rng.int(0, 1e9)));
       s.battle = {
         kind, lootKind, monster, res, title: G.Dungeon.monsterName(monster, kind),
-        visual: { a: { ...visualFor(p), tint: G.PLAYER_TINT } },
+        visual: { a: visualFor(p) },
         done: false, onDone: () => this.battleDone(false),
       };
       s.phase = 'battle';
@@ -185,7 +193,7 @@ window.G = window.G || {};
       b.done = true;
       const out = G.Dungeon.applyFight(p, b.res, s.room);
       const notes = [];
-      if (b.res.revived.a) notes.push('Phoenix Heart burned: you rose again at full health.');
+      if (b.res.revived.a) notes.push('Phoenix Heart burned: you were reborn at full health and exploded.');
       if (b.res.goldStolen) notes.push(`A thief escaped with ${b.res.goldStolen} gold.`);
       if (out === 'dead') { s.phase = 'dead'; s.roundEnds = 0; if (!silent) render(); return; }
       if (out === 'timeout') { this.completeRoom([...notes, 'Neither side could finish it. No loot this time.'].join(' ')); return; }
@@ -277,19 +285,11 @@ window.G = window.G || {};
       s.shop = {
         table: G.Loot.shopTable(s.room, alive.length + CFG().shop.extraTableItems, s.rng),
         order: order.map(h => h.id), turn: 0, reviewUntil: now() + CFG().shop.reviewSeconds * 1000, reviewDone: false,
-        turnStart: now() + CFG().shop.reviewSeconds * 1000, picks: {}, lastCall: false, ready: false,
-        totalSeconds: CFG().shop.reviewSeconds + CFG().shop.turnSeconds * order.length,
-        stock: G.Loot.offer(s.player, s.room, 'shop', s.rng, CFG().shop.gearCount),
-        buffs: this.pickBuffs(), potions: 0, bought: [], msg: null,
+        turnStart: now() + CFG().shop.reviewSeconds * 1000, picks: {},
+        totalSeconds: CFG().shop.reviewSeconds + CFG().shop.turnSeconds * order.length, msg: null,
       };
-      for (const r of s.rivals) if (r.alive) r.lastText = G.AI.aiMerchant(r, s.room, r.rng);
       this.startTimer(s.shop.totalSeconds);
       render();
-    },
-    pickBuffs() {
-      const ids = G.BUFF_IDS.slice(), out = [];
-      while (out.length < 3 && ids.length) out.push(ids.splice(this.s.rng.int(0, ids.length - 1), 1)[0]);
-      return out;
     },
     shopTurnHero() {
       const sh = this.s.shop;
@@ -329,10 +329,7 @@ window.G = window.G || {};
     },
     shopAfterPick(full) {
       const sh = this.s.shop;
-      if (sh.turn >= sh.order.length) {
-        if (sh.ready) { this.endShop(); return; }
-        if (!sh.lastCall) { sh.lastCall = true; this.startTimer(CFG().shop.lastCall); render(); return; }
-      }
+      if (sh.turn >= sh.order.length) { this.endShop(); return; }
       if (full) render(); else G.UI.refreshShopPicks();
     },
     playerShopPick(id) {
@@ -353,28 +350,30 @@ window.G = window.G || {};
       this.s.shop.msg = `You passed and got ${CFG().shop.passGold} gold.`;
       this.shopAfterPick(true);
     },
-    shopReady() {
-      const sh = this.s.shop;
-      sh.ready = true;
-      if (sh.turn >= sh.order.length) this.endShop(); else render();
-    },
     shopTimeUp() {
       const s = this.s, sh = s.shop;
-      if (sh.lastCall) { this.endShop(); return; }
       while (sh.turn < sh.order.length) { const h = this.shopTurnHero(); if (h.isPlayer) this.shopPick(h, null); else this.autoShopPick(h); }
-      sh.lastCall = true;
-      this.startTimer(CFG().shop.lastCall);
-      render();
+      this.endShop();
     },
     endShop() {
-      const s = this.s;
+      const s = this.s, sh = s.shop;
       s.roundEnds = 0;
-      s.notice = 'The merchant packs up. On to the next room.';
+      const mine = sh.picks[s.player.id];
+      s.notice = `Shop round over. You ${mine && !mine.startsWith('passed') ? 'took ' + mine : mine || 'passed'}.`;
       s.room++;
       this.startRoom();
     },
+
+    // ---------- Merchant door ----------
+    leaveMerchant() {
+      const s = this.s;
+      if (s.phase !== 'merchant') return;
+      const n = s.merchant.bought.length + s.merchant.potions;
+      this.completeRoom(n ? 'You leave the merchant with your purchases.' : 'You leave the merchant.');
+    },
     shopBuy(kind, id) {
-      const s = this.s, sh = s.shop, p = s.player, S = CFG().shop;
+      const s = this.s, sh = s.merchant, p = s.player, S = CFG().shop;
+      if (s.phase !== 'merchant' || !sh) return;
       if (kind === 'gear') {
         const it = sh.stock.find(x => x.id === id);
         const price = it && G.Dungeon.itemPrice(it);
@@ -440,6 +439,7 @@ window.G = window.G || {};
           if (s.battle.done) return;
           s.battle.done = true;
           G.Tournament.resolve(T, m, res);
+          if (m.rageHeal && m.winner.hero.isPlayer) s.notice = `Bloodrage: your arena health rises by ${m.rageHeal} for your next match.`;
           s.phase = 'tournament';
           if (!T.champion) this.startTimer(CFG().tourBreakSeconds);
           render();

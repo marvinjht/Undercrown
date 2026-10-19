@@ -28,7 +28,7 @@ window.G = window.G || {};
   function splitSpec(sp, base, room, mult) {
     if (!sp) return null;
     return {
-      count: sp.count, name: 'Slime', sprite: 'monster_' + base.id, scale: sp.scale,
+      count: sp.count, name: sp.next ? 'Slime' : 'Slimeling', sprite: 'monster_' + base.id, scale: sp.scale,
       s: statBlock({ ...base, hp: sp.hp, hit: sp.hit }, room, mult),
       next: splitSpec(sp.next, base, room, mult),
     };
@@ -42,7 +42,7 @@ window.G = window.G || {};
     const out = [];
     for (let i = 0; i < count; i++) {
       out.push({
-        s: statBlock(mon, room, mult), name: (kind === 'elite' ? 'Elite ' : '') + (mon.memberName || mon.name),
+        s: statBlock(mon, room, mult), name: prefix(mon, kind) + (mon.memberName || mon.name),
         sprite: 'monster_' + mon.id, scale: (mon.scale || 1) * (kind === 'elite' ? 1.12 : 1),
         tint: kind === 'elite' ? 0xffb8a8 : null,
         steal: mon.steal || 0, escapeAfter: mon.escapeAfter || 0,
@@ -52,8 +52,10 @@ window.G = window.G || {};
     return out;
   }
 
+  // "Elite " in front for elite doors, unless the monster is already an elite kind (Elite Slime)
+  const prefix = (mon, kind) => (kind === 'elite' && !/^Elite /.test(mon.name) ? 'Elite ' : '');
   function monsterName(mon, kind) {
-    const n = (kind === 'elite' ? 'Elite ' : '') + mon.name;
+    const n = prefix(mon, kind) + mon.name;
     const c = (mon.pack || 1) + (kind === 'elite' && mon.pack ? CFG().monster.elite.packExtra : 0);
     return c > 1 ? `${n} ×${c}` : n;
   }
@@ -68,15 +70,23 @@ window.G = window.G || {};
     mystery:  { title: 'Unknown',  text: () => 'Could be a gift, could be a fight.' },
     venom:    { title: 'Venom Cache', text: () => `Take an uncommon or better item, but gain ${CFG().poison.venomStacks} poison.` },
     purify:   { title: 'Purifying Spring', text: () => `Clears all poison and heals ${CFG().poison.purifyHeal}.` },
-    shop:     { title: 'Shared Shop', text: () => 'Free picks, weakest first, and the merchant.' },
+    shop:     { title: 'Shop Round', text: () => 'Free picks for everyone, weakest first.' },
+    merchant: { title: 'Merchant', text: () => 'No fight. Spend gold on gear and potions, or sell blood.' },
   };
+
+  // Merchant doors stay away from room 1, boss rooms, and the rooms next to a shop round
+  function merchantOk(room) {
+    const gap = CFG().merchantGapFromShop;
+    if (room <= 1 || CFG().bossRooms[room] || room >= CFG().rooms) return false;
+    return !CFG().shopRooms.some(r => Math.abs(r - room) <= gap);
+  }
 
   function makeDoors(hero, room, rng) {
     if (room === 1) return [{ type: 'armory' }];
     if (CFG().shopRooms.includes(room)) return [{ type: 'shop' }];
     if (CFG().bossRooms[room]) return [{ type: 'boss', monster: monsterFor(room, 'boss', rng) }];
     const w = t => (t === 'purify' && hero.poison > 0 ? CFG().purifyWeightPoisoned : CFG().doorWeights[t]);
-    const types = Object.keys(CFG().doorWeights).filter(t => room >= CFG().doorMinRoom[t]);
+    const types = Object.keys(CFG().doorWeights).filter(t => room >= CFG().doorMinRoom[t] && (t !== 'merchant' || merchantOk(room)));
     const first = rng.weighted(types.map(t => [t, w(t)]));
     const rest = types.filter(t => t !== first);
     const second = rest.length ? rng.weighted(rest.map(t => [t, w(t)])) : first;
@@ -129,6 +139,13 @@ window.G = window.G || {};
     return CFG().shop.itemCost[item.rarity] + item.room * CFG().shop.itemCostPerRoom;
   }
 
+  // What a merchant door sells: gear for gold, one potion, an antidote, a few buffs, blood for gold, restock
+  function merchantStock(hero, room, rng) {
+    const ids = G.BUFF_IDS.slice(), buffs = [];
+    while (buffs.length < 3 && ids.length) buffs.push(ids.splice(rng.int(0, ids.length - 1), 1)[0]);
+    return { stock: G.Loot.offer(hero, room, 'shop', rng, CFG().shop.gearCount), buffs, potions: 0, bought: [], msg: null };
+  }
+
   function pickN(ids, n, rng) {
     const pool = ids.slice(), out = [];
     while (out.length < n && pool.length) out.push(pool.splice(Math.floor(rng.float() * pool.length), 1)[0]);
@@ -166,7 +183,7 @@ window.G = window.G || {};
     const dmg = hero.poison;
     hero.hp -= dmg;
     if (hero.hp <= 0) {
-      if (hero.gem === 'phoenix' && !hero.phoenixUsed) { hero.phoenixUsed = true; hero.hp = G.Hero.maxHp(hero); }
+      if (hero.gem === 'phoenix' && !hero.phoenixUsed) { hero.phoenixUsed = true; hero.hp = G.Hero.maxHp(hero); }  // reborn at full (no one to explode on)
       else { hero.hp = 0; hero.alive = false; hero.diedRoom = room; }
     }
     return dmg;
@@ -192,7 +209,7 @@ window.G = window.G || {};
 
   G.Dungeon = {
     monsterFor, buildEnemies, monsterName, makeDoors, doorInfo, danger, goldFor, itemPrice,
-    specOptions, gemOptions, rollMystery, fight, applyFight, tickPoison, useItem, fightOpts,
+    specOptions, gemOptions, rollMystery, fight, applyFight, tickPoison, useItem, fightOpts, merchantOk, merchantStock,
   };
 
   // ---------------- AI rivals ----------------
@@ -226,7 +243,7 @@ window.G = window.G || {};
 
   function autoSpec(hero, opts) { G.Hero.setSpec(hero, opts[0]); return opts[0]; }
   function autoGem(hero, opts) {
-    const pref = ['pure', 'devil', 'gaia', 'vulture', 'phoenix', 'stone'];
+    const pref = ['pure', 'phoenix', 'devil', 'gaia', 'vulture', 'stone'];
     const pick = pref.find(g => opts.includes(g)) || opts[0];
     G.Hero.setGem(hero, pick);
     return pick;
@@ -258,6 +275,7 @@ window.G = window.G || {};
         case 'mystery': s = 0.9; break;
         case 'venom': s = hasAntidote ? 1.6 : hpPct > 0.7 && hero.poison === 0 ? 0.8 : 0.1; break;
         case 'purify': s = hero.poison >= 3 ? 3.5 : hero.poison > 0 ? 1.4 : 0.15; break;
+        case 'merchant': s = hero.gold >= 60 ? 1.7 : hero.gold >= 35 ? 1.0 : 0.2; break;
         default: s = 1;
       }
       if (d.monster) {
@@ -292,6 +310,7 @@ window.G = window.G || {};
       }
       case 'purify': { const n = hero.poison; hero.poison = 0; G.Hero.heal(hero, CFG().poison.purifyHeal); return n ? `washed away ${n} poison` : 'drank from a clean spring'; }
       case 'shop': return soloShop(hero, room, rng);
+      case 'merchant': return 'visited a merchant, ' + aiMerchant(hero, room, rng);
       case 'mystery': {
         const ev = rollMystery(rng);
         if (ev.id === 'spring') return `drank from a spring (+${G.Hero.heal(hero, CFG().springHeal)})`;
@@ -310,7 +329,7 @@ window.G = window.G || {};
     return '';
   }
 
-  // Merchant spending for AI (shared shop round, or the solo shop used by tools)
+  // Merchant door spending for AI
   function aiMerchant(hero, room, rng) {
     const S = CFG().shop, bits = [];
     const max = G.Hero.maxHp(hero);
@@ -331,7 +350,7 @@ window.G = window.G || {};
     const table = G.Loot.shopTable(room, 4, rng);
     let free = autoLoot(hero, table.slice(rng.int(0, 2)), room, false);
     if (free === 'took nothing') { hero.gold += CFG().shop.passGold; free = `passed for ${CFG().shop.passGold} gold`; }
-    return `${free} at the shop, ${aiMerchant(hero, room, rng)}`;
+    return `${free} at the shop round`;
   }
 
   function aiRoom(hero, room) {

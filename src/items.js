@@ -15,14 +15,17 @@ window.G = window.G || {};
     return even(base * R.mult * (1 + (tier - 1) * g));
   }
 
-  // Class tag for uncommon+ armor; often matches a class you already wear so sets come together
-  function rollSet(hero, rng) {
+  // Class tag for uncommon+ gear; often matches a class you already wear so sets come together.
+  // allowed = the classes this item can roll (weapons are limited to the classes that fit them).
+  function rollSet(hero, rng, allowed) {
+    const pool = allowed && allowed.length ? allowed : G.CLASS_ORDER;
+    if (pool.length === 1) return pool[0];
     if (hero && rng.int(1, 100) <= L().setMatchChance) {
       const counts = G.Stats.sets(hero).counts;
-      const best = G.CLASS_ORDER.filter(c => counts[c]).sort((a, b) => counts[b] - counts[a]);
+      const best = pool.filter(c => counts[c]).sort((a, b) => counts[b] - counts[a]);
       if (best.length) return rng.chance(0.75) ? best[0] : rng.pick(best);
     }
-    return rng.pick(G.CLASS_ORDER);
+    return rng.pick(pool);
   }
 
   function generate(rng, { slot, rarity, room, weaponType, hero, set }) {
@@ -46,18 +49,23 @@ window.G = window.G || {};
       iconKey = slot;
     }
     let itemSet = null;
-    if (slot !== 'weapon' && rarity !== 'grey') itemSet = set || rollSet(hero, rng);
+    if (rarity !== 'grey') {
+      const allowed = slot === 'weapon' ? G.WEAPONS[weaponType].classes : null;
+      itemSet = set && (!allowed || allowed.includes(set)) ? set : rollSet(hero, rng, allowed);
+    }
 
     const pool = Object.keys(G.AFFIXES).filter(k => !(G.AFFIXES[k].goldOnly && rarity !== 'gold') && !(G.AFFIXES[k].weaponOnly && slot !== 'weapon'));
-    const affixes = [];
+    const affixes = [], affixStats = {};
     for (let i = 0; i < R.affixes && pool.length; i++) {
       const k = pool.splice(Math.floor(rng.float() * pool.length), 1)[0];
       affixes.push(k);
-      stats[k] = (stats[k] || 0) + value(k, G.AFFIXES[k].base, R, tier);
+      const v = value(k, G.AFFIXES[k].base, R, tier);
+      affixStats[k] = v;
+      stats[k] = (stats[k] || 0) + v;
     }
     if (affixes.length) name += ' ' + G.AFFIXES[affixes[0]].suffix;
 
-    return { id: G.uid('item'), kind: 'gear', slot, rarity, room, tier, weaponType: weaponType || null, set: itemSet, name, stats, trait, iconKey, affixes };
+    return { id: G.uid('item'), kind: 'gear', slot, rarity, room, tier, weaponType: weaponType || null, set: itemSet, name, stats, affixStats, trait, iconKey, affixes };
   }
 
   function fmtStat(k, v, isWeapon) {
@@ -66,8 +74,15 @@ window.G = window.G || {};
     return `+${v} ${label}`;
   }
 
+  // Base stats first, then each bonus stat (affix) on its own line, so you can see what the bonus adds
   function statLines(item) {
-    return G.STAT_ORDER.filter(k => item.stats[k]).map(k => ({ k, v: item.stats[k], text: fmtStat(k, item.stats[k], item.slot === 'weapon') }));
+    const aff = item.affixStats || {};
+    const isW = item.slot === 'weapon';
+    const base = G.STAT_ORDER.filter(k => (item.stats[k] || 0) - (aff[k] || 0) > 0)
+      .map(k => ({ k, v: item.stats[k] - (aff[k] || 0), text: fmtStat(k, item.stats[k] - (aff[k] || 0), isW), affix: false }));
+    const bonus = (item.affixes || []).filter(k => aff[k])
+      .map(k => ({ k, v: aff[k], text: `+${aff[k]} ${G.STAT_INFO[k].label}`, affix: true, suffix: G.AFFIXES[k].suffix }));
+    return [...base, ...bonus];
   }
 
   function compare(item, equipped) {
@@ -164,7 +179,7 @@ window.G = window.G || {};
     return items;
   }
 
-  // Shared shop: the free table everyone picks from (one legendary, rest uncommon+, two consumables)
+  // Shop round: the free table everyone picks from (one legendary, rest uncommon+, two consumables)
   function shopTable(room, count, rng) {
     const items = [];
     const nCons = Math.min(2, Math.max(0, count - 2));

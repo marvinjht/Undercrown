@@ -22,7 +22,6 @@ window.G = window.G || {};
     maceShield: P('M15 4l5 2v4c0 4-2 6-5 8-3-2-5-4-5-8V6zM3 21l6-6M9 15a3 3 0 1 0-1-4'),
     shortbow: P('M7 4c6 3 6 13 0 16M7 4v16M4 12h14l-3-2M18 12l-3 2'),
     longbow: P('M6 2c9 4 9 16 0 20M6 2v20M3 12h17l-3-2M20 12l-3 2'),
-    wand: P('M5 19L15 9M17 4l1 3 3 1-3 1-1 3-1-3-3-1 3-1z'),
     wandFocus: P('M4 20l8-8M14 5l1 2 2 1-2 1-1 2-1-2-2-1 2-1zM18 14a3 3 0 1 0 0 6 3 3 0 1 0 0-6'),
     staff: P('M6 21L17 6M17 6a3 3 0 1 0 2-3 3 3 0 0 0-2 3z'),
     potion: P('M10 3h4M10 3v5l-4 7a4 4 0 0 0 4 6h4a4 4 0 0 0 4-6l-4-7V3M8 14h8'),
@@ -31,6 +30,7 @@ window.G = window.G || {};
     door_boss: P('M3 18h18l-2-10-4 4-3-7-3 7-4-4z'),
     door_treasure: P('M3 10h18v10H3zM3 10l2-5h14l2 5M12 10v4'),
     door_rest: P('M12 3c3 4 5 6 5 9a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3 0-5 1-8zM5 21l14-2M5 19l14 2'),
+    door_merchant: P('M3 9l2-5h14l2 5M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0zM5 13v7h14v-7M10 20v-4h4v4'),
     door_shop: P('M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18zM14.5 8.5c-.5-1-1.5-1.5-2.5-1.5-1.5 0-2.5 1-2.5 2s1 1.7 2.5 2 2.5 1 2.5 2-1 2-2.5 2c-1 0-2-.5-2.5-1.5M12 5.5v13'),
     door_mystery: P('M9 9a3 3 0 1 1 4 3c-1 .5-1 1-1 2.5M12 18h.01'),
     door_armory: P('M4 21V8l8-5 8 5v13M9 21v-6h6v6M8 11l8 0M12 3v4'),
@@ -115,7 +115,6 @@ window.G = window.G || {};
     maceShield(g) { g.fillStyle(0x6b4a2f).fillRect(2, 40, 22, 4); g.fillStyle(0xd4af37).fillCircle(28, 42, 6); g.fillStyle(0xe8e0c8).fillEllipse(18, 20, 18, 28); g.lineStyle(3, 0xd4af37).strokeEllipse(18, 20, 18, 28).lineBetween(18, 10, 18, 30).lineBetween(11, 20, 25, 20); },
     shortbow(g) { g.lineStyle(4, 0x8a6a48).beginPath().arc(10, 32, 20, -1.2, 1.2).strokePath(); g.lineStyle(1, 0xe8e8e8).lineBetween(17, 13, 17, 51); },
     longbow(g) { g.lineStyle(4, 0x7a5a38).beginPath().arc(4, 32, 28, -1.25, 1.25).strokePath(); g.lineStyle(1, 0xe8e8e8).lineBetween(13, 6, 13, 58); },
-    wand(g) { g.fillStyle(0x5a3f2a).fillRect(0, 30, 34, 4); g.fillStyle(0xffb36b).fillCircle(36, 32, 5); g.fillStyle(0xffe0a8, 0.5).fillCircle(36, 32, 9); },
     wandFocus(g) { g.fillStyle(0x5a3f2a).fillRect(0, 40, 30, 4); g.fillStyle(0xffb36b).fillCircle(32, 42, 4); g.fillStyle(0x8fd4ff, 0.8).fillCircle(20, 18, 9); g.lineStyle(2, 0xe8f6ff).strokeCircle(20, 18, 9); },
     staff(g) { g.fillStyle(0x5a3f2a).fillRect(0, 30, 54, 5); g.fillStyle(0xa18cff).fillCircle(56, 32, 7); g.fillStyle(0xd8ccff, 0.45).fillCircle(56, 32, 12); },
   };
@@ -129,6 +128,11 @@ window.G = window.G || {};
   const MONSTER_DRAW = {
     rat: g => { g.lineStyle(3, 0x8a6f62).lineBetween(6, 32, 20, 32); blob(g, 34, 32, 34, 22, 0x7d6b5d, 0xff5a4a); },
     slime: g => { g.fillStyle(0x5cc77a, 0.3).fillCircle(32, 32, 26); blob(g, 32, 32, 42, 42, 0x4fae63, 0x10301a); },
+    slimeElite: g => {
+      g.fillStyle(0x2f7a8a, 0.3).fillCircle(32, 34, 26); blob(g, 32, 34, 42, 40, 0x24606e, 0xffe066);
+      g.fillStyle(0xf2c14a).fillPoints([{ x: 8, y: 22 }, { x: 8, y: 46 }, { x: 18, y: 42 }, { x: 14, y: 34 }, { x: 18, y: 26 }], true);
+      g.lineStyle(2, OUTLINE).strokePoints([{ x: 8, y: 22 }, { x: 8, y: 46 }, { x: 18, y: 42 }, { x: 14, y: 34 }, { x: 18, y: 26 }], true);
+    },
     wolf: g => { g.fillStyle(0x6d6a66).fillTriangle(38, 20, 44, 12, 46, 24).fillTriangle(38, 44, 44, 52, 46, 40); g.lineStyle(3, 0x6d6a66).lineBetween(4, 32, 16, 32); blob(g, 32, 32, 40, 26, 0x8a8680, 0xffd23f); },
     skeleton: g => { blob(g, 32, 32, 32, 44, 0xe4dccb, 0x1b1410); g.lineStyle(2, 0x9c917f).lineBetween(26, 18, 26, 46).lineBetween(30, 16, 30, 48); },
     goblin: g => { g.fillStyle(0x5d8a3a).fillTriangle(30, 18, 22, 6, 36, 16).fillTriangle(30, 46, 22, 58, 36, 48); blob(g, 32, 32, 30, 36, 0x6e9e44, 0xffd23f); },

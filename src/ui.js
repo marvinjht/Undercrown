@@ -39,10 +39,18 @@ window.G = window.G || {};
     return `<div class="tt-title">${esc(c.name)}</div><p>${esc(c.desc)}</p><p class="tt-extra">Goes in your bag. Tap it there to use or discard.</p>`;
   }
 
+  // Base stats, then a "Bonus stats" heading with each affix on its own line
+  function statList(item, cls) {
+    const lines = G.Items.statLines(item);
+    const base = lines.filter(l => !l.affix).map(l => `<li>${esc(l.text)}</li>`).join('');
+    const bonus = lines.filter(l => l.affix);
+    const extra = bonus.length ? `<li class="affix-h">Bonus stats</li>${bonus.map(l => `<li class="affix">${esc(l.text)} <small>${esc(l.suffix)}</small></li>`).join('')}` : '';
+    return `<ul class="${cls}">${base}${extra}</ul>`;
+  }
+
   function itemTip(item, hero) {
     if (item.kind === 'consumable') return consumableTip(item);
     const R = G.RARITY[item.rarity];
-    const lines = G.Items.statLines(item).map(l => `<li>${esc(l.text)}</li>`).join('');
     let cmp = '';
     if (hero) {
       const eq = hero.gear[item.slot];
@@ -53,10 +61,10 @@ window.G = window.G || {};
       }
     }
     const W = item.slot === 'weapon' ? G.WEAPONS[item.weaponType] : null;
-    const set = item.set ? `<p class="tt-extra">${G.CLASSES[item.set].name} set piece. 2 pieces: ${esc(G.CLASSES[item.set].two.desc)}.</p>` : '';
+    const set = item.set ? `<p class="tt-extra">Counts toward the ${G.CLASSES[item.set].name} set. 2 pieces: ${esc(G.CLASSES[item.set].two.desc)}.</p>` : '';
     return `<div class="tt-title r-${item.rarity}">${esc(item.name)}</div>
       <div class="tt-sub">${R.name} ${W ? W.name + ' · ' + RANGE_NAMES[W.range] + ' · ' + (W.type === 'magic' ? 'Magic' : 'Physical') : G.SLOT_NAMES[item.slot]} · Tier ${item.tier}</div>
-      <ul class="tt-stats">${lines}</ul>
+      ${statList(item, 'tt-stats')}
       ${item.trait ? `<div class="tt-trait">${esc(item.trait)}</div>` : ''}${set}${cmp}`;
   }
 
@@ -90,7 +98,7 @@ window.G = window.G || {};
           <small>${G.RARITY[item.rarity].name} ${W ? esc(W.name) + ' · ' + RANGE_NAMES[W.range] + ' · ' + (W.type === 'magic' ? 'Magic' : 'Physical') : G.SLOT_NAMES[item.slot]}</small>
           <span class="tags">${setChip(item.set)}<span class="verdict ${v.cls}">${v.text}</span></span></div>
       </div>
-      <ul class="stat-list">${G.Items.statLines(item).map(l => `<li>${esc(l.text)}</li>`).join('')}</ul>
+      ${statList(item, 'stat-list')}
       ${item.trait ? `<p class="trait">${esc(item.trait)}</p>` : ''}
       ${eq ? `<div class="cmp"><span>Replaces ${esc(eq.name)}</span><ul>${diffs.map(d => `<li class="${d.d > 0 ? 'up' : 'down'}">${esc(d.text)}</li>`).join('')}</ul></div>` : ''}
       <div class="btns">${btns}</div>
@@ -113,14 +121,18 @@ window.G = window.G || {};
       const n = st.counts[c] || 0;
       const C = G.CLASSES[c];
       const act = st.active.find(a => a.cls === c);
-      return `<li class="${act ? 'on' : n ? '' : 'off'}" ${tip(`<div class="tt-title">${C.name} set</div><p><b>2 pieces:</b> ${esc(C.two.desc)}.</p><p><b>4 pieces:</b> ${esc(C.four.desc)}.</p><p class="tt-extra">A single piece gives nothing.</p>`)}>
+      return `<li class="${act ? 'on' : n ? '' : 'off'}" ${tip(`<div class="tt-title">${C.name} set</div><p><b>2 pieces:</b> ${esc(C.two.desc)}.</p><p><b>4 pieces:</b> ${esc(C.four.desc)}. Your color and look change.</p><p><b>6 pieces, ${esc(C.six.name)}:</b> ${esc(C.six.desc)}.</p><p class="tt-extra">All 6 slots count, weapon included. A single piece gives nothing.</p>`)}>
         <span class="set-name" style="--set:${C.color}">${C.name}</span>
-        <span class="pips5">${[0, 1, 2, 3, 4].map(i => `<i class="${i < n ? 'f' : ''} ${i === 1 || i === 3 ? 'mark' : ''}"></i>`).join('')}</span>
-        <b>${n}/5</b></li>`;
+        <span class="pips5">${[0, 1, 2, 3, 4, 5].map(i => `<i class="${i < n ? 'f' : ''} ${i === 1 || i === 3 ? 'mark' : ''}" style="--set:${C.color}"></i>`).join('')}</span>
+        <b>${n}/6</b></li>`;
     }).join('');
     const hy = st.hybrid ? G.HYBRIDS[st.hybrid] : null;
-    const hyRow = hy ? `<p class="hybrid on" ${tip(`<div class="tt-title">${hy.name}</div><p>${esc(hy.desc)}.</p>`)}>${esc(hy.name)}: ${esc(hy.desc)}</p>`
-      : `<p class="hybrid" ${tip('<div class="tt-title">Hybrid archetypes</div><p>Wear 2 or more pieces of two different classes to unlock a hybrid bonus, like Battle Mage (Warrior + Mage).</p>')}>2+ pieces of two classes unlocks a hybrid.</p>`;
+    let hyRow;
+    if (st.full) {
+      const C = G.CLASSES[st.look];
+      hyRow = `<p class="hybrid on" ${tip(`<div class="tt-title">${esc(C.six.name)}</div><p>${esc(C.six.desc)}.</p>`)}>${esc(C.six.name)}: ${esc(C.six.desc)}</p>`;
+    } else if (hy) hyRow = `<p class="hybrid on" ${tip(`<div class="tt-title">${hy.name}</div><p>${esc(hy.desc)}.</p>`)}>${esc(hy.name)}: ${esc(hy.desc)}</p>`;
+    else hyRow = `<p class="hybrid" ${tip('<div class="tt-title">Hybrid archetypes</div><p>Wear 4 pieces of one class and 2 of another to unlock that pair’s hybrid bonus, like Battle Mage (Warrior + Mage). 6 of one class gives its capstone instead.</p>')}>4 of one class + 2 of another unlocks a hybrid.</p>`;
     return `<section class="panel"><h3>Sets</h3><ul class="sets">${rows}</ul>${hyRow}</section>`;
   }
 
@@ -223,13 +235,13 @@ window.G = window.G || {};
     if (st.room > CFG().rooms) roomLabel = 'Tournament';
     else if (st.roundKind === 'spec') roomLabel = `Specialization <small>after room ${st.room}</small>`;
     else if (st.roundKind === 'gem') roomLabel = `Heart gem <small>after room ${st.room}</small>`;
-    else if (st.roundKind === 'shop') roomLabel = `Room ${st.room} <small>· Shared shop</small>`;
+    else if (st.roundKind === 'shop') roomLabel = `Room ${st.room} <small>· Shop round</small>`;
     const poison = p.poison ? `<span class="poison" ${tip(`<div class="tt-title">Poison ${p.poison}</div><p>You lose ${p.poison} health at the start of every room. Only an Antidote or a Purifying Spring clears it; campfires don't.</p>`)}>Poison ${p.poison}</span>` : '';
     return `<header class="top">
       <div class="brand">Thirty Doors</div>
       <div class="track"><div class="room-label">${roomLabel}</div><div class="pips" aria-hidden="true">${pips.join('')}</div></div>
       <div class="clock" id="clock" ${tip('<div class="tt-title">Round timer</div><p>Every round is timed for everyone and ends early once everyone is ready. Anything you haven’t decided at zero is decided for you.</p>')}><b id="clock-num">${timerText()}</b><i><span id="clock-bar" style="width:${timerPct()}%"></span></i></div>
-      <div class="vitals">${hpBar(p.hp, max, '', 'player-top')}${poison}<div class="gold" ${tip('<div class="tt-title">Gold</div><p>Spend it at the shared shop on rooms 8, 16 and 24.</p>')}><span class="coin"></span>${p.gold}</div></div>
+      <div class="vitals">${hpBar(p.hp, max, '', 'player-top')}${poison}<div class="gold" ${tip('<div class="tt-title">Gold</div><p>Spend it at Merchant doors. Passing at a shop round also gives gold.</p>')}><span class="coin"></span>${p.gold}</div></div>
     </header>`;
   }
 
@@ -242,7 +254,7 @@ window.G = window.G || {};
   function timerPct() {
     const st = G.Game.s, t = G.Game.timeLeft();
     if (!st || !st.roundEnds || t == null) return 0;
-    const total = st.roundKind === 'tour' ? CFG().tourBreakSeconds : st.roundKind === 'shop' ? (st.shop && st.shop.lastCall ? CFG().shop.lastCall : st.shop.totalSeconds) : CFG().roundSeconds;
+    const total = st.roundKind === 'tour' ? CFG().tourBreakSeconds : st.roundKind === 'shop' ? st.shop.totalSeconds : CFG().roundSeconds;
     return Math.max(0, Math.min(100, (t / total) * 100));
   }
 
@@ -266,7 +278,22 @@ window.G = window.G || {};
       <h2>${t === 'armory' ? 'Room 1: the Armory' : one ? 'A single door, sealed with iron' : 'Two doors'}</h2>
       <p class="lede">${t === 'armory' ? 'Grab a weapon. The real run starts in room 2.' : one ? 'No way around it. Win to continue.' : 'Pick one. Your health does not refill between rooms. You can use bag items before you choose.'}</p>
       <div class="doors ${one ? 'one' : ''}">${doors}</div>
+      ${previewBlock(st.player)}
     </section>`;
+  }
+
+  // Your character under the doors, drawn like in fights, with what your sets add up to
+  function previewBlock(p) {
+    const st = G.Stats.sets(p);
+    let label = 'No set bonus yet';
+    if (st.full) label = `${G.CLASSES[st.look].name} · ${G.CLASSES[st.look].six.name}`;
+    else if (st.hybrid) label = `${G.HYBRIDS[st.hybrid].name} (${st.counts[st.look]} ${G.CLASSES[st.look].name} + ${st.counts[st.trim]} ${G.CLASSES[st.trim].name})`;
+    else if (st.active.length) label = st.active.map(a => `${G.CLASSES[a.cls].name} ${st.counts[a.cls]}`).join(' · ');
+    const next = st.full ? '' : st.look ? (st.hybrid ? '' : `2 of another class for a hybrid, or 6 ${G.CLASSES[st.look].name} for ${G.CLASSES[st.look].six.name}`)
+      : st.main ? `4 ${G.CLASSES[st.main].name} pieces changes your look` : 'Uncommon gear carries a class tag';
+    const col = st.look ? G.CLASSES[st.look].color : '#9fdcff';
+    return `<div class="preview" style="--pv:${col}"><div id="preview-slot" class="preview-slot" aria-hidden="true"></div>
+      <div class="pv-info"><b>You</b><span>${esc(label)}</span>${next ? `<small>${esc(next)}</small>` : ''}</div></div>`;
   }
 
   function battleScreen(st) {
@@ -329,17 +356,24 @@ window.G = window.G || {};
       <div class="cards">${table || '<p class="hint">The table is empty.</p>'}</div>`;
   }
 
-  // Rival picks only refresh this part, so clicks in the merchant aren't lost to a re-render
+  // Rival picks only refresh this part, so clicks and tooltips aren't lost to a re-render
   function refreshShopPicks() {
     const st = G.Game.s, el = document.getElementById('shop-picks');
     if (!st || st.phase !== 'shop' || !el) return render();
     el.innerHTML = shopPicks(st);
-    const r = document.getElementById('shop-ready');
-    if (r && st.shop.ready) r.textContent = st.shop.turn >= st.shop.order.length ? 'Ready' : 'Ready \u2014 waiting for picks';
   }
 
   function shopScreen(st) {
-    const sh = st.shop, p = st.player, S = CFG().shop;
+    const sh = st.shop, S = CFG().shop;
+    return `<section class="screen shop">
+      <h2>Shop round</h2>
+      <p class="lede">Free picks go weakest first: lowest health picks first. Everyone gets ${S.reviewSeconds} seconds to look, then ${S.turnSeconds} seconds per turn. Pass to take ${S.passGold} gold instead.</p>
+      ${sh.msg ? `<p class="notice">${esc(sh.msg)}</p>` : ''}
+      <div id="shop-picks">${shopPicks(st)}</div></section>`;
+  }
+
+  function merchantScreen(st) {
+    const sh = st.merchant, p = st.player, S = CFG().shop;
     const full = G.Hero.bagFull(p);
     const stock = sh.stock.map(it => {
       const price = G.Dungeon.itemPrice(it), sold = sh.bought.includes(it.id);
@@ -351,15 +385,12 @@ window.G = window.G || {};
       return `<div class="potion card"><span class="ico-wrap">${G.Art.icon('potion_' + id)}</span><div><b>${esc(c.name)}</b><small>${esc(c.desc)}${note ? ' ' + note : ''}</small></div>
         <button data-act="shop-buy" data-kind="cons" data-id="${id}" ${disabled || p.gold < price || full ? 'disabled' : ''}>${disabled ? 'Bought' : full ? 'Bag full' : `${price} gold`}</button></div>`;
     };
-    const allPicked = sh.turn >= sh.order.length;
     return `<section class="screen shop">
-      <h2>Shared shop</h2>
-      <p class="lede">Free picks go weakest first: lowest health picks first. Everyone gets ${S.reviewSeconds} seconds to look, then ${S.turnSeconds} seconds per turn. Pass to take ${S.passGold} gold instead. The merchant is open the whole round${sh.lastCall ? ' — last call!' : '.'}</p>
+      <h2>Merchant</h2>
+      <p class="lede">A trader with a cart full of gear. You have ${p.gold} gold. Stay as long as the room timer allows, or leave when you're done.</p>
       ${sh.msg ? `<p class="notice">${esc(sh.msg)}</p>` : ''}
-      <div id="shop-picks">${shopPicks(st)}</div>
-      <h3 class="sub">Merchant</h3>
       <div class="shop-row">
-        ${consRow('potion', S.potionCost, 'One per shop round.', potUsed)}
+        ${consRow('potion', S.potionCost, 'One per merchant.', potUsed)}
         ${consRow('antidote', G.CONSUMABLES.antidote.price, '', false)}
         ${sh.buffs.map(id => consRow(id, G.CONSUMABLES[id].price, '', false)).join('')}
         <div class="potion card"><span class="flask blood"></span><div><b>Sell blood</b><small>Lose ${S.bloodCost[0]} to ${S.bloodCost[1]} health, gain ${S.bloodGold} gold.</small></div>
@@ -368,7 +399,7 @@ window.G = window.G || {};
       <div class="cards">${stock}</div>
       <div class="row-actions">
         <button class="ghost" data-act="shop-buy" data-kind="restock" ${p.gold < S.restockCost ? 'disabled' : ''}>Restock gear (${S.restockCost} gold)</button>
-        <button id="shop-ready" data-act="shop-ready" ${sh.ready ? 'disabled' : ''}>${sh.ready ? (allPicked ? 'Ready' : 'Ready — waiting for picks') : 'I’m ready'}</button>
+        <button data-act="merchant-leave">Leave the merchant</button>
       </div></section>`;
   }
   function turnRaw() {
@@ -437,15 +468,39 @@ window.G = window.G || {};
       }).join('')}</tbody></table></div>`;
   }
 
+  // Bracket: one column per round, built rounds filled in, later rounds shown as open slots
   function roundsList(T) {
-    return T.rounds.map(r => `<div class="round"><h4>${r.name}</h4><ul>
-      ${r.byes.map(e => `<li class="bye">${esc(e.hero.name)} <small>waits (bye)</small></li>`).join('')}
-      ${r.matches.map(m => {
-        if (!m.result) return `<li>${esc(m.a.hero.name)} <small>vs</small> ${esc(m.b.hero.name)}</li>`;
-        const left = m.winner === m.a ? m.result.aHp : m.result.bHp;
-        const lose = m.winner === m.a ? m.b : m.a;
-        return `<li><b>${esc(m.winner.hero.name)}</b> <small>beat</small> ${esc(lose.hero.name)} <small>(${left} health left${m.result.timeout ? ', on time' : ''})</small></li>`;
-      }).join('')}</ul></div>`).join('');
+    if (!T.rounds.length) return '';
+    const first = T.rounds[0].size;
+    const total = Math.round(Math.log2(first));
+    const next = G.Tournament.nextMatch(T);
+    const name = sz => sz === 2 ? 'Final' : sz === 4 ? 'Semifinals' : sz === 8 ? 'Quarterfinals' : 'Round of ' + sz;
+    const row = (e, m, won) => {
+      if (!e) return `<div class="b-row tbd"><span class="seed"></span><b>To be decided</b></div>`;
+      const left = m && m.result ? (m.winner === m.a ? m.result.aHp : m.result.bHp) : null;
+      const cls = [e.hero.isPlayer ? 'me' : '', won === true ? 'won' : won === false ? 'lost' : ''].join(' ');
+      const hp = m && m.result ? (won ? `${left} left` : 'out') : `${e.entryHp} hp`;
+      return `<div class="b-row ${cls}"><span class="seed">${e.seed}</span><b>${esc(e.hero.name)}</b><small>${hp}</small></div>`;
+    };
+    const cols = [];
+    for (let i = 0; i < total; i++) {
+      const r = T.rounds[i], size = first / Math.pow(2, i);
+      const boxes = [];
+      if (r) {
+        for (const e of r.byes) boxes.push(`<div class="b-match bye">${row(e)}<div class="b-note">Bye: waits for the next round</div></div>`);
+        for (const m of r.matches) {
+          const isNext = m === next, mine = m.a.hero.isPlayer || m.b.hero.isPlayer;
+          const wa = m.result ? m.winner === m.a : null, wb = m.result ? m.winner === m.b : null;
+          const note = m.result ? (m.result.timeout ? 'Won on time' : m.rageHeal ? `Bloodrage +${m.rageHeal} next match` : '') : isNext ? (mine ? 'Your match is next' : 'Up next') : 'Waiting';
+          boxes.push(`<div class="b-match ${isNext ? 'next' : ''} ${mine ? 'mine' : ''}">${row(m.a, m, wa)}<div class="b-vs">vs</div>${row(m.b, m, wb)}${note ? `<div class="b-note">${note}</div>` : ''}</div>`);
+        }
+      } else {
+        for (let k = 0; k < size / 2; k++) boxes.push(`<div class="b-match open">${row(null)}<div class="b-vs">vs</div>${row(null)}</div>`);
+      }
+      cols.push(`<div class="b-col"><h4>${r ? r.name : name(size)}</h4><div class="b-list">${boxes.join('')}</div></div>`);
+    }
+    const champ = T.champion ? `<div class="b-col champ"><h4>Champion</h4><div class="b-list"><div class="b-match won">${row(T.champion, null, true)}</div></div></div>` : '';
+    return `<div class="bracket" role="list" aria-label="Tournament bracket">${cols.join('')}${champ}</div>`;
   }
 
   function placements(T) {
@@ -460,14 +515,15 @@ window.G = window.G || {};
       const won = T.champion.hero.isPlayer;
       return `<section class="screen end"><h2>${won ? 'You are the strongest warrior in the dungeon' : `${esc(T.champion.hero.name)} wins the tournament`}</h2>
         <p class="lede">${T.entrants.length === 1 ? 'Everyone else fell in the dungeon. Last one standing.' : won ? 'Thirty rooms, and nobody could stop you.' : 'You made it through the dungeon. Next time, the arena.'}</p>
-        ${placements(T)}${roundsList(T)}
+        ${roundsList(T)}${placements(T)}
         <div class="row-actions"><button data-act="title">Play again</button></div></section>`;
     }
     const m = G.Tournament.nextMatch(T);
     const mine = m && (m.a.hero.isPlayer || m.b.hero.isPlayer);
     return `<section class="screen"><h2>The Tournament</h2>
       <p class="lede">Everyone enters with the health they left the dungeon with, plus the heal shown below (heart gems can change it). Every match starts at that arena health. Top seeds get byes.</p>
-      ${tourTable(T)}${roundsList(T)}
+      ${roundsList(T)}
+      <h3 class="sub">Seeds and arena health</h3>${tourTable(T)}
       <p class="waiting">${mine ? 'Your match starts' : 'Next matches start'} in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p></section>`;
   }
 
@@ -483,13 +539,13 @@ window.G = window.G || {};
 
   function titleScreen() {
     return `<div class="title-screen">
-      <header class="hero-head"><div class="eyebrow">Prototype v2 · single player</div><h1>Thirty Doors</h1>
+      <header class="hero-head"><div class="eyebrow">Prototype v3 · single player</div><h1>Thirty Doors</h1>
         <p>Six warriors. Thirty rooms each. Your health never refills on its own. Build an archetype from armor sets, pick a heart gem, and the survivors fight for the crown.</p></header>
       <ul class="rules">
         <li><b>The Armory</b>Room 1: pick one of three random weapons. Swords, bows, wands, maces and more.</li>
-        <li><b>Class sets</b>Uncommon armor carries a class. 2 pieces for a bonus, 4 for the full set, 2 + 2 or 3 + 2 for a hybrid like Battle Mage.</li>
+        <li><b>Class sets</b>Uncommon gear and weapons carry a class. 2 pieces for a bonus, 4 to change your look, 6 for the capstone, or 4 + 2 for a hybrid like Battle Mage.</li>
         <li><b>Build moments</b>Specialization after room ${CFG().specRoom}, heart gem after room ${CFG().gemRoom}.</li>
-        <li><b>Shared shop</b>Rooms ${CFG().shopRooms.join(', ')}: free picks weakest first, plus the merchant.</li>
+        <li><b>Shops</b>Rooms ${CFG().shopRooms.join(', ')}: free picks, weakest first. Merchant doors sell gear for gold.</li>
         <li><b>Poison</b>Ticks every room. Only Antidotes and Purifying Springs clear it.</li>
         <li><b>The tournament</b>Survivors heal and fight a bracket. Best health gets a bye.</li>
       </ul>
@@ -505,15 +561,17 @@ window.G = window.G || {};
     if (!st || st.phase !== 'battle') G.Arena.stop();
     if (!st) { app.innerHTML = titleScreen(); window.scrollTo(0, 0); return; }
     if (st.phase === 'battle') bagOpen = -1;
-    const screens = { doors: doorsScreen, battle: battleScreen, armory: armoryScreen, reward: rewardScreen, shop: shopScreen,
+    const screens = { doors: doorsScreen, battle: battleScreen, armory: armoryScreen, reward: rewardScreen, shop: shopScreen, merchant: merchantScreen,
       mystery: mysteryScreen, spec: specScreen, gem: gemScreen, dead: deadScreen, tournament: tournamentScreen, ending: endingScreen };
     const prevPhase = app.dataset.phase;
     const notice = st.notice && !['dead', 'shop'].includes(st.phase) ? `<p class="notice">${esc(st.notice)}</p>` : '';
-    app.innerHTML = `<div class="shell">${topbar(st)}<div class="cols"><main class="stage">${notice}${screens[st.phase](st)}</main>
-      <aside class="side">${bagPanel(st)}${gearPanel(st.player)}${setsPanel(st.player)}${statsPanel(st.player)}${rivalsPanel(st)}</aside></div></div>`;
+    app.innerHTML = `<div class="shell">${topbar(st)}<div class="cols"><aside class="left">${rivalsPanel(st)}</aside><main class="stage">${notice}${screens[st.phase](st)}</main>
+      <aside class="side">${bagPanel(st)}${gearPanel(st.player)}${setsPanel(st.player)}${statsPanel(st.player)}</aside></div></div>`;
     if (st.phase !== prevPhase) window.scrollTo(0, 0);
     app.dataset.phase = st.phase;
     if (st.phase === 'battle') startBattleView(st);
+    const pv = document.getElementById('preview-slot');
+    if (pv) G.Preview.mount(pv, G.visualFor(st.player)); else G.Preview.park();
   }
 
   // Updates only clocks each tick, never the whole screen (a re-render would cut off a running fight)
@@ -547,7 +605,10 @@ window.G = window.G || {};
       case 'parry': return `${subj(e.tgt)} ${verb(e.tgt, 'parry', 'parries')}`;
       case 'stun': return `${subj(e.tgt)} ${verb(e.tgt, 'are', 'is')} stunned`;
       case 'heal': return `${subj(e.src)} ${verb(e.src, 'heal', 'heals')} ${e.amount}${e.label ? ` (${e.label})` : ''}`;
-      case 'stealth_on': return `${subj(e.src)} ${verb(e.src, 'vanish', 'vanishes')}`;
+      case 'stealth_on': return `${subj(e.src)} ${verb(e.src, 'vanish', 'vanishes')}${e.label ? ' (Vanish)' : ''}`;
+      case 'kite': return `${subj(e.src)} ${verb(e.src, 'step', 'steps')} back (Kiting)`;
+      case 'burst': return `${subj(e.src)} ${verb(e.src, 'explode', 'explodes')} in flame`;
+      case 'burn': return `${subj(e.tgt)} ${verb(e.tgt, 'burn', 'burns')} for ${e.amount}`;
       case 'spawn': return `${subj(e.src)} splits off`;
       case 'escape': return `${subj(e.src)} escapes with ${e.amount} gold`;
       case 'revive': return `${subj(e.src)} ${verb(e.src, 'rise', 'rises')} from the ashes`;
@@ -574,6 +635,17 @@ window.G = window.G || {};
     });
   }
 
+  // Small message over an element that fades out (never re-renders, so a running fight keeps going)
+  function toast(el, text) {
+    const host = el.closest('.bag-slot') || el.parentNode;
+    const old = host.querySelector('.toast');
+    if (old) old.remove();
+    const t = document.createElement('span');
+    t.className = 'toast'; t.textContent = text; t.setAttribute('role', 'status');
+    host.appendChild(t);
+    setTimeout(() => t.remove(), 1500);
+  }
+
   // ---------- Input ----------
   function onClick(e) {
     const el = e.target.closest('[data-act]');
@@ -589,12 +661,14 @@ window.G = window.G || {};
       case 'mystery': Gm.mysteryAct(el.dataset.v); break;
       case 'spec': Gm.chooseSpec(el.dataset.id); break;
       case 'gem': Gm.chooseGem(el.dataset.id); break;
-      case 'bag-menu': bagOpen = bagOpen === +el.dataset.i ? -1 : +el.dataset.i; render(); break;
+      case 'bag-menu':
+        if (G.Game.s && G.Game.s.phase === 'battle') { toast(el, 'Can’t use during combat!'); break; }
+        bagOpen = bagOpen === +el.dataset.i ? -1 : +el.dataset.i; render(); break;
       case 'bag-use': Gm.useBag(+el.dataset.i); break;
       case 'bag-drop': Gm.discardBag(+el.dataset.i); break;
       case 'shop-pick': Gm.playerShopPick(el.dataset.id); break;
       case 'shop-buy': Gm.shopBuy(el.dataset.kind, el.dataset.id); break;
-      case 'shop-ready': Gm.shopReady(); break;
+      case 'merchant-leave': Gm.leaveMerchant(); break;
       case 'shop-pass': Gm.playerShopPass(); break;
       case 'ending': Gm.seeEnding(); break;
       case 'title': Gm.toTitle(); break;

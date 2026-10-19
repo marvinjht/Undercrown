@@ -5,7 +5,7 @@ window.G = window.G || {};
 (function (G) {
   const W = 640, H = 360;
   const FONT = '"Spline Sans Mono", ui-monospace, monospace';
-  const X0 = 110, STEP = 70;                      // pixels: position 0 and 1 step
+  const X0 = 150, STEP = 60;                      // pixels: position 0 and 1 step (Kiting can step back past 0)
   const LANES = [200, 132, 268, 166, 234, 110, 290];
 
   function posAt(track, t) {
@@ -60,6 +60,11 @@ window.G = window.G || {};
       if (tint) body.setTint(tint);
       const parts = [body];
       if (vis.trim && G.CLASSES[vis.trim]) parts.unshift(this.add.image(0, 0, 'trim_ring').setTint(G.CLASSES[vis.trim].tint).setAlpha(0.9));
+      if (vis.full && vis.look && G.CLASSES[vis.look]) {
+        const aura = this.add.image(0, 0, 'fx_ring').setTint(G.CLASSES[vis.look].tint).setScale(0.78).setAlpha(0.55);
+        parts.unshift(aura);
+        this.tweens.add({ targets: aura, scale: 0.9, alpha: 0.3, duration: 700, yoyo: true, repeat: -1 });
+      }
       let weapon = null;
       const wkey = vis.weapon || m.weapon;
       if (wkey && this.textures.exists(wkey)) { weapon = this.add.image(10, 10, wkey).setOrigin(0.1, 0.5); parts.push(weapon); }
@@ -145,7 +150,7 @@ window.G = window.G || {};
           break;
         case 'cast': {
           if (!att) break;
-          this.float(att, e.name.toUpperCase(), '#c9b8ff', 15);
+          this.float(att, e.echo ? 'ECHO' : e.name.toUpperCase(), '#c9b8ff', e.echo ? 13 : 15);
           const ring = this.track(this.add.image(att.cont.x, att.cont.y, 'fx_ring').setTint(0xa18cff).setScale(0.3).setAlpha(0.9));
           this.tweens.add({ targets: ring, scale: 0.9, alpha: 0, duration: 400 / this.speed, onComplete: () => ring.destroy() });
           break;
@@ -172,8 +177,15 @@ window.G = window.G || {};
             this.tweens.add({ targets: [att.cont], x: W + 60, alpha: 0, duration: 600 / this.speed });
           }
           break;
-        case 'revive': if (att) { this.float(att, 'REBORN', '#ff8a4c', 20); att.cont.setAlpha(1); att.dead = false; } break;
-        case 'stealth_on': if (att) this.tweens.add({ targets: att.cont, alpha: 0.22, duration: 160 / this.speed }); break;
+        case 'revive': if (att) { this.float(att, 'REBORN', '#ff8a4c', 20); att.cont.setAlpha(1); att.cont.angle = 0; att.dead = false; if (att.tint) att.body.setTint(att.tint); else att.body.clearTint(); } break;
+        case 'burst': if (att) {
+          const ring = this.track(this.add.image(att.cont.x, att.cont.y, 'fx_ring').setTint(0xff7a2c).setScale(0.3));
+          this.tweens.add({ targets: ring, scale: 3.2, alpha: 0, duration: 650 / this.speed, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
+          this.cameras.main.shake(220 / this.speed, 0.008);
+        } break;
+        case 'burn': if (def) this.float(def, String(e.amount), '#ff9a3c', 13, -18); break;
+        case 'kite': if (att) this.float(att, 'KITE', '#8fcf78', 12); break;
+        case 'stealth_on': if (att) { this.tweens.add({ targets: att.cont, alpha: 0.22, duration: 160 / this.speed }); if (e.label) this.float(att, 'VANISH', '#b9a7d9', 14); } break;
         case 'stealth_off': if (att) this.tweens.add({ targets: att.cont, alpha: 1, duration: 160 / this.speed }); break;
         case 'death':
           if (def) { def.dead = true; def.body.setTint(0x555555); this.tweens.add({ targets: def.cont, alpha: 0.35, angle: def.dir * 80, duration: 450 / this.speed }); }
@@ -216,6 +228,56 @@ window.G = window.G || {};
       if (this.cfg.onDone) this.cfg.onDone();
     }
   }
+
+  // ---------- Door preview: one small canvas game that lives for the whole session ----------
+  // Each render moves its canvas into the new preview slot and redraws the hero.
+  const PW = 220, PH = 150;
+  class PreviewScene extends Phaser.Scene {
+    constructor() { super('preview'); }
+    preload() { const S = G.ASSETS.sprites; for (const k in S) if (S[k]) this.load.image(k, S[k]); }
+    create() {
+      G.Art.makeTextures(this);
+      this.add.ellipse(PW / 2, PH / 2 + 34, 120, 26, 0x000000, 0.35);
+      this.holder = null;
+      G.Preview._scene = this;
+      if (G.Preview._vis) this.draw(G.Preview._vis);
+    }
+    draw(vis) {
+      if (this.holder) this.holder.destroy();
+      const parts = [];
+      if (vis.full && vis.look) {
+        const aura = this.add.image(0, 0, 'fx_ring').setTint(G.CLASSES[vis.look].tint).setScale(0.8).setAlpha(0.55);
+        parts.push(aura);
+        this.tweens.add({ targets: aura, scale: 0.92, alpha: 0.3, duration: 700, yoyo: true, repeat: -1 });
+      }
+      if (vis.trim && G.CLASSES[vis.trim]) parts.push(this.add.image(0, 0, 'trim_ring').setTint(G.CLASSES[vis.trim].tint).setAlpha(0.9));
+      let tex = vis.look ? 'hero_' + vis.look : 'hero';
+      if (!this.textures.exists(tex)) tex = 'hero';
+      const body = this.add.image(0, 0, tex);
+      if (vis.tint != null) body.setTint(vis.tint);
+      parts.push(body);
+      if (vis.weapon && this.textures.exists(vis.weapon)) parts.push(this.add.image(10, 10, vis.weapon).setOrigin(0.1, 0.5));
+      this.holder = this.add.container(PW / 2 - 8, PH / 2, parts).setScale(1.6);
+      this.tweens.add({ targets: this.holder, y: PH / 2 - 4, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    }
+  }
+  G.Preview = {
+    game: null, _scene: null, _vis: null,
+    mount(el, vis) {
+      this._vis = vis;
+      if (!this.game) {
+        this.game = new Phaser.Game({ type: Phaser.WEBGL, parent: el, width: PW, height: PH, transparent: true,
+          scale: { mode: Phaser.Scale.NONE }, scene: [PreviewScene], banner: false, audio: { noAudio: true } });
+        return;
+      }
+      if (this.game.canvas && this.game.canvas.parentNode !== el) el.appendChild(this.game.canvas);
+      if (this._scene) this._scene.draw(vis);
+    },
+    // Keep the canvas out of the page when no preview slot is showing
+    park() {
+      if (this.game && this.game.canvas && this.game.canvas.parentNode) this.game.canvas.parentNode.removeChild(this.game.canvas);
+    },
+  };
 
   // A fresh Phaser game is built for every fight and thrown away after it.
   G.Arena = {
