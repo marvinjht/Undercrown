@@ -1,6 +1,7 @@
 // Single-player run state and actions. Every round is timed; it ends as soon as every player is
 // ready (the AI rivals are always ready, so in single player that's as soon as you finish).
 // When the clock hits zero, whatever is left is decided automatically, like a server would.
+// Fights never count against the clock: the timer for the next choice starts when the fight ends.
 window.G = window.G || {};
 
 (function (G) {
@@ -8,7 +9,7 @@ window.G = window.G || {};
   const render = () => G.UI.render();
   const now = () => Date.now();
 
-  // What a hero looks like in fights and in the door preview.
+  // What a hero looks like in fights and in the previews.
   // 4+ pieces of a class: that class's silhouette and color. 4 + 2: a trim ring in the second class's color.
   // 6 pieces: the full look (an aura in the class color).
   function visualFor(hero) {
@@ -19,6 +20,7 @@ window.G = window.G || {};
       tint: st.look ? G.CLASSES[st.look].tint : hero.tint,
     };
   }
+  const say = (s, text) => { s.notice = [s.notice, text].filter(Boolean).join(' '); };
 
   const Game = {
     s: null,
@@ -29,13 +31,14 @@ window.G = window.G || {};
       const player = G.Hero.create({ name: 'You', isPlayer: true, tint: G.PLAYER_TINT }, rng.fork());
       const rivals = G.RIVALS.map(r => G.Hero.create({ name: r.name, tint: r.tint }, rng.fork()));
       this.s = { seed, rng, player, rivals, room: 1, phase: 'doors', roundKind: 'room', roundEnds: 0, notice: null, bagMsg: null, log: [] };
+      G.Supply.reset([player, ...rivals]);
       this.startRoom();
     },
     toTitle() { this.s = null; render(); },
     all() { return [this.s.player, ...this.s.rivals]; },
 
     // ---------- Timing ----------
-    startTimer(seconds) { this.s.roundEnds = now() + seconds * 1000; },
+    startTimer(seconds) { this.s.roundEnds = now() + seconds * 1000; this.s.roundTotal = seconds; },
     timeLeft() { const s = this.s; return s && s.roundEnds ? Math.max(0, (s.roundEnds - now()) / 1000) : null; },
     tick() {
       const s = this.s;
@@ -48,13 +51,37 @@ window.G = window.G || {};
       else this.timeUp();
     },
 
+    // ---------- Hearts ----------
+    // Vulture's Heart heals whenever a rival loses a heart
+    heartsSnapshot() { return Object.fromEntries(this.all().map(h => [h.id, h.hearts])); },
+    afterHeartLoss(before) {
+      const s = this.s;
+      for (const h of this.all()) {
+        const lost = (before[h.id] || 0) - h.hearts;
+        if (lost <= 0) continue;
+        for (const v of this.all()) {
+          if (v === h || !v.alive || v.gem !== 'vulture') continue;
+          const got = G.Hero.heal(v, CFG().vultureHeal * lost);
+          if (v.isPlayer && got) say(s, `${h.name} lost a heart. Vulture’s Heart heals you ${got}.`);
+        }
+      }
+    },
+    playerOut(text) {
+      const s = this.s;
+      s.phase = 'dead'; s.roundEnds = 0;
+      s.notice = text;
+      render();
+    },
+
     // ---------- Rooms ----------
     startRoom() {
       const s = this.s, p = s.player;
       s.roundKind = 'room';
+      const before = this.heartsSnapshot();
       const dmg = G.Dungeon.tickPoison(p, s.room);
-      if (dmg) s.notice = [s.notice, `Poison deals ${dmg} damage.`].filter(Boolean).join(' ');
-      if (!p.alive) { s.phase = 'dead'; s.notice = `Poison finished you off in room ${s.room}.`; s.roundEnds = 0; render(); return; }
+      if (dmg) say(s, `Poison deals ${dmg} damage.`);
+      if (!p.alive) { this.playerOut(`Poison took your last heart in room ${s.room}.`); return; }
+      if (p.hearts < before[p.id]) say(s, 'Poison took a heart. You come back at full health, poison cleared.');
       if (CFG().shopRooms.includes(s.room)) { this.startShop(); return; }
       s.doors = G.Dungeon.makeDoors(p, s.room, s.rng);
       for (const d of s.doors) if (d.monster) d.danger = G.Dungeon.danger(p, d, s.room);
@@ -65,7 +92,7 @@ window.G = window.G || {};
 
     // Player finished: in single player everyone is ready, so the round ends now
     completeRoom(text) {
-      if (text) this.s.notice = text;
+      if (text) say(this.s, text);
       this.endRound();
     },
 
@@ -76,63 +103,64 @@ window.G = window.G || {};
         case 'doors': {
           const d = G.AI.chooseDoor(p, s.doors, s.room, p.rng);
           G.AI.autoBag(p, d);
+          const before = this.heartsSnapshot();
           auto = `Time ran out, so the dungeon chose for you: ${G.Dungeon.doorInfo(d).title}. You ${G.AI.resolveDoor(p, d, s.room, s.rng)}.`;
+          this.afterHeartLoss(before);
           break;
         }
         case 'armory': { const it = s.rng.pick(s.armory); G.Hero.equip(p, it); auto = `Time ran out. You grabbed the ${it.name}.`; break; }
-        case 'battle': {
-          G.Arena.stop();
-          this.battleDone(true);
-          if (s.phase === 'reward') auto = `Time ran out. You ${G.AI.autoLoot(p, s.offer.items, s.room, s.offer.gold > 0)}.`;
-          break;
-        }
         case 'reward': auto = `Time ran out. You ${G.AI.autoLoot(p, s.offer.items, s.room, s.offer.gold > 0)}.`; break;
+        case 'spoils': auto = `Time ran out. You ${G.AI.autoSpoils(p, s.spoils)}.`; break;
         case 'mystery':
-          if (s.mystery.id === 'ambush') auto = 'Time ran out. You ' + G.AI.resolveDoor(p, { type: 'fight', monster: G.Dungeon.monsterFor(s.room, 'fight', s.rng) }, s.room, s.rng);
+          if (s.mystery.id === 'ambush') { this.startBattle({ type: 'fight', monster: G.Dungeon.monsterFor(s.room, 'fight', s.rng) }, 'fight'); return; }
           break;
-        case 'spec': { const id = G.AI.autoSpec(p, s.specOptions); auto = `Time ran out. You became a ${G.SPECS[id].name}.`; break; }
-        case 'gem': { const id = G.AI.autoGem(p, s.gemOptions); auto = `Time ran out. You took the ${G.GEMS[id].name}.`; break; }
+        case 'wager': auto = 'Time ran out. You walked away from the wager.'; break;
         case 'merchant': auto = 'Time ran out, so you left the merchant.'; break;
+        case 'forge': auto = 'Time ran out, so you left the forge.'; break;
+        case 'spec': { const id = G.AI.autoSpec(p, s.specOptions); s.notice = `Time ran out. You became a ${G.SPECS[id].name}.`; this.nextStep(); return; }
+        case 'tree': { const n = G.AI.autoTree(p, s.treeLevel); s.notice = `Time ran out. You took ${n.name}.`; this.nextStep(); return; }
+        case 'gem': { const id = G.AI.autoGem(p, s.gemOptions); s.notice = `Time ran out. You took the ${G.GEMS[id].name}.`; s.gemDone = true; this.nextStep(); return; }
+        case 'duelIntro': this.startDuelFight(); return;
       }
-      if (!p.alive) { s.phase = 'dead'; s.roundEnds = 0; s.notice = auto; render(); return; }
+      if (!p.alive) { this.playerOut(auto); return; }
       s.notice = auto;
       this.endRound();
     },
 
-    // Everyone else dies? Vulture's Heart heals to full.
-    vultureCheck(before) {
-      const s = this.s;
-      const died = this.all().filter(h => before.includes(h.id) && !h.alive).length;
-      if (!died) return;
-      for (const h of this.all()) {
-        if (h.alive && h.gem === 'vulture') {
-          h.hp = G.Hero.maxHp(h);
-          if (h.isPlayer) s.notice = [s.notice, 'A rival fell. Vulture’s Heart heals you to full.'].filter(Boolean).join(' ');
-        }
-      }
-    },
-
+    // After the player's room: rivals play their room, then level-up picks, gem, duel, next room
     endRound() {
       const s = this.s;
       s.bagMsg = null;
       if (s.roundKind === 'room') {
-        const before = this.all().filter(h => h.alive).map(h => h.id);
+        const before = this.heartsSnapshot();
         for (const r of s.rivals) if (r.alive) G.AI.aiRoom(r, s.room);
-        this.vultureCheck(before);
-        if (s.room === CFG().specRoom && !s.player.spec) {
-          s.roundKind = 'spec'; s.specOptions = G.Dungeon.specOptions(s.player, s.rng); s.phase = 'spec';
-          this.startTimer(CFG().roundSeconds); render(); return;
-        }
-        if (s.room === CFG().gemRoom && !s.player.gem) {
-          s.roundKind = 'gem'; s.gemOptions = G.Dungeon.gemOptions(s.player, s.rng); s.phase = 'gem';
-          this.startTimer(CFG().roundSeconds); render(); return;
-        }
+        s.rivalsPlayedRoom = s.room;
+        this.afterHeartLoss(before);
+        s.gemDone = false; s.duelDone = false;
+        s.roundKind = 'after';
       }
-      if (s.roundKind === 'spec' && s.room === CFG().gemRoom && !s.player.gem) {
-        s.roundKind = 'gem'; s.gemOptions = G.Dungeon.gemOptions(s.player, s.rng); s.phase = 'gem';
+      this.nextStep();
+    },
+    // Walks through whatever comes after a room: spec/tree picks, heart gem, duel, then the next room
+    nextStep() {
+      const s = this.s, p = s.player;
+      if (!p.alive) { this.playerOut(s.notice || `You ran out of hearts in room ${s.room}.`); return; }
+      const pick = G.Hero.pendingPick(p);
+      if (pick && pick.kind === 'spec') {
+        s.phase = 'spec'; s.specOptions = s.specOptions && s.specFor === p.level ? s.specOptions : G.Dungeon.specOptions(p, s.rng); s.specFor = p.level;
         this.startTimer(CFG().roundSeconds); render(); return;
       }
+      if (pick && pick.kind === 'tree') {
+        s.phase = 'tree'; s.treeLevel = pick.level;
+        this.startTimer(CFG().roundSeconds); render(); return;
+      }
+      if (s.room === CFG().gemRoom && !p.gem && !s.gemDone) {
+        s.phase = 'gem'; s.gemOptions = s.gemOptions || G.Dungeon.gemOptions(p, s.rng);
+        this.startTimer(CFG().roundSeconds); render(); return;
+      }
+      if (CFG().duelRooms.includes(s.room) && !s.duelDone) { this.startDuels(); return; }
       s.room++;
+      s.specOptions = null; s.gemOptions = s.room > CFG().gemRoom ? null : s.gemOptions;
       if (s.room > CFG().rooms) { this.startTournament(); return; }
       this.startRoom();
     },
@@ -141,11 +169,20 @@ window.G = window.G || {};
       const s = this.s, d = s.doors[i], p = s.player;
       if (s.phase !== 'doors') return;
       s.notice = null;
+      s.door = d;
       switch (d.type) {
         case 'armory': s.armory = G.Loot.armory(s.rng); s.phase = 'armory'; break;
-        case 'fight': case 'elite': case 'boss': this.startBattle(d.monster, d.type, d.type); return;
-        case 'treasure':
-          s.offer = { items: G.Loot.offer(p, s.room, 'treasure', s.rng), gold: CFG().gold.skipItemBase + 2 * Math.round(s.room / 2), title: 'Treasure', text: 'A chest, untouched. Take one item.' };
+        case 'fight': case 'elite': case 'boss': this.startBattle(d, d.type); return;
+        case 'wager': s.phase = 'wager'; break;
+        case 'trash': {
+          const g = G.Dungeon.goldFor('trash', p, s.rng);
+          p.gold += g;
+          s.offer = { items: G.Loot.offer(p, s.room, 'trash', s.rng), gold: 0, title: 'Trash Pile', text: `You dig out ${g} gold. Anything else worth keeping?` };
+          if (s.rng.chance(0.5)) s.offer.items.push(G.Items.rollConsumable(s.room, s.rng));
+          s.phase = 'reward'; break;
+        }
+        case 'vault':
+          s.offer = { items: G.Loot.offer(p, s.room, 'vault', s.rng), gold: CFG().gold.skipItemBase + 2 * Math.round(s.room / 2), title: 'Treasure Vault', text: 'A sealed vault, untouched for years. Take one.' };
           s.phase = 'reward'; break;
         case 'venom':
           p.poison += CFG().poison.venomStacks;
@@ -162,6 +199,12 @@ window.G = window.G || {};
           this.completeRoom(h > 0 ? `You rested by the fire and recovered ${h} health.` : 'You rested by the fire, but nothing came back.');
           return;
         }
+        case 'trainer': {
+          const lv = G.Hero.gainXp(p, CFG().xp.trainer);
+          this.completeRoom(`The trainer drills you hard. +${CFG().xp.trainer} XP${lv.length ? `. You reached level ${p.level}!` : '.'}`);
+          return;
+        }
+        case 'forge': s.forge = { strengthened: false, rerolled: false, msg: null }; s.phase = 'forge'; break;
         case 'mystery': s.mystery = G.Dungeon.rollMystery(s.rng); s.phase = 'mystery'; break;
         case 'merchant': s.merchant = G.Dungeon.merchantStock(p, s.room, s.rng); s.phase = 'merchant'; break;
       }
@@ -174,36 +217,62 @@ window.G = window.G || {};
       this.completeRoom(`You took the ${it.name}. The real run starts now.`);
     },
 
-    startBattle(monster, kind, lootKind) {
+    // ---------- Fights ----------
+    startBattle(door, kind) {
       const s = this.s, p = s.player;
-      const foes = G.Dungeon.buildEnemies(monster, s.room, kind);
+      const foes = G.Dungeon.doorFoes(door, s.room);
       const res = G.simulateFight(G.Stats.compute(p, { buffs: true }), foes, G.Dungeon.fightOpts(p, s.rng.int(0, 1e9)));
       s.battle = {
-        kind, lootKind, monster, res, title: G.Dungeon.monsterName(monster, kind),
+        kind, door, res, title: G.Dungeon.monsterName(door.monster, kind === 'wager' ? 'fight' : kind, door.trait),
         visual: { a: visualFor(p) },
         done: false, onDone: () => this.battleDone(false),
       };
       s.phase = 'battle';
+      s.notice = null;
+      s.roundEnds = 0;                 // fights never eat into your pick time
       render();
     },
 
     battleDone(silent) {
       const s = this.s, b = s.battle, p = s.player;
-      if (!b || b.done || b.tour) return;
+      if (!b || b.done || b.tour || b.duel) return;
       b.done = true;
+      const before = this.heartsSnapshot();
       const out = G.Dungeon.applyFight(p, b.res, s.room);
+      this.afterHeartLoss(before);
       const notes = [];
-      if (b.res.revived.a) notes.push('Phoenix Heart burned: you were reborn at full health and exploded.');
+      if (b.res.phoenixWin === 'a') notes.push('Phoenix Heart: you exploded, took them with you, and stood back up.');
       if (b.res.goldStolen) notes.push(`A thief escaped with ${b.res.goldStolen} gold.`);
-      if (out === 'dead') { s.phase = 'dead'; s.roundEnds = 0; if (!silent) render(); return; }
-      if (out === 'timeout') { this.completeRoom([...notes, 'Neither side could finish it. No loot this time.'].join(' ')); return; }
-      const gold = G.Dungeon.goldFor(b.kind === 'fight' ? 'fight' : b.kind, p, s.rng);
+      const bet = b.kind === 'wager' ? s.wagerBet || 0 : 0;
+      if (out === 'dead') { p.gold = Math.max(0, p.gold - bet); this.playerOut(`${b.title} took your last heart in room ${s.room}.`); return; }
+      if (out === 'heart') {
+        p.gold = Math.max(0, p.gold - bet);
+        this.completeRoom([...notes, `${b.title} took a heart. You have ${p.hearts} left and come back at full health, but get nothing from this room.${bet ? ` You lost your ${bet} gold bet.` : ''}`].join(' '));
+        return;
+      }
+      const k = b.kind === 'wager' ? 'fight' : b.kind;
+      const lv = G.Hero.gainXp(p, CFG().xp[k] || CFG().xp.fight);
+      const xpNote = `+${CFG().xp[k] || CFG().xp.fight} XP${lv.length ? ` (you reached level ${p.level})` : ''}`;
+      if (out === 'timeout') {
+        p.gold = Math.max(0, p.gold - bet);
+        this.completeRoom([...notes, `Neither side could finish it. ${xpNote}, no loot this time.${bet ? ` The bet is lost.` : ''}`].join(' '));
+        return;
+      }
+      if (bet) { p.gold += bet; notes.push(`You won the wager: +${bet} gold.`); }
+      const gold = G.Dungeon.goldFor(k, p, s.rng);
       p.gold += gold;
-      s.offer = {
-        items: G.Loot.offer(p, s.room, b.lootKind, s.rng), gold: CFG().gold.skipItemBase + 2 * Math.round(s.room / 2),
-        title: 'Victory', text: [...notes, `${b.title} is down. You found ${gold} gold. Choose one.`].join(' '),
-      };
-      s.phase = 'reward';
+      if (G.Dungeon.gearDrops(p, k, s.rng)) {
+        s.offer = {
+          items: G.Loot.offer(p, s.room, k, s.rng), gold: CFG().gold.skipItemBase + 2 * Math.round(s.room / 2),
+          title: 'Victory', text: [...notes, `${b.title} is down. ${gold} gold, ${xpNote}. Gear dropped: choose one.`].join(' '),
+        };
+        s.phase = 'reward';
+      } else {
+        s.spoils = G.Dungeon.spoilsOptions(p, s.room, s.rng);
+        s.spoilsText = [...notes, `${b.title} is down. ${gold} gold, ${xpNote}. No gear this time; pick your spoils.`].join(' ');
+        s.phase = 'spoils';
+      }
+      this.startTimer(CFG().roundSeconds);    // the victory screen gets its own clock
       if (!silent) render();
     },
 
@@ -227,6 +296,39 @@ window.G = window.G || {};
       s.player.gold += s.offer.gold;
       this.completeRoom(s.offer.gold ? `Took ${s.offer.gold} gold.` : 'You left with nothing.');
     },
+    takeSpoils(id) {
+      const s = this.s, opt = s.spoils && s.spoils.find(o => o.id === id);
+      if (!opt) return;
+      const lvBefore = s.player.level;
+      const txt = G.Dungeon.takeSpoils(s.player, opt);
+      this.completeRoom(`You ${txt}.${s.player.level > lvBefore ? ` Level ${s.player.level}!` : ''}`);
+    },
+
+    // ---------- Wager ----------
+    placeBet(amount) {
+      const s = this.s, p = s.player;
+      if (s.phase !== 'wager' || (amount && p.gold < amount)) return;
+      if (!amount) { this.completeRoom('You walked away from the wager.'); return; }
+      s.wagerBet = amount;
+      this.startBattle(s.door, 'wager');
+    },
+
+    // ---------- Forge ----------
+    forgeAct(kind, slot) {
+      const s = this.s, p = s.player, f = s.forge, F = CFG().forge;
+      const it = p.gear[slot];
+      if (s.phase !== 'forge' || !it) return;
+      if (kind === 'strengthen' && !f.strengthened && p.gold >= F.upgradeCost) {
+        p.gold -= F.upgradeCost; G.Dungeon.forgeStrengthen(it); f.strengthened = true;
+        f.msg = `The smith hammers your ${it.name} stronger.`;
+      } else if (kind === 'reroll' && !f.rerolled && p.gold >= F.rerollCost && it.rarity !== 'grey') {
+        p.gold -= F.rerollCost; G.Dungeon.forgeReroll(it, s.rng); f.rerolled = true;
+        f.msg = `New bonus: ${it.name}.`;
+      }
+      const max = G.Hero.maxHp(p); if (p.hp > max) p.hp = max;
+      render();
+    },
+    leaveForge() { if (this.s.phase === 'forge') this.completeRoom(this.s.forge.strengthened || this.s.forge.rerolled ? 'You leave the forge.' : 'You leave the forge empty-handed.'); },
 
     // ---------- Bag ----------
     useBag(i) {
@@ -250,36 +352,102 @@ window.G = window.G || {};
       if (act === 'spring') this.completeRoom(`The water is cold and clean. +${G.Hero.heal(p, CFG().springHeal)} health.`);
       else if (act === 'cache') { const g = 2 * s.rng.int(10, 16); p.gold += g; this.completeRoom(`You pocket ${g} gold.`); }
       else if (act === 'shrine') {
-        const cost = CFG().shrineCost;
+        const cost = p.gem === 'stone' ? 1 : CFG().shrineCost;
         if (p.hp <= cost) return;
         p.hp -= cost;
         s.offer = { items: G.Loot.offer(p, s.room, 'shrine', s.rng), gold: 0, title: 'Blood Shrine', text: `The altar drinks ${cost} health. It offers these in return.` };
         s.phase = 'reward';
         render();
-      } else if (act === 'ambush') this.startBattle(G.Dungeon.monsterFor(s.room, 'fight', s.rng), 'fight', 'fight');
+      } else if (act === 'ambush') this.startBattle({ type: 'fight', monster: G.Dungeon.monsterFor(s.room, 'fight', s.rng) }, 'fight');
       else if (act === 'leave') this.completeRoom('You left the shrine alone.');
     },
 
+    // ---------- Level-up picks and heart gem ----------
     chooseSpec(id) {
       const s = this.s;
       if (s.phase !== 'spec') return;
       G.Hero.setSpec(s.player, id);
-      s.notice = `You are now a ${G.SPECS[id].name}.`;
-      this.endRound();
+      s.notice = `You are now a ${G.SPECS[id].name}. Its skill tree opens at level 10.`;
+      this.nextStep();
+    },
+    chooseTree(id) {
+      const s = this.s;
+      if (s.phase !== 'tree') return;
+      const node = G.Stats.treeOptions(s.player.spec, s.treeLevel).find(n => n.id === id);
+      if (!node) return;
+      G.Hero.pickTree(s.player, s.treeLevel, id);
+      s.notice = `${node.name}: ${node.desc}.`;
+      this.nextStep();
     },
     chooseGem(id) {
       const s = this.s;
       if (s.phase !== 'gem') return;
       G.Hero.setGem(s.player, id);
       s.notice = `The ${G.GEMS[id].name} settles into your chest.`;
-      this.endRound();
+      s.gemDone = true;
+      this.nextStep();
     },
 
-    // ---------- Shared shop round ----------
+    // ---------- Duels (after the bosses in rooms 10 and 20) ----------
+    startDuels() {
+      const s = this.s;
+      s.duelDone = true;
+      const field = this.all().filter(h => h.alive);
+      const pairs = G.Duel.pairs(field, s.rng);
+      const before = this.heartsSnapshot();
+      s.duel = { pairs, mine: null };
+      for (const p of pairs) {
+        const mine = p.a.hero.isPlayer || (!p.ghost && p.b.hero.isPlayer);
+        if (mine) { s.duel.mine = p; continue; }
+        G.Duel.resolve(p, G.Duel.simulate(p, s.rng), s.room);
+      }
+      this.afterHeartLoss(before);
+      if (!s.duel.mine) { this.nextStep(); return; }
+      s.phase = 'duelIntro';
+      s.roundKind = 'duel';
+      this.startTimer(8);
+      render();
+    },
+    startDuelFight() {
+      const s = this.s, m = s.duel.mine;
+      if (!m) return;
+      // Fight from the player's side so the player is always on the left
+      const flip = !m.a.hero.isPlayer;
+      const pair = flip ? { a: m.b, b: m.a } : m;
+      const res = G.Duel.simulate(pair, s.rng);
+      const oppName = pair.b.ghost ? pair.b.name : pair.b.hero.name;
+      s.battle = {
+        duel: true, res, title: `Duel: You vs ${oppName}`,
+        visual: { a: visualFor(pair.a.hero), b0: pair.b.ghost ? { ...visualFor(pair.b.of), ghost: true } : visualFor(pair.b.hero) },
+        done: false,
+        onDone: () => {
+          if (s.battle.done) return;
+          s.battle.done = true;
+          const before = this.heartsSnapshot();
+          G.Duel.resolve(pair, res, s.room);
+          this.afterHeartLoss(before);
+          const won = res.winner === 'a';
+          const X = CFG().xp;
+          if (pair.ghost) s.notice = won ? `You beat the ${oppName}. +${X.duelWin} XP.` : `The ${oppName} got the better of you. No heart lost. +${X.duelLoss} XP.`;
+          else s.notice = won ? `You beat ${oppName}! +${CFG().duel.winGold} gold, +${X.duelWin} XP. Your health goes back to what it was.`
+            : `${oppName} won the duel. You lose a heart (${s.player.hearts} left). +${X.duelLoss} XP. Your health goes back to what it was.`;
+          s.duel.mine = null;
+          s.roundKind = 'after';
+          this.nextStep();
+        },
+      };
+      s.phase = 'battle';
+      s.roundEnds = 0;
+      render();
+    },
+
+    // ---------- Shop round ----------
     startShop() {
       const s = this.s;
       const alive = this.all().filter(h => h.alive);
-      const order = alive.slice().sort((a, b) => a.hp - b.hp || G.Hero.power(a) - G.Hero.power(b));
+      // weakest first: lowest health percentage picks first
+      const pct = h => h.hp / G.Hero.maxHp(h);
+      const order = alive.slice().sort((a, b) => pct(a) - pct(b) || G.Hero.power(a) - G.Hero.power(b));
       s.roundKind = 'shop';
       s.phase = 'shop';
       s.shop = {
@@ -360,49 +528,54 @@ window.G = window.G || {};
       s.roundEnds = 0;
       const mine = sh.picks[s.player.id];
       s.notice = `Shop round over. You ${mine && !mine.startsWith('passed') ? 'took ' + mine : mine || 'passed'}.`;
-      s.room++;
-      this.startRoom();
+      s.roundKind = 'after';
+      s.rivalsPlayedRoom = s.room;
+      s.gemDone = true; s.duelDone = true;
+      this.nextStep();
     },
 
     // ---------- Merchant door ----------
     leaveMerchant() {
       const s = this.s;
       if (s.phase !== 'merchant') return;
-      const n = s.merchant.bought.length + s.merchant.potions;
-      this.completeRoom(n ? 'You leave the merchant with your purchases.' : 'You leave the merchant.');
+      this.completeRoom(s.merchant.bought.length ? 'You leave the merchant with your purchases.' : 'You leave the merchant.');
     },
     shopBuy(kind, id) {
-      const s = this.s, sh = s.merchant, p = s.player, S = CFG().shop;
-      if (s.phase !== 'merchant' || !sh) return;
+      const s = this.s, m = s.merchant, p = s.player, S = CFG().shop;
+      if (s.phase !== 'merchant' || !m) return;
       if (kind === 'gear') {
-        const it = sh.stock.find(x => x.id === id);
-        const price = it && G.Dungeon.itemPrice(it);
-        if (!it || sh.bought.includes(id) || p.gold < price) return;
+        const it = m.stock.find(x => x.id === id);
+        const price = it && G.Dungeon.merchantPrice(p, m, it);
+        if (!it || m.bought.includes(id) || p.gold < price) return;
         p.gold -= price;
+        if (price === 0) m.freeUsed = true;
         const old = G.Hero.equip(p, it);
         if (old) p.gold += CFG().salvage[old.rarity];
-        sh.bought.push(id);
-        sh.msg = `Bought and equipped ${it.name}.`;
+        m.bought.push(id);
+        m.msg = price === 0 ? `Haggled ${it.name} for free and equipped it.` : `Bought and equipped ${it.name}.`;
       } else if (kind === 'cons') {
         const c = G.CONSUMABLES[id];
         const price = id === 'potion' ? S.potionCost : c.price;
         if (p.gold < price || G.Hero.bagFull(p)) return;
-        if (id === 'potion' && sh.potions >= S.potionsPerShop) return;
+        if (id === 'potion' && m.potions <= 0) return;
         p.gold -= price;
-        if (id === 'potion') sh.potions++;
+        if (id === 'potion') m.potions--;
         p.bag.push(G.Items.consumable(id));
-        sh.msg = `Bought ${c.name}. It's in your bag.`;
+        m.msg = `Bought ${c.name}. It's in your bag.`;
       } else if (kind === 'restock') {
-        if (p.gold < S.restockCost) return;
-        p.gold -= S.restockCost;
-        sh.stock = G.Loot.offer(p, s.room, 'shop', s.rng, S.gearCount);
-        sh.bought = [];
-        sh.msg = 'Fresh stock on the table.';
+        const cost = S.restockCosts[m.restocks];
+        if (cost == null || p.gold < cost) return;
+        p.gold -= cost;
+        m.restocks++;
+        m.stock = G.Loot.offer(p, s.room, 'shop', s.rng, S.gearCount);
+        m.bought = [];
+        m.msg = 'Fresh stock on the table.';
       } else if (kind === 'blood') {
-        if (p.hp <= S.bloodCost[1]) return;
-        const cost = 2 * s.rng.int(S.bloodCost[0] / 2, S.bloodCost[1] / 2);
+        if (p.hp <= S.bloodCost[1] && p.gem !== 'stone') return;
+        if (p.gem === 'stone' && p.hp <= 1) return;
+        const cost = p.gem === 'stone' ? 1 : 2 * s.rng.int(S.bloodCost[0] / 2, S.bloodCost[1] / 2);
         p.hp -= cost; p.gold += S.bloodGold;
-        sh.msg = `The merchant takes ${cost} health and hands you ${S.bloodGold} gold.`;
+        m.msg = `The merchant takes ${cost} health and hands you ${S.bloodGold} gold.`;
       }
       render();
     },
@@ -423,43 +596,59 @@ window.G = window.G || {};
       const startRound = T.rounds.length;
       let m;
       while ((m = G.Tournament.nextMatch(T)) && T.rounds.length === startRound) {
-        if (m.a.hero.isPlayer || m.b.hero.isPlayer) { this.tourBattle(m); return; }
+        const mine = m.a.hero.isPlayer || (!m.ghost && m.b.hero.isPlayer);
+        if (mine && !this.playerOutOfTour()) { this.tourBattle(m); return; }
         G.Tournament.resolve(T, m, G.Tournament.simulate(T, m));
       }
       if (!T.champion) this.startTimer(CFG().tourBreakSeconds);
       render();
     },
+    playerOutOfTour() { const e = this.s.tour.entrants.find(x => x.hero.isPlayer); return !e || e.out; },
     tourBattle(m) {
       const s = this.s, T = s.tour;
-      const res = G.Tournament.simulate(T, m);
+      const flip = !m.a.hero.isPlayer;
+      const pair = flip ? { a: m.b, b: m.a } : m;
+      const res = G.Tournament.simulate(T, pair);
+      const oppName = pair.b.ghost ? pair.b.name : pair.b.hero.name;
       s.battle = {
-        tour: true, match: m, res, title: `${G.Tournament.currentRound(T).name}: ${m.a.hero.name} vs ${m.b.hero.name}`,
-        visual: { a: visualFor(m.a.hero), b0: visualFor(m.b.hero) }, done: false,
+        tour: true, match: m, res, title: `Tournament round ${G.Tournament.currentRound(T).n}: You vs ${oppName}`,
+        visual: { a: visualFor(pair.a.hero), b0: pair.b.ghost ? { ...visualFor(pair.b.of), ghost: true } : visualFor(pair.b.hero) }, done: false,
         onDone: () => {
           if (s.battle.done) return;
           s.battle.done = true;
-          G.Tournament.resolve(T, m, res);
-          if (m.rageHeal && m.winner.hero.isPlayer) s.notice = `Bloodrage: your arena health rises by ${m.rageHeal} for your next match.`;
+          // Resolve from the match's own orientation
+          const fixed = flip ? { ...res, winner: res.winner === 'a' ? 'b' : 'a', aHp: res.bHp, bHp: res.aHp,
+            bloodrage: res.bloodrage ? { a: res.bloodrage.b, b: res.bloodrage.a } : null } : res;
+          G.Tournament.resolve(T, m, fixed);
+          const me = T.entrants.find(e => e.hero.isPlayer);
+          const won = res.winner === 'a';
+          if (m.ghost) s.notice = won ? `You beat the ${oppName}. You keep ${me.hp} health.` : `The ${oppName} beat you. No heart lost; you go on with ${me.hp} health.`;
+          else if (won) s.notice = `You beat ${oppName}. You go into the next round with ${me.hp} health.${m.rageHeal ? ` Bloodrage: +${m.rageHeal}.` : ''}`;
+          else s.notice = me.out ? `${oppName} took your last heart.` : `${oppName} won. You lose a heart (${s.player.hearts} left) and come back at full health.`;
           s.phase = 'tournament';
           if (!T.champion) this.startTimer(CFG().tourBreakSeconds);
           render();
         },
       };
       s.phase = 'battle';
+      s.roundEnds = 0;
       render();
     },
 
+    // When you're out: play the rest of the match without you
     seeEnding() {
       const s = this.s;
-      for (let room = s.room; room <= CFG().rooms; room++) {
-        const before = this.all().filter(h => h.alive).map(h => h.id);
-        for (const r of s.rivals) if (r.alive) G.AI.aiRoom(r, room);
-        this.vultureCheck(before);
+      if (!s.tour) {
+        for (let room = s.room; room <= CFG().rooms; room++) {
+          if (s.rivalsPlayedRoom !== room) for (const r of s.rivals) if (r.alive) G.AI.aiRoom(r, room);
+          if (CFG().duelRooms.includes(room) && !(room === s.room && s.duelDone)) G.Duel.runAll(s.rivals, room, s.rng);
+        }
+        const field = s.rivals.filter(h => h.alive);
+        s.tour = field.length ? G.Tournament.create(field, s.rng.fork()) : null;
       }
-      const field = s.rivals.filter(h => h.alive);
-      s.tour = field.length ? G.Tournament.create(field, s.rng.fork()) : null;
       if (s.tour) G.Tournament.runAll(s.tour);
       s.phase = 'ending';
+      s.roundEnds = 0;
       render();
     },
   };

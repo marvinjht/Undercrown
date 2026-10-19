@@ -3,8 +3,8 @@
 window.G = window.G || {};
 
 G.CONSUMABLES = {
-  potion:  { name: 'Health Potion',         heal: 40,  price: 30, weight: 30, desc: 'Heal 40.' },
-  greater: { name: 'Greater Health Potion', heal: 80,  price: 54, weight: 12, minRoom: 15, desc: 'Heal 80.' },
+  potion:  { name: 'Health Potion',         heal: 30,  price: 30, weight: 30, desc: 'Heal 30.' },
+  greater: { name: 'Greater Health Potion', heal: 60,  price: 54, weight: 12, minRoom: 15, desc: 'Heal 60.' },
   antidote:{ name: 'Antidote',              cure: true, price: 20, weight: 18, desc: 'Clear all poison.' },
   iron:    { name: 'Elixir of Iron',        buff: { armor: 6 }, price: 24, weight: 9, desc: '+6 Armor next fight.' },
   salve:   { name: 'Ward Salve',            buff: { ward: 6 },  price: 24, weight: 9, desc: '+6 Ward next fight.' },

@@ -70,7 +70,7 @@ G.WEAPONS = {
   },
   longbow: {
     classes: ['archer'],
-    name: 'Longbow', range: 'far', type: 'phys', dmg: 18, spd: 6, bonus: { pierce: 4 },
+    name: 'Longbow', range: 'far', type: 'phys', dmg: 18, spd: 6, bonus: { pierce: 2 },
     trait: 'Far range: the most free shots. Pierce: ignores some Armor.',
     blurb: 'Slow, heavy arrows from across the room.',
     bases: ['Yew Longbow', 'Warbow', 'Skypiercer'],

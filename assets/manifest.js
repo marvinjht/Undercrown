@@ -43,6 +43,6 @@ G.ASSETS = {
 
     icon_door_fight: null, icon_door_elite: null, icon_door_boss: null, icon_door_treasure: null,
     icon_door_rest: null, icon_door_shop: null, icon_door_mystery: null, icon_door_armory: null,
-    icon_door_venom: null, icon_door_purify: null, icon_door_merchant: null,
+    icon_door_venom: null, icon_door_purify: null, icon_door_merchant: null, icon_door_trash: null, icon_door_vault: null, icon_door_forge: null, icon_door_trainer: null, icon_door_wager: null,
   },
 };

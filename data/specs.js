@@ -1,5 +1,5 @@
-// Specializations, offered right after room 5 (3 options). affinity = weapons that make a
-// spec more likely to be offered. params = the numbers the game uses; keep desc in sync.
+// Specializations, picked at level 5 (3 random options). params = the numbers the game uses; keep desc in sync.
+// tree: at level 10 and 15 you pick left or right; level 20 is the capstone. fx keys are read by combat.js.
 window.G = window.G || {};
 
 G.SPECS = {
@@ -43,6 +43,51 @@ G.SPECS = {
     desc: 'Every 4th attack aimed at you is parried: you take nothing and strike back.',
     tip: 'Best with sabers, longswords and shields.',
     affinity: ['saber', 'longsword', 'swordShield'],
+  },
+};
+
+G.SPEC_TREES = {
+  shadow: {
+    t10: [{ id: 'linger', name: 'Lingering Shadows', fx: { hideLonger: 1 }, desc: 'Hide for 3 seconds instead of 2' },
+          { id: 'ambush', name: 'Ambush', fx: { ambushDmg: 10 }, desc: 'Your hit out of hiding deals +10' }],
+    t15: [{ id: 'step', name: 'Shadow Step', fx: { hideEvery: 4 }, desc: 'Hide every 4 seconds instead of 6' },
+          { id: 'poison', name: 'Poisoned Blade', fx: { ambushBleed: 6 }, desc: 'Hits out of hiding cause Bleed 6' }],
+    t20: { id: 'nightlord', name: 'Night Lord', fx: { markPop: 5 }, desc: 'Hitting out of hiding marks the enemy for 5 seconds. When the mark ends it pops for half the damage you dealt it during the mark' },
+  },
+  bloodthirst: {
+    t10: [{ id: 'gorge', name: 'Gorge', fx: { overhealShield: 20 }, desc: 'Healing past full health becomes Shield, up to 20' },
+          { id: 'frenzy', name: 'Frenzy', fx: { lowSpd: 2 }, desc: '+2 Speed below half health' }],
+    t15: [{ id: 'pact', name: 'Blood Pact', stats: { leech: 2, hp: -16 }, desc: '+2 more Life on Hit, −16 max Health' },
+          { id: 'hemorrhage', name: 'Hemorrhage', stats: { bleed: 2 }, desc: 'Your hits cause Bleed 2' }],
+    t20: { id: 'sanguine', name: 'Sanguine', fx: { lowLeechDouble: 1 }, desc: 'Life on Hit heals double below half health' },
+  },
+  juggernaut: {
+    t10: [{ id: 'bulwark', name: 'Bulwark', stats: { armor: 4 }, desc: '+4 Armor' },
+          { id: 'thick', name: 'Thick Skin', stats: { ward: 4 }, desc: '+4 Ward' }],
+    t15: [{ id: 'unstoppable', name: 'Unstoppable', fx: { stunImmune: 1 }, desc: 'You can’t be stunned' },
+          { id: 'retaliate', name: 'Retaliate', fx: { retaliate: 4 }, desc: 'Every hit you take deals 4 back' }],
+    t20: { id: 'colossus', name: 'Colossus', fx: { armorShield: 4 }, desc: 'Start each fight with Shield equal to 4 times your Armor' },
+  },
+  berserker: {
+    t10: [{ id: 'bloodlust', name: 'Bloodlust', fx: { berserkCap: 30 }, desc: 'Your bonus cap rises from +20 to +30 Damage' },
+          { id: 'thrill', name: 'Thrill', fx: { lowSpd: 2 }, desc: '+2 Speed below half health' }],
+    t15: [{ id: 'reckless', name: 'Reckless', fx: { critDmgFlat: 10, takeMore: 2 }, desc: 'Crits deal +10, but you take +2 per hit' },
+          { id: 'breath', name: 'Second Breath', fx: { quarterHeal: 30 }, desc: 'The first time you drop below a quarter health, heal 30' }],
+    t20: { id: 'undying', name: 'Undying Rage', fx: { undying: 3 }, desc: 'Once per fight, at 0 health you stay at 1 for 3 seconds' },
+  },
+  treasureHunter: {
+    t10: [{ id: 'haggler', name: 'Haggler', fx: { freeMerchant: 1 }, desc: 'Your first gear purchase at each merchant is free' },
+          { id: 'scavenger', name: 'Scavenger', fx: { spoils4: 1 }, desc: 'Spoils offer 4 choices instead of 3' }],
+    t15: [{ id: 'lucky', name: 'Lucky Find', fx: { luckyGear: 1 }, desc: 'Gear from 1 in 2 normal fights instead of 1 in 3' },
+          { id: 'collector', name: 'Collector', fx: { collector: 1 }, desc: 'Class-tagged drops lean toward your main class' }],
+    t20: { id: 'midas', name: 'Midas', fx: { midas: 50 }, desc: '+2 Damage and +8 Health for every 50 gold you hold' },
+  },
+  duelist: {
+    t10: [{ id: 'riposte', name: 'Riposte', fx: { counterDmg: 8 }, desc: 'Counters deal +8' },
+          { id: 'footwork', name: 'Footwork', fx: { parryEvery: 3 }, desc: 'Parry every 3rd attack instead of every 4th' }],
+    t15: [{ id: 'read', name: 'Read the Fight', fx: { parryDodge: 2 }, desc: 'Each parry gives +2 Dodge, up to +10' },
+          { id: 'disarm', name: 'Disarm', fx: { parryStun: 1 }, desc: 'Parries stun the attacker for 1 second' }],
+    t20: { id: 'blademaster', name: 'Blade Master', fx: { counterCrit: 1 }, desc: 'Your counters always crit' },
   },
 };
 

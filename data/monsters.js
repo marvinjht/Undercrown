@@ -25,10 +25,21 @@ G.MONSTERS = [
 ];
 
 G.BOSSES = {
-  boneKing: { id: 'boneKing', name: 'The Bone King', hp: 0.8, hit: 0.9, spd: 10, armor: 4 },
-  gorehorn: { id: 'gorehorn', name: 'Gorehorn',      hp: 0.95, hit: 1.2, spd: 8, stun: 14 },
-  warden:   { id: 'warden',   name: 'The Warden',    hp: 0.8, hit: 0.85, spd: 10, armor: 6, ward: 4, crit: 8 },
+  boneKing: { id: 'boneKing', name: 'The Bone King', hp: 0.8, hit: 0.9, spd: 10, armor: 4, trait: 'ironclad' },
+  gorehorn: { id: 'gorehorn', name: 'Gorehorn',      hp: 0.95, hit: 1.2, spd: 8, stun: 14, trait: 'thorns' },
+  warden:   { id: 'warden',   name: 'The Warden',    hp: 0.8, hit: 0.85, spd: 10, armor: 6, ward: 4, crit: 8, trait: 'spellward' },
 };
+
+// Elite traits: every elite rolls one, shown on its door. Each punishes a one-note build.
+G.ELITE_TRAITS = {
+  ironclad:      { name: 'Ironclad',      stats: { armor: 12 }, desc: '+12 Armor. Bring magic, holy or Pierce.' },
+  spellward:     { name: 'Spellward',     stats: { ward: 12 },  desc: '+12 Ward. Bring physical damage.' },
+  swarm:         { name: 'Swarm',         extra: 2,             desc: 'Comes with 2 extra weak copies. Cleave, area spells and fast attacks help.' },
+  evasive:       { name: 'Evasive',       stats: { dodge: 20 }, desc: '+20 Dodge. Fast attacks and Crit help.' },
+  thorns:        { name: 'Thorns',        thorns: 3,            desc: 'Every hit it takes deals 3 back. Slow heavy hits and Life on Hit help.' },
+  shieldbreaker: { name: 'Shieldbreaker', shieldBreak: true,    desc: 'Deals double damage to Shields. Armor and Health help.' },
+};
+G.ELITE_TRAIT_ORDER = Object.keys(G.ELITE_TRAITS);
 
 G.RIVALS = [
   { name: 'Brakka',   tint: 0xe8a07a },

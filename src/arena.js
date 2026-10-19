@@ -58,6 +58,7 @@ window.G = window.G || {};
       const body = this.add.image(0, 0, texture);
       const tint = vis.tint != null ? vis.tint : m.tint;
       if (tint) body.setTint(tint);
+      if (vis.ghost) body.setAlpha(0.5);
       const parts = [body];
       if (vis.trim && G.CLASSES[vis.trim]) parts.unshift(this.add.image(0, 0, 'trim_ring').setTint(G.CLASSES[vis.trim].tint).setAlpha(0.9));
       if (vis.full && vis.look && G.CLASSES[vis.look]) {
@@ -185,6 +186,8 @@ window.G = window.G || {};
         } break;
         case 'burn': if (def) this.float(def, String(e.amount), '#ff9a3c', 13, -18); break;
         case 'kite': if (att) this.float(att, 'KITE', '#8fcf78', 12); break;
+        case 'thorns': if (def) this.float(def, String(e.amount), '#c9a26b', 12, 14); break;
+        case 'undying': if (att) this.float(att, 'UNDYING', '#ff5b4a', 16); break;
         case 'stealth_on': if (att) { this.tweens.add({ targets: att.cont, alpha: 0.22, duration: 160 / this.speed }); if (e.label) this.float(att, 'VANISH', '#b9a7d9', 14); } break;
         case 'stealth_off': if (att) this.tweens.add({ targets: att.cont, alpha: 1, duration: 160 / this.speed }); break;
         case 'death':
@@ -197,15 +200,17 @@ window.G = window.G || {};
 
     drawBar(f) {
       if (f.gone) { f.bar.clear(); f.name.setVisible(false); return; }
-      const w = 64, h = 6, x = f.cont.x - w / 2, y = f.y - 42 * f.sc;
+      // An enemy on the hero's lane (1v1 fights) shows its name and bar below, so labels never overlap
+      const below = f.side === 'b' && f.y === 200;
+      const w = 64, h = 6, x = f.cont.x - w / 2, y = below ? f.y + 34 * f.sc + 14 : f.y - 42 * f.sc;
       f.bar.clear();
-      if (f.dead) { f.name.setPosition(f.cont.x, y - 10).setAlpha(0.4); return; }
+      if (f.dead) { f.name.setPosition(f.cont.x, below ? y + 12 : y - 10).setAlpha(0.4); return; }
       f.bar.fillStyle(0x0d0b09, 0.85).fillRect(x - 1, y - 1, w + 2, h + 2);
       f.bar.fillStyle(f.side === 'a' ? 0x6cc35f : 0xc4473a).fillRect(x, y, w * Math.max(0, f.hp / f.maxHp), h);
       let yy = y + h + 1;
       if (f.shield > 0) { f.bar.fillStyle(0x9fc4ff).fillRect(x, yy, w * Math.min(1, f.shield / f.maxShield), 3); yy += 4; }
       if (f.hasMana) { f.bar.fillStyle(0x0d0b09, 0.85).fillRect(x - 1, yy - 1, w + 2, 5); f.bar.fillStyle(0x6f7dff).fillRect(x, yy, w * Math.min(1, f.mana / 100), 3); }
-      f.name.setPosition(f.cont.x, y - 10);
+      f.name.setPosition(f.cont.x, below ? yy + 12 : y - 10);
     }
 
     update(_, delta) {

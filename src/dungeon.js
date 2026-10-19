@@ -1,4 +1,4 @@
-// Rooms, doors, monsters, events, spec and gem offers, and the AI that plays the rival heroes.
+// Rooms, doors, monsters, rewards, XP, hearts, and the AI that plays the rival heroes.
 // Everything here is UI-free so the same code can run on a server later.
 window.G = window.G || {};
 
@@ -24,6 +24,16 @@ window.G = window.G || {};
       spec: null, gem: null, spell: null, fx: {}, type: 'phys', range: 'melee',
     };
   }
+  // Trait stats grow with depth: about a third early, full strength by the last rooms
+  const traitScale = room => Math.min(1, 0.3 + room / 40);
+  function applyTrait(s, trait, room) {
+    const T = trait && G.ELITE_TRAITS[trait];
+    if (!T) return s;
+    for (const k in T.stats || {}) s[k] = (s[k] || 0) + 2 * Math.round(T.stats[k] * traitScale(room || 30) / 2);
+    if (T.thorns) s.fx = { ...s.fx, thorns: T.thorns };
+    if (T.shieldBreak) s.fx = { ...s.fx, shieldBreak: true };
+    return s;
+  }
 
   function splitSpec(sp, base, room, mult) {
     if (!sp) return null;
@@ -34,44 +44,58 @@ window.G = window.G || {};
     };
   }
 
-  // Enemy specs for one fight door
-  function buildEnemies(mon, room, kind) {
+  // Enemy specs for one fight door. trait = elite/boss trait; harder = Wager multiplier.
+  function buildEnemies(mon, room, kind, trait, harder) {
     const M = CFG().monster;
-    const mult = kind === 'elite' ? M.elite : kind === 'boss' ? M.boss : { hp: 1, hit: 1 };
+    let mult = kind === 'elite' ? M.elite : kind === 'boss' ? M.boss : { hp: 1, hit: 1 };
+    if (harder) mult = { hp: mult.hp * harder, hit: mult.hit * harder };
     const count = (mon.pack || 1) + (kind === 'elite' && mon.pack ? M.elite.packExtra : 0);
+    const tr = trait || mon.trait || null;
     const out = [];
     for (let i = 0; i < count; i++) {
       out.push({
-        s: statBlock(mon, room, mult), name: prefix(mon, kind) + (mon.memberName || mon.name),
+        s: applyTrait(statBlock(mon, room, mult), tr, room), name: prefix(mon, kind) + (mon.memberName || mon.name),
         sprite: 'monster_' + mon.id, scale: (mon.scale || 1) * (kind === 'elite' ? 1.12 : 1),
         tint: kind === 'elite' ? 0xffb8a8 : null,
         steal: mon.steal || 0, escapeAfter: mon.escapeAfter || 0,
         split: splitSpec(mon.split, mon, room, mult),
       });
     }
+    if (tr === 'swarm') {
+      const W = M.swarmCopy;
+      for (let i = 0; i < G.ELITE_TRAITS.swarm.extra; i++) {
+        out.push({ s: statBlock(mon, room, { hp: mult.hp * W.hp, hit: mult.hit * W.hit }), name: 'Swarmling',
+          sprite: 'monster_' + mon.id, scale: (mon.scale || 1) * 0.75, tint: 0xffb8a8 });
+      }
+    }
     return out;
   }
 
   // "Elite " in front for elite doors, unless the monster is already an elite kind (Elite Slime)
   const prefix = (mon, kind) => (kind === 'elite' && !/^Elite /.test(mon.name) ? 'Elite ' : '');
-  function monsterName(mon, kind) {
+  function monsterName(mon, kind, trait) {
     const n = prefix(mon, kind) + mon.name;
     const c = (mon.pack || 1) + (kind === 'elite' && mon.pack ? CFG().monster.elite.packExtra : 0);
-    return c > 1 ? `${n} ×${c}` : n;
+    const T = trait && G.ELITE_TRAITS[trait];
+    return (T ? T.name + ' ' : '') + (c > 1 ? `${n} ×${c}` : n);
   }
 
   const DOOR_INFO = {
     armory:   { title: 'The Armory', text: () => 'Every warrior starts here. Pick one of three weapons.' },
-    fight:    { title: 'Fight',    text: d => `${monsterName(d.monster, 'fight')}. Normal loot.` },
-    elite:    { title: 'Elite',    text: d => `${monsterName(d.monster, 'elite')}. Hits harder; loot is uncommon or better.` },
-    boss:     { title: 'Boss',     text: d => `${d.monster.name}. Guaranteed legendary item.` },
-    treasure: { title: 'Treasure', text: () => 'No fight. Pick one of two items.' },
+    fight:    { title: 'Fight',    text: d => `${monsterName(d.monster, 'fight')}. XP and gold; gear 1 fight in 3.` },
+    elite:    { title: 'Elite',    text: d => `${monsterName(d.monster, 'elite', d.trait)}. ${G.ELITE_TRAITS[d.trait].desc} Always drops gear.` },
+    boss:     { title: 'Boss',     text: d => `${d.monster.name} (${G.ELITE_TRAITS[d.monster.trait].name}). ${G.ELITE_TRAITS[d.monster.trait].desc} Guaranteed rare item.` },
+    trash:    { title: 'Trash Pile', text: () => 'No fight. A little gold and some junk. Maybe something useful.' },
+    vault:    { title: 'Treasure Vault', text: () => 'No fight. Pick 1 of 3 items, one of them rare.' },
     rest:     { title: 'Campfire', text: () => `Recover ${CFG().restHeal} health. Does not clear poison.` },
     mystery:  { title: 'Unknown',  text: () => 'Could be a gift, could be a fight.' },
     venom:    { title: 'Venom Cache', text: () => `Take an uncommon or better item, but gain ${CFG().poison.venomStacks} poison.` },
     purify:   { title: 'Purifying Spring', text: () => `Clears all poison and heals ${CFG().poison.purifyHeal}.` },
     shop:     { title: 'Shop Round', text: () => 'Free picks for everyone, weakest first.' },
     merchant: { title: 'Merchant', text: () => 'No fight. Spend gold on gear and potions, or sell blood.' },
+    forge:    { title: 'Forge',    text: () => `No fight. Strengthen an item (${CFG().forge.upgradeCost} gold) or reroll its bonus (${CFG().forge.rerollCost} gold).` },
+    trainer:  { title: 'Trainer',  text: () => `No fight. Gain ${CFG().xp.trainer} XP.` },
+    wager:    { title: 'Wager',    text: d => `${monsterName(d.monster, 'fight')}, tougher than usual. Bet gold: win and you double it.` },
   };
 
   // Merchant doors stay away from room 1, boss rooms, and the rooms next to a shop round
@@ -92,11 +116,12 @@ window.G = window.G || {};
     const second = rest.length ? rng.weighted(rest.map(t => [t, w(t)])) : first;
     const doors = [first, second].map(type => {
       const d = { type };
-      if (type === 'fight' || type === 'elite') d.monster = monsterFor(room, type, rng);
+      if (type === 'fight' || type === 'elite' || type === 'wager') d.monster = monsterFor(room, type === 'elite' ? 'elite' : 'fight', rng);
+      if (type === 'elite') d.trait = rng.pick(G.ELITE_TRAIT_ORDER);
       return d;
     });
-    for (let i = 0; i < 6 && doors[1].monster && doors[0].monster && doors[0].type === doors[1].type && doors[0].monster.id === doors[1].monster.id; i++) {
-      doors[1].monster = monsterFor(room, doors[1].type, rng);
+    for (let i = 0; i < 6 && doors[1].monster && doors[0].monster && doors[0].monster.id === doors[1].monster.id; i++) {
+      doors[1].monster = monsterFor(room, 'fight', rng);
     }
     return doors;
   }
@@ -104,17 +129,21 @@ window.G = window.G || {};
   function doorInfo(d) { const i = DOOR_INFO[d.type]; return { title: i.title, text: i.text(d) }; }
 
   function fightOpts(hero, seed) {
-    return { seed, aHp: hero.hp, aRevive: hero.gem === 'phoenix' && !hero.phoenixUsed, aName: hero.isPlayer ? 'You' : hero.name };
+    return { seed, aHp: hero.hp, aName: hero.isPlayer ? 'You' : hero.name };
+  }
+  function doorFoes(door, room) {
+    const kind = door.type === 'wager' ? 'fight' : door.type;
+    return buildEnemies(door.monster, room, kind, door.trait, door.type === 'wager' ? CFG().wager.monsterMult : null);
   }
 
   function danger(hero, door, room) {
     if (!door.monster) return null;
     const ps = G.Stats.compute(hero, { buffs: true });
-    const foes = buildEnemies(door.monster, room, door.type);
+    const foes = doorFoes(door, room);
     let lost = 0, deaths = 0;
     const n = 5;
     for (let i = 0; i < n; i++) {
-      const r = G.simulateFight(ps, foes, { ...fightOpts(hero, 1000 + i * 7919 + room), aRevive: false });
+      const r = G.simulateFight(ps, foes, fightOpts(hero, 1000 + i * 7919 + room));
       if (r.winner === 'b' && !r.timeout) deaths++;
       lost += hero.hp - r.aHp;
     }
@@ -139,13 +168,6 @@ window.G = window.G || {};
     return CFG().shop.itemCost[item.rarity] + item.room * CFG().shop.itemCostPerRoom;
   }
 
-  // What a merchant door sells: gear for gold, one potion, an antidote, a few buffs, blood for gold, restock
-  function merchantStock(hero, room, rng) {
-    const ids = G.BUFF_IDS.slice(), buffs = [];
-    while (buffs.length < 3 && ids.length) buffs.push(ids.splice(rng.int(0, ids.length - 1), 1)[0]);
-    return { stock: G.Loot.offer(hero, room, 'shop', rng, CFG().shop.gearCount), buffs, potions: 0, bought: [], msg: null };
-  }
-
   function pickN(ids, n, rng) {
     const pool = ids.slice(), out = [];
     while (out.length < n && pool.length) out.push(pool.splice(Math.floor(rng.float() * pool.length), 1)[0]);
@@ -162,30 +184,61 @@ window.G = window.G || {};
   ];
   function rollMystery(rng) { return rng.weighted(MYSTERY.map(m => [m, m.weight])); }
 
-  // Run one fight for a hero (no UI). Returns the sim result.
-  function fight(hero, mon, kind, room, rng) {
-    const foes = buildEnemies(mon, room, kind);
-    return G.simulateFight(G.Stats.compute(hero, { buffs: true }), foes, fightOpts(hero, rng.int(0, 1e9)));
+  // ---------- Fights and rewards ----------
+  function fight(hero, door, room, rng) {
+    return G.simulateFight(G.Stats.compute(hero, { buffs: true }), doorFoes(door, room), fightOpts(hero, rng.int(0, 1e9)));
   }
+  // Applies the result. Returns 'won' | 'timeout' | 'heart' (lost a heart, back at full) | 'dead' (out of hearts)
   function applyFight(hero, res, room) {
     hero.buffs = {};
-    if (res.revived.a) hero.phoenixUsed = true;
     if (res.goldStolen) hero.gold = Math.max(0, hero.gold - res.goldStolen);
-    if (res.timeout) { hero.hp = Math.max(1, res.aHp); return 'timeout'; }
-    hero.hp = res.aHp;
-    if (res.winner === 'b') { hero.alive = false; hero.hp = 0; hero.diedRoom = room; return 'dead'; }
-    return 'won';
+    if (res.winner === 'b') return G.Hero.loseHeart(hero, room) ? 'heart' : 'dead';
+    hero.hp = Math.max(1, res.aHp);
+    return res.timeout ? 'timeout' : 'won';
   }
 
-  // Poison ticks at the start of every room
+  // Does this fight give gear? Normal fights 1 in 3 (1 in 2 with Lucky Find); elites and bosses always.
+  function gearDrops(hero, kind, rng) {
+    if (kind === 'elite' || kind === 'boss') return true;
+    const lucky = G.Stats.treeFx(hero).fx.luckyGear;
+    return rng.int(1, 100) <= (lucky ? CFG().gearChance.lucky : CFG().gearChance.fight);
+  }
+
+  // Spoils: a small choice on fights with no gear
+  function spoilsOptions(hero, room, rng) {
+    const S = CFG().spoils;
+    const gold = S.gold + 2 * Math.round(room / 2);
+    const all = [
+      { id: 'gold', title: 'Gold pouch', text: `+${gold} gold`, gold },
+      { id: 'xp', title: 'Lessons learned', text: `+${CFG().xp.spoils} XP`, xp: CFG().xp.spoils },
+      { id: 'cons', title: 'Supplies', text: 'A random bag item', item: G.Items.rollConsumable(room, rng) },
+      { id: 'dmg', title: 'Whetstone', text: `+${S.statDmg} Damage, permanently`, stat: { dmg: S.statDmg } },
+      { id: 'hp', title: 'Hearty meal', text: `+${S.statHp} max Health, permanently`, stat: { hp: S.statHp } },
+    ];
+    const n = G.Stats.treeFx(hero).fx.spoils4 ? 4 : 3;
+    return pickN(all, n, rng);
+  }
+  function takeSpoils(hero, opt) {
+    if (opt.gold) { hero.gold += opt.gold; return `took ${opt.gold} gold`; }
+    if (opt.xp) { G.Hero.gainXp(hero, opt.xp); return `gained ${opt.xp} XP`; }
+    if (opt.item) {
+      if (G.Hero.bagFull(hero)) { hero.gold += 10; return 'took 10 gold (bag full)'; }
+      hero.bag.push(opt.item); return `took ${opt.item.name}`;
+    }
+    if (opt.stat) {
+      hero.bonus = hero.bonus || {};
+      for (const k in opt.stat) hero.bonus[k] = (hero.bonus[k] || 0) + opt.stat[k];
+      return `took the ${opt.title.toLowerCase()}`;
+    }
+    return '';
+  }
+
+  // Poison ticks at the start of every room. Dying to it costs a heart.
   function tickPoison(hero, room) {
     if (!hero.alive || hero.poison <= 0) return 0;
     const dmg = hero.poison;
     hero.hp -= dmg;
-    if (hero.hp <= 0) {
-      if (hero.gem === 'phoenix' && !hero.phoenixUsed) { hero.phoenixUsed = true; hero.hp = G.Hero.maxHp(hero); }  // reborn at full (no one to explode on)
-      else { hero.hp = 0; hero.alive = false; hero.diedRoom = room; }
-    }
+    if (hero.hp <= 0) { hero.hp = 0; G.Hero.loseHeart(hero, room); }
     return dmg;
   }
 
@@ -207,9 +260,56 @@ window.G = window.G || {};
     return '';
   }
 
+  // ---------- Merchant ----------
+  function merchantStock(hero, room, rng) {
+    const ids = G.BUFF_IDS.slice(), buffs = [];
+    while (buffs.length < 3 && ids.length) buffs.push(ids.splice(rng.int(0, ids.length - 1), 1)[0]);
+    const P = CFG().shop.potionStock;
+    return { stock: G.Loot.offer(hero, room, 'shop', rng, CFG().shop.gearCount), buffs, potions: rng.int(P[0], P[1]),
+      restocks: 0, bought: [], msg: null, freeUsed: false };
+  }
+  // Price for this hero at this visit (Haggler: first gear purchase is free)
+  function merchantPrice(hero, m, item) {
+    if (item.kind === 'gear' && G.Stats.treeFx(hero).fx.freeMerchant && !m.freeUsed) return 0;
+    return itemPrice(item);
+  }
+
+  // ---------- Forge ----------
+  // Strengthen: base stats grow by one tier step. Reroll: a new bonus stat (or trade-off) for the item.
+  function forgeStrengthen(item) {
+    for (const k in item.base) {
+      if (k === 'spd' && item.slot === 'weapon') continue;
+      const growth = G.STAT_INFO[k].growth;
+      if (growth === 'fixed') continue;
+      const g = growth === 'flat' ? CFG().loot.tierGrowth : CFG().loot.chanceTierGrowth;
+      const add = Math.max(2, 2 * Math.round(item.base[k] * g / 2));
+      item.base[k] += add; item.stats[k] = (item.stats[k] || 0) + add;
+    }
+    item.forged = (item.forged || 0) + 1;
+    item.name = item.name.replace(/ \+\d+$/, '') + ' +' + item.forged;
+  }
+  function forgeReroll(item, rng) {
+    if (item.rarity === 'grey') return false;
+    for (const k in item.affixStats || {}) item.stats[k] -= item.affixStats[k];
+    if (item.tradeoff) {
+      for (const k in item.tradeoff.give) item.stats[k] -= item.tradeoff.give[k];
+      for (const k in item.tradeoff.cost) item.stats[k] += item.tradeoff.cost[k];
+    }
+    const fresh = G.Items.generate(rng, { slot: item.slot, rarity: item.rarity, room: item.room, weaponType: item.weaponType });
+    item.affixStats = fresh.affixStats; item.affixes = fresh.affixes; item.tradeoff = fresh.tradeoff;
+    for (const k in item.affixStats) item.stats[k] = (item.stats[k] || 0) + item.affixStats[k];
+    if (item.tradeoff) {
+      for (const k in item.tradeoff.give) item.stats[k] = (item.stats[k] || 0) + item.tradeoff.give[k];
+      for (const k in item.tradeoff.cost) item.stats[k] = (item.stats[k] || 0) - item.tradeoff.cost[k];
+    }
+    item.name = fresh.name + (item.forged ? ' +' + item.forged : '');
+    return true;
+  }
+
   G.Dungeon = {
-    monsterFor, buildEnemies, monsterName, makeDoors, doorInfo, danger, goldFor, itemPrice,
-    specOptions, gemOptions, rollMystery, fight, applyFight, tickPoison, useItem, fightOpts, merchantOk, merchantStock,
+    monsterFor, buildEnemies, monsterName, makeDoors, doorInfo, danger, goldFor, itemPrice, doorFoes,
+    specOptions, gemOptions, rollMystery, fight, applyFight, tickPoison, useItem, fightOpts, merchantOk, merchantStock, merchantPrice,
+    gearDrops, spoilsOptions, takeSpoils, forgeStrengthen, forgeReroll,
   };
 
   // ---------------- AI rivals ----------------
@@ -240,10 +340,31 @@ window.G = window.G || {};
     if (goldInstead) { const g = CFG().gold.skipItemBase + 2 * Math.round(room / 2); hero.gold += g; return `took ${g} gold`; }
     return 'took nothing';
   }
+  function autoSpoils(hero, opts) {
+    const pref = ['dmg', 'hp', 'xp', 'gold', 'cons'];
+    const pick = pref.map(id => opts.find(o => o.id === id)).find(Boolean) || opts[0];
+    return takeSpoils(hero, pick);
+  }
 
   function autoSpec(hero, opts) { G.Hero.setSpec(hero, opts[0]); return opts[0]; }
+  function autoTree(hero, lv) {
+    const opts = G.Stats.treeOptions(hero.spec, lv);
+    let best = opts[0], bp = -1;
+    for (const o of opts) { hero.treePicks[lv] = o.id; const p = G.Hero.power(hero); if (p > bp) { bp = p; best = o; } }
+    delete hero.treePicks[lv];
+    G.Hero.pickTree(hero, lv, best.id);
+    return best;
+  }
+  // Make every pick a level-up owes (spec at 5, tree picks after)
+  function autoPicks(hero, rng) {
+    let p;
+    while ((p = G.Hero.pendingPick(hero))) {
+      if (p.kind === 'spec') autoSpec(hero, specOptions(hero, rng));
+      else autoTree(hero, p.level);
+    }
+  }
   function autoGem(hero, opts) {
-    const pref = ['pure', 'phoenix', 'devil', 'gaia', 'vulture', 'stone'];
+    const pref = ['pure', 'gaia', 'devil', 'phoenix', 'vulture', 'stone'];
     const pick = pref.find(g => opts.includes(g)) || opts[0];
     G.Hero.setGem(hero, pick);
     return pick;
@@ -268,14 +389,18 @@ window.G = window.G || {};
     const score = d => {
       let s;
       switch (d.type) {
-        case 'fight': s = hpPct > 0.3 ? 1.2 : 0.3; break;
+        case 'fight': s = hpPct > 0.3 ? 1.3 : 0.4; break;
         case 'elite': s = hpPct > 0.8 ? 2 : hpPct > 0.6 ? 0.9 : 0.05; break;
-        case 'treasure': s = 1.8; break;
+        case 'wager': s = hpPct > 0.75 && hero.gold >= CFG().wager.bets[0] ? 1.4 : 0.1; break;
+        case 'trash': s = 0.8; break;
+        case 'vault': s = 2.6; break;
         case 'rest': s = hpPct < 0.5 ? 3 : hpPct < 0.75 ? 1.3 : 0.2; break;
         case 'mystery': s = 0.9; break;
         case 'venom': s = hasAntidote ? 1.6 : hpPct > 0.7 && hero.poison === 0 ? 0.8 : 0.1; break;
         case 'purify': s = hero.poison >= 3 ? 3.5 : hero.poison > 0 ? 1.4 : 0.15; break;
         case 'merchant': s = hero.gold >= 60 ? 1.7 : hero.gold >= 35 ? 1.0 : 0.2; break;
+        case 'forge': s = hero.gold >= CFG().forge.upgradeCost ? 1.3 : 0.2; break;
+        case 'trainer': s = 1.2; break;
         default: s = 1;
       }
       if (d.monster) {
@@ -288,22 +413,46 @@ window.G = window.G || {};
     return scored.reduce((a, b) => (b[1] > a[1] ? b : a))[0];
   }
 
+  // Rewards after a won fight (XP and gold always; then gear or spoils). AI, and the player when time runs out.
+  function autoReward(hero, kind, room, rng) {
+    const k = kind === 'wager' ? 'fight' : kind;
+    G.Hero.gainXp(hero, CFG().xp[k] || CFG().xp.fight);
+    hero.gold += goldFor(k, hero, rng);
+    if (gearDrops(hero, k, rng)) return autoLoot(hero, G.Loot.offer(hero, room, k, rng), room);
+    return autoSpoils(hero, spoilsOptions(hero, room, rng));
+  }
+
+  function wagerBet(hero) {
+    const B = CFG().wager.bets;
+    return hero.gold >= B[1] ? B[1] : hero.gold >= B[0] ? B[0] : 0;
+  }
+
   // Resolve a whole door with no player input (AI rivals, or the player when time runs out)
   function resolveDoor(hero, d, room, rng) {
-    const doFight = (mon, kind, lootKind) => {
-      const res = fight(hero, mon, kind, room, rng);
+    const doFight = (door, kind) => {
+      const bet = kind === 'wager' ? wagerBet(hero) : 0;
+      const res = fight(hero, door, room, rng);
       const out = applyFight(hero, res, room);
-      const nm = monsterName(mon, kind);
-      if (out === 'dead') return `fell to ${nm}`;
-      if (out === 'timeout') return `fought ${nm} to a standstill`;
-      hero.gold += goldFor(kind === 'fight' ? 'fight' : kind, hero, rng);
-      return `beat ${nm}, ${autoLoot(hero, G.Loot.offer(hero, room, lootKind, rng), room)}`;
+      const nm = monsterName(door.monster, kind === 'wager' ? 'fight' : kind, door.trait);
+      if (out === 'dead') { hero.gold = Math.max(0, hero.gold - bet); return `fell to ${nm} and is out`; }
+      if (out === 'heart') { hero.gold = Math.max(0, hero.gold - bet); return `lost a heart to ${nm}`; }
+      if (out === 'timeout') { hero.gold = Math.max(0, hero.gold - bet); G.Hero.gainXp(hero, CFG().xp.fight); return `fought ${nm} to a standstill`; }
+      if (bet) hero.gold += bet;
+      return `beat ${nm}, ${autoReward(hero, kind, room, rng)}`;
     };
     switch (d.type) {
       case 'armory': { const it = rng.pick(G.Loot.armory(rng)); G.Hero.equip(hero, it); return `took ${it.name}`; }
-      case 'fight': case 'elite': case 'boss': return doFight(d.monster, d.type, d.type);
-      case 'treasure': return `found treasure, ${autoLoot(hero, G.Loot.offer(hero, room, 'treasure', rng), room)}`;
+      case 'fight': case 'elite': case 'boss': case 'wager': return doFight(d, d.type);
+      case 'trash': { hero.gold += goldFor('trash', hero, rng); return `dug through trash, ${autoLoot(hero, G.Loot.offer(hero, room, 'trash', rng), room, false)}`; }
+      case 'vault': return `found a vault, ${autoLoot(hero, G.Loot.offer(hero, room, 'vault', rng), room)}`;
       case 'rest': return `rested for ${G.Hero.heal(hero, CFG().restHeal)} health`;
+      case 'trainer': G.Hero.gainXp(hero, CFG().xp.trainer); return `trained (+${CFG().xp.trainer} XP)`;
+      case 'forge': {
+        const F = CFG().forge;
+        if (hero.gold < F.upgradeCost || !hero.gear.weapon) return 'looked at the forge';
+        hero.gold -= F.upgradeCost; forgeStrengthen(hero.gear.weapon);
+        return `strengthened ${hero.gear.weapon.name}`;
+      }
       case 'venom': {
         hero.poison += CFG().poison.venomStacks;
         return `opened a venom cache, ${autoLoot(hero, G.Loot.offer(hero, room, 'shrine', rng), room, false)}`;
@@ -317,13 +466,14 @@ window.G = window.G || {};
         if (ev.id === 'cache') { const g = 2 * rng.int(10, 16); hero.gold += g; return `found ${g} gold`; }
         if (ev.id === 'shrine') {
           const max = G.Hero.maxHp(hero);
-          if (hero.hp / max > 0.6 && hero.hp > CFG().shrineCost) {
-            hero.hp -= CFG().shrineCost;
+          const cost = hero.gem === 'stone' ? 1 : CFG().shrineCost;
+          if (hero.hp / max > 0.6 && hero.hp > cost) {
+            hero.hp -= cost;
             return `bled at a shrine, ${autoLoot(hero, G.Loot.offer(hero, room, 'shrine', rng), room, false)}`;
           }
           return 'walked past a shrine';
         }
-        return 'was ambushed: ' + doFight(monsterFor(room, 'fight', rng), 'fight', 'fight');
+        return 'was ambushed: ' + doFight({ type: 'fight', monster: monsterFor(room, 'fight', rng) }, 'fight');
       }
     }
     return '';
@@ -333,19 +483,20 @@ window.G = window.G || {};
   function aiMerchant(hero, room, rng) {
     const S = CFG().shop, bits = [];
     const max = G.Hero.maxHp(hero);
-    if (hero.gold >= S.potionCost && max - hero.hp >= 40 && hero.gem !== 'gaia') {
+    const m = merchantStock(hero, room, rng);
+    if (hero.gold >= S.potionCost && max - hero.hp >= 30 && hero.gem !== 'gaia') {
       hero.gold -= S.potionCost; G.Hero.heal(hero, G.CONSUMABLES.potion.heal); bits.push('a potion');
     }
     if (hero.poison >= 2 && hero.gold >= G.CONSUMABLES.antidote.price) {
       hero.gold -= G.CONSUMABLES.antidote.price; hero.poison = 0; bits.push('an antidote');
     }
-    const stock = G.Loot.offer(hero, room, 'shop', rng, S.gearCount).filter(it => itemPrice(it) <= hero.gold);
+    const stock = m.stock.filter(it => merchantPrice(hero, m, it) <= hero.gold);
     const up = bestUpgrade(hero, stock);
-    if (up) { hero.gold -= itemPrice(up); take(hero, up); bits.push(up.name); }
+    if (up) { hero.gold -= merchantPrice(hero, m, up); m.freeUsed = true; take(hero, up); bits.push(up.name); }
     return bits.length ? 'bought ' + bits.join(', ') : 'browsed the merchant';
   }
 
-  // Shop room without other players (balance tool / fast-forward after the player dies)
+  // Shop round without other players (balance tool / fast-forward after the player is out)
   function soloShop(hero, room, rng) {
     const table = G.Loot.shopTable(room, 4, rng);
     let free = autoLoot(hero, table.slice(rng.int(0, 2)), room, false);
@@ -356,16 +507,18 @@ window.G = window.G || {};
   function aiRoom(hero, room) {
     const rng = hero.rng;
     if (!hero.alive) return;
+    const hearts = hero.hearts;
     tickPoison(hero, room);
-    if (!hero.alive) { hero.lastText = 'succumbed to poison'; return; }
+    if (!hero.alive) { hero.lastText = 'succumbed to poison and is out'; return; }
+    if (hero.hearts < hearts) { hero.lastText = 'lost a heart to poison'; return; }
     const doors = makeDoors(hero, room, rng);
     const d = chooseDoor(hero, doors, room, rng);
     autoBag(hero, d);
     hero.lastAction = doorInfo(d).title;
     hero.lastText = resolveDoor(hero, d, room, rng);
-    if (hero.alive && room === CFG().specRoom && !hero.spec) autoSpec(hero, specOptions(hero, rng));
+    if (hero.alive) autoPicks(hero, rng);
     if (hero.alive && room === CFG().gemRoom && !hero.gem) autoGem(hero, gemOptions(hero, rng));
   }
 
-  G.AI = { aiRoom, bestUpgrade, autoLoot, autoSpec, autoGem, autoBag, resolveDoor, chooseDoor, aiMerchant, take };
+  G.AI = { aiRoom, bestUpgrade, autoLoot, autoSpec, autoTree, autoPicks, autoGem, autoBag, autoSpoils, autoReward, resolveDoor, chooseDoor, aiMerchant, take, wagerBet };
 })(window.G);

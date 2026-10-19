@@ -1,21 +1,23 @@
-# Thirty Doors (prototype v3)
+# Thirty Doors (prototype v4)
 
-Single-player prototype of a dungeon auto battler. You and 5 AI rivals each walk 30 rooms.
-Room 1 is the Armory (pick 1 of 3 random weapons). Rooms 8, 16 and 24 are shop rounds (free picks,
-weakest first). Merchant doors show up during the run. Every round is timed and ends as soon as
-everyone is ready. Health never refills on its own.
+Single-player prototype of a dungeon auto battler. You and 5 AI rivals each walk 30 rooms with 3 hearts.
+Room 1 is the Armory. Rooms 8, 16 and 24 are shop rounds (free picks, weakest first). After the bosses in
+rooms 10 and 20 everyone duels a rival. After room 30, everyone with hearts fights in a last-one-standing
+tournament. Every round is timed and ends as soon as everyone is ready; fights don't count against the clock.
 
-v3 adds:
-- Sets counted over 6 slots (5 armor + weapon). Bonuses at 2, 4 and 6 pieces; hybrids at 4 + 2.
-- Weapons roll class tags limited to the classes that fit them (data/weapons.js `classes`).
-- 6-piece capstones: Bloodrage, Echo, Kiting, Consecration, Vanish.
-- Your color and look change at 4 pieces. A preview of your character sits under the doors.
-- Phoenix Heart: 100 max HP cap, reborn at 100 with an explosion and burn.
-- Slimes split once; an Elite Slime (room 15+) splits twice.
-- Merchant moved out of the shop round into its own door.
-- Tournament bracket, rivals panel on the left, bonus stats on their own lines.
+v4 adds:
+- Hearts: dying or losing a duel costs one; you come back at full health but get nothing from that room.
+- Duels at rooms 10 and 20, and a heart-based tournament where winners keep their health.
+- Ghosts (half-strength copies of the strongest player) instead of byes. Player fights deal a quarter damage.
+- Shared set supply: 12 pieces of each class per match (src/items.js `Supply`).
+- XP and levels: spec at level 5, skill tree picks at 10, 15 and 20 (data/specs.js `SPEC_TREES`).
+- Slower gear: normal fights drop gear 1 in 3; otherwise you pick Spoils. New rooms: Trash Pile, Treasure Vault,
+  Forge, Trainer, Wager.
+- Rarity is Common (grey), Uncommon (green), Rare (blue). Trade-off bonuses and build effects (data/armor.js).
+- Elite traits that counter one-note builds (data/monsters.js `ELITE_TRAITS`).
+- Weaker set bonuses, less healing, less health from gear.
 
-v1 and v2 are kept in git as the tags `v1` and `v2`.
+Earlier versions are kept in git as the tags `v1`, `v2` and `v3`.
 
 ## Stats (all flat, even numbers)
 

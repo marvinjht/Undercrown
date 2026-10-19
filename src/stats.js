@@ -69,6 +69,25 @@ window.G = window.G || {};
       add(h.stats);
       for (const k in h) if (!['stats', 'desc', 'name'].includes(k)) fx[k] = h[k];
     }
+    // Build effects on rare gear (numbers add up; flags just switch on)
+    for (const slot of G.SLOTS) {
+      const it = hero.gear[slot];
+      if (!it || !it.effect) continue;
+      const E = G.EFFECTS[it.effect].fx;
+      for (const k in E) fx[k] = (fx[k] || 0) + E[k];
+    }
+    if (fx.perWarriorDmg) t.dmg += fx.perWarriorDmg * (st.counts.warrior || 0);
+    if (fx.perArcherPierce) t.pierce += fx.perArcherPierce * (st.counts.archer || 0);
+    // Skill tree picks
+    const tree = treeFx(hero);
+    for (const k in tree.fx) fx[k] = tree.fx[k];
+    add(tree.stats);
+    // Permanent stats from Spoils
+    add(hero.bonus);
+    // Levels: +4 max health each level past 1
+    t.hp += Math.max(0, (hero.level || 1) - 1) * C().levels.hpPerLevel;
+    // Midas: +2 Damage and +8 Health for every 50 gold you hold
+    if (fx.midas) { const n = Math.floor((hero.gold || 0) / fx.midas); t.dmg += 2 * n; t.hp += 8 * n; }
 
     const s = {
       maxHp: P.baseHp + t.hp,
@@ -100,9 +119,8 @@ window.G = window.G || {};
 
     // Heart gems
     if (hero.gem === 'pure') { s.maxHp += 20; s.dmg += 2; }
-    if (hero.gem === 'gaia') s.shield += 50;
-    if (hero.gem === 'phoenix') s.maxHp = Math.min(s.maxHp, C().phoenix.cap);
-    if (hero.gem === 'stone') s.maxHp = 30;
+    if (hero.gem === 'gaia') s.shield += C().gaiaShield;
+    if (hero.gem === 'stone') s.maxHp = C().stoneHp;
 
     // Bag buffs (next fight only)
     if (opts.buffs && hero.buffs) {
@@ -111,13 +129,42 @@ window.G = window.G || {};
       if (b.fullMana) s.startMana = CB.manaMax;
     }
 
+    // Trade-offs can push a stat below zero; keep everything sensible
+    for (const k of ['armor', 'ward', 'dodge', 'crit', 'critDmg', 'leech', 'shield', 'bleed', 'stun', 'holy', 'pierce', 'manaGain', 'startMana']) s[k] = Math.max(0, s[k] || 0);
+    s.maxHp = Math.max(10, s.maxHp);
+    s.dmg = Math.max(2, s.dmg);
+    s.spd = Math.max(CB.minSpd, s.spd);
+    if (fx.armorShield) s.shield += fx.armorShield * s.armor;
+    if (fx.openingSpell && s.spell) s.startMana = CB.manaMax;
     s.dodge = Math.min(CB.dodgeCap, s.dodge);
     s.crit = Math.min(CB.critCap, s.crit);
     s.atkSpd = s.spd / 10;
     return s;
   }
 
-  // Rough single number for "how strong is this build". Used by the AI and upgrade labels.
+  // Skill tree: the picks a hero made at levels 10, 15 and 20, merged into effects and stats
+  function treeFx(hero) {
+    const out = { fx: {}, stats: {}, nodes: [] };
+    if (!hero.spec || !hero.treePicks) return out;
+    const T = G.SPEC_TREES[hero.spec];
+    for (const lv of C().levels.treeLevels) {
+      const id = hero.treePicks[lv];
+      if (!id) continue;
+      const node = treeOptions(hero.spec, lv).find(n => n.id === id);
+      if (!node) continue;
+      out.nodes.push(node);
+      Object.assign(out.fx, node.fx || {});
+      for (const k in node.stats || {}) out.stats[k] = (out.stats[k] || 0) + node.stats[k];
+    }
+    return out;
+  }
+  function treeOptions(spec, lv) {
+    const T = G.SPEC_TREES[spec];
+    if (!T) return [];
+    return lv === 10 ? T.t10 : lv === 15 ? T.t15 : [T.t20];
+  }
+
+  // Rough single number for "how strong is this build". Used by the AI.
   const REF_ARMOR = 3, REF_WARD = 2, REF_HIT = 12;
   function power(s) {
     const base = s.type === 'magic' ? Math.max(2, s.dmg - REF_WARD) : Math.max(2, s.dmg - Math.max(0, REF_ARMOR - s.pierce));
@@ -144,26 +191,30 @@ window.G = window.G || {};
     if (s.spec === 'berserker') off *= 1.25;
     if (s.gem === 'devil') { off *= 2; def /= 2; }
     if (s.gem === 'stone') def *= 6;
-    if (s.gem === 'phoenix') def *= 1.7;
+    if (s.gem === 'phoenix') { def *= 1.25; off *= 1.05; }
+    if (s.fx.critHeal) def *= 1 + s.crit / 400;
+    if (s.fx.fourthStun) off *= 1.06;
+    if (s.fx.bleedShred && s.bleed) off *= 1.08;
     return Math.sqrt(off * def);
   }
 
+  // Raising max health never heals you; lowering it can't leave you above the new max
   function withMaxChange(hero, fn) {
-    const before = compute(hero).maxHp;
     const r = fn();
     const after = compute(hero).maxHp;
-    hero.hp = Math.max(1, Math.min(after, hero.hp + (after - before)));
+    hero.hp = Math.max(1, Math.min(after, hero.hp));
     return r;
   }
 
-  G.Stats = { compute, power, sets };
+  G.Stats = { compute, power, sets, treeFx, treeOptions };
 
   G.Hero = {
     create(opts, rng) {
       return {
         id: G.uid('hero'), name: opts.name, isPlayer: !!opts.isPlayer, tint: opts.tint,
         gear: {}, spec: null, gem: null, gold: 0, hp: C().player.baseHp, alive: true, diedRoom: null,
-        pity: { gold: 0, green: 0 }, rng, lastAction: '', bag: [], buffs: {}, poison: 0, phoenixUsed: false,
+        pity: { rare: 0, green: 0 }, rng, lastAction: '', bag: [], buffs: {}, poison: 0,
+        hearts: C().hearts, level: 1, xp: 0, treePicks: {}, opponents: [],
       };
     },
     equip(hero, item) {
@@ -178,8 +229,8 @@ window.G = window.G || {};
       hero.gem = id;
       const max = compute(hero).maxHp;
       hero.hp = Math.max(1, Math.min(max, hero.hp));
-      // Heart of Stone shrinks your health in proportion; Phoenix just caps it
-      if (id === 'stone') hero.hp = Math.min(30, Math.max(1, Math.round(hero.hp * 30 / Math.max(1, compute({ ...hero, gem: null }).maxHp))));
+      // Heart of Stone puts you at exactly its max health, never lower
+      if (id === 'stone') hero.hp = C().stoneHp;
     },
     // All healing outside fights goes through here so heart gems apply
     heal(hero, amount) {
@@ -201,5 +252,40 @@ window.G = window.G || {};
       return p;
     },
     bagFull(hero) { return hero.bag.length >= C().bagSize; },
+
+    // ---------- Levels ----------
+    xpToNext(level) { return C().levels.xpBase + level; },
+    // Adds XP; returns the levels reached (e.g. [5] or [9, 10])
+    gainXp(hero, n) {
+      const L = C().levels, reached = [];
+      if (!n || hero.level >= L.max) return reached;
+      hero.xp += n;
+      while (hero.level < L.max && hero.xp >= this.xpToNext(hero.level)) {
+        hero.xp -= this.xpToNext(hero.level);
+        hero.level++;
+        reached.push(hero.level);
+      }
+      if (hero.level >= L.max) hero.xp = 0;
+      return reached;
+    },
+    // Picks still owed: the spec at level 5, then tree picks at 10, 15, 20
+    pendingPick(hero) {
+      const L = C().levels;
+      if (hero.level >= L.specLevel && !hero.spec) return { kind: 'spec', level: L.specLevel };
+      if (!hero.spec) return null;
+      for (const lv of L.treeLevels) if (hero.level >= lv && !hero.treePicks[lv]) return { kind: 'tree', level: lv };
+      return null;
+    },
+    pickTree(hero, lv, id) { withMaxChange(hero, () => { hero.treePicks[lv] = id; }); },
+
+    // ---------- Hearts ----------
+    // Lose a heart. Out of hearts = out of the match. Otherwise you come back at full health, poison cleared.
+    loseHeart(hero, room) {
+      hero.hearts = Math.max(0, hero.hearts - 1);
+      if (hero.hearts <= 0) { hero.alive = false; hero.hp = 0; hero.diedRoom = room; return false; }
+      hero.hp = compute(hero).maxHp;
+      hero.poison = 0;
+      return true;
+    },
   };
 })(window.G);

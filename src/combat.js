@@ -32,11 +32,14 @@ window.G = window.G || {};
         hp: spec.hp != null ? Math.min(spec.hp, s.maxHp) : s.maxHp, maxHp: s.maxHp,
         shield: s.shield || 0, mana: Math.min(CB.manaMax, s.startMana || 0), alive: true,
         nextAtk: 0.3 + rng.range(0, 0.4) * 10 / s.spd, atkCount: 0, hitsLanded: 0, incoming: 0,
-        invis: false, invisUntil: -1, nextInvis: s.spec === 'shadow' ? 2.5 : Infinity, stealthCrit: false,
+        invis: false, invisUntil: -1, nextInvis: s.spec === 'shadow' ? 2.5 : Infinity, stealthCrit: false, ambush: false,
         bleed: 0, bleedUntil: -1, nextBleed: Infinity,
         firstCrits: Math.max((s.fx && s.fx.firstCrits) || 0, 0), dmgBonus: 0, hurtBonus: 0, nextHitBonus: 0,
         swUsed: false, reviveAvail: !!spec.revive, vanishUsed: false,
         burn: 0, burnUntil: -1, nextBurn: Infinity, kiteNext: 0, dashTo: null,
+        selfBurnNext: s.gem === 'phoenix' ? 1 : Infinity, exploded: false, undyingUsed: false, undyingUntil: -1,
+        quarterUsed: false, overShield: 0, parryDodge: 0, shred: 0, shredUntil: -1, mark: null,
+        thorns: spec.thorns || (s.fx && s.fx.thorns) || 0, shieldBreak: !!(spec.shieldBreak || (s.fx && s.fx.shieldBreak)),
         steal: spec.steal || 0, stolen: 0, escapeAfter: spec.escapeAfter || 0, split: spec.split || null,
         range: CB.ranges[s.range || 'melee'] || 1,
         ...extra,
@@ -51,7 +54,8 @@ window.G = window.G || {};
 
     const A = mk('a', { s: sa, name: opts.aName || 'You', hp: opts.aHp, revive: opts.aRevive }, 0);
     toSpecs(sb).forEach(sp => mk('b', { ...sp, revive: sp.revive != null ? sp.revive : opts.bRevive }, CB.startGap));
-    const result = { revived: { a: false, b: false }, goldStolen: 0, bloodrage: { a: 0, b: 0 } };
+    const result = { revived: { a: false, b: false }, goldStolen: 0, bloodrage: { a: 0, b: 0 }, phoenixWin: null };
+    const PVP = opts.pvp ? G.CONFIG.arena.damageMult : 1;   // duels and the tournament: half damage
     const pending = [];   // delayed actions (Echo recasts)
     const PX = G.CONFIG.phoenix;
 
@@ -65,17 +69,30 @@ window.G = window.G || {};
       const a = f.s.gem === 'stone' ? 1 : amount;
       const h = Math.min(f.maxHp - f.hp, a);
       if (h > 0) f.hp += h;
+      // Bloodthirst: Gorge. Healing past full becomes Shield.
+      const over = a - Math.max(0, h), cap = f.s.fx && f.s.fx.overhealShield;
+      if (cap && over > 0 && f.overShield < cap) { const add = Math.min(over, cap - f.overShield); f.overShield += add; f.shield += add; }
       return h > 0 ? h : 0;
     }
 
     // Deal damage after reductions. Returns {dealt, absorbed}.
+    // Shields soak hits at full damage (even with Heart of Stone); Stone only turns health damage into 1.
     function damage(def, amt, att) {
       if (att && att.s.gem === 'devil') amt *= 2;
       if (def.s.gem === 'devil') amt *= 2;
-      if (def.s.gem === 'stone') amt = 1;
+      if (PVP !== 1) amt = Math.max(1, 2 * Math.round(amt * PVP / 2));
       let absorbed = 0;
-      if (def.shield > 0) { absorbed = Math.min(def.shield, amt); def.shield -= absorbed; amt -= absorbed; }
+      if (def.shield > 0) {
+        if (att && att.shieldBreak) {
+          const used = Math.min(def.shield, amt * 2);
+          def.shield -= used; absorbed = Math.ceil(used / 2); amt -= absorbed;
+        } else { absorbed = Math.min(def.shield, amt); def.shield -= absorbed; amt -= absorbed; }
+      }
+      if (amt > 0 && def.s.gem === 'stone') amt = 1;
       def.hp -= amt;
+      // Berserker: Undying Rage keeps you at 1 for a few seconds
+      if (def.hp <= 0 && def.undyingUntil >= t) def.hp = 1;
+      if (def.mark && att && def.mark.by === att && amt > 0) def.mark.dmg += amt;
       return { dealt: amt, absorbed };
     }
 
@@ -92,13 +109,29 @@ window.G = window.G || {};
           def.vanishUsed = true; def.invis = true; def.invisUntil = Math.max(def.invisUntil, t + fx.vanish);
           push({ type: 'stealth_on', src: def.id, label: 'Vanish' });
         }
+        // Berserker: Second Breath
+        if (fx.quarterHeal && !def.quarterUsed && def.hp < def.maxHp / 4) {
+          def.quarterUsed = true;
+          const h = heal(def, fx.quarterHeal);
+          if (h) push({ type: 'heal', src: def.id, amount: h, label: 'Second Breath' }, def);
+        }
         return;
       }
-      if (def.reviveAvail) {
-        def.reviveAvail = false; def.hp = def.maxHp; result.revived[def.side] = true;
-        push({ type: 'revive', src: def.id }, def);
-        if (def.s.gem === 'phoenix') phoenixBurst(def);
+      // Berserker: Undying Rage
+      if (def.s.fx && def.s.fx.undying && !def.undyingUsed) {
+        def.undyingUsed = true; def.hp = 1; def.undyingUntil = t + def.s.fx.undying;
+        push({ type: 'undying', src: def.id }, def);
         return;
+      }
+      // Phoenix Heart: explode on death. If that clears the fight, you win and stand back up.
+      if (def.s.gem === 'phoenix' && !def.exploded) {
+        def.exploded = true;
+        phoenixBurst(def);
+        if (!foes(def).length) {
+          def.hp = PX.standUp; result.phoenixWin = def.side;
+          push({ type: 'revive', src: def.id }, def);
+          return;
+        }
       }
       def.alive = false;
       push({ type: 'death', tgt: def.id, src: att ? att.id : null }, def);
@@ -132,11 +165,19 @@ window.G = window.G || {};
       }
     }
 
-    function applyBleed(def, amount) {
+    function applyBleed(def, amount, att) {
       if (amount <= 0 || !def.alive) return;
       if (def.bleedUntil < t) def.nextBleed = t + 1;
       def.bleed = Math.max(def.bleed, amount);
       def.bleedUntil = t + 3;
+      // Rending: bleeding lowers Armor
+      const shred = att && att.s.fx && att.s.fx.bleedShred;
+      if (shred) { def.shred = shred; def.shredUntil = def.bleedUntil; }
+    }
+    function stun(att, def, secs = 1) {
+      if (!def.alive || (def.s.fx && def.s.fx.stunImmune)) return;
+      def.nextAtk = Math.max(def.nextAtk, t + secs);
+      push({ type: 'stun', src: att.id, tgt: def.id });
     }
 
     function cast(f) {
@@ -180,30 +221,38 @@ window.G = window.G || {};
     function strike(att, def, counter) {
       const fx = att.s.fx || {};
       if (def.invis) { push({ type: 'hidden', src: att.id, tgt: def.id }); return 0; }
-      if (roll(def.s.dodge)) {
+      const dfx = def.s.fx || {};
+      if (roll(Math.min(CB.dodgeCap, (def.s.dodge || 0) + def.parryDodge))) {
         push({ type: 'dodge', src: att.id, tgt: def.id });
-        if (def.s.fx && def.s.fx.afterDodge) def.nextHitBonus = def.s.fx.afterDodge;
+        if (dfx.afterDodge) def.nextHitBonus = dfx.afterDodge;
         return 0;
       }
       if (!counter && def.s.spec === 'duelist') {
         def.incoming++;
-        if (def.incoming % DU.every === 0) {
+        if (def.incoming % (dfx.parryEvery || DU.every) === 0) {
           push({ type: 'parry', src: att.id, tgt: def.id });
+          if (dfx.parryDodge) def.parryDodge = Math.min(10, def.parryDodge + dfx.parryDodge);
+          if (dfx.parryStun) stun(def, att, 1);
           strike(def, att, true);
           return 0;
         }
       }
-      let crit = false;
-      if (att.stealthCrit) { crit = true; att.stealthCrit = false; }
+      let crit = false, ambush = false;
+      if (att.stealthCrit) { crit = true; att.stealthCrit = false; ambush = att.s.spec === 'shadow'; }
       else if (att.firstCrits > 0) { crit = true; att.firstCrits--; }
+      else if (counter && fx.counterCrit) crit = true;
       else crit = roll(att.s.crit);
       let raw = att.s.dmg + att.dmgBonus + att.hurtBonus + att.nextHitBonus;
       att.nextHitBonus = 0;
-      if (att.s.spec === 'berserker') raw += Math.min(CB.berserkCap, Math.floor((att.maxHp - att.hp) / BE.per) * BE.dmg);
-      if (crit) raw = raw * 2 + (att.s.critDmg || 0);
+      if (counter && fx.counterDmg) raw += fx.counterDmg;
+      if (ambush && fx.ambushDmg) raw += fx.ambushDmg;
+      if (att.s.spec === 'berserker') raw += Math.min(fx.berserkCap || CB.berserkCap, Math.floor((att.maxHp - att.hp) / BE.per) * BE.dmg);
+      if (crit) raw = raw * 2 + (att.s.critDmg || 0) + (fx.critDmgFlat || 0);
+      if (dfx.takeMore) raw += dfx.takeMore;
+      const armor = Math.max(0, (def.s.armor || 0) - (def.shredUntil >= t ? def.shred : 0));
       let amt = att.s.type === 'magic'
         ? Math.max(CB.minHit, raw - (def.s.ward || 0))
-        : Math.max(CB.minHit, raw - Math.max(0, (def.s.armor || 0) - (att.s.pierce || 0)));
+        : Math.max(CB.minHit, raw - Math.max(0, armor - (att.s.pierce || 0)));
       let holy = att.s.holy || 0;
       if (fx.executeHoly && def.hp < def.maxHp / 2) holy += fx.executeHoly;
       const holyPart = holy ? Math.max(0, holy - (def.s.ward || 0)) : 0;
@@ -213,9 +262,19 @@ window.G = window.G || {};
       push({ type: 'hit', src: att.id, tgt: def.id, amount: r.dealt, absorbed: r.absorbed, crit, counter: !!counter, kind: att.s.type, ranged: att.range > 1 }, att, def);
       att.hitsLanded++;
       if (def.s.fx && def.s.fx.hurtStack) def.hurtBonus = Math.min(def.s.fx.hurtCap, def.hurtBonus + def.s.fx.hurtStack);
-      // Life on Hit, plus Paladin 6: Consecration (holy damage heals you)
-      const lifeOnHit = (att.s.leech || 0) + (fx.consecrate ? holyPart : 0);
+      // Life on Hit, plus Paladin 6: Consecration (holy damage heals you), plus crit heals
+      const low = att.hp < att.maxHp / 2;
+      const lifeOnHit = (att.s.leech || 0) * (fx.lowLeechDouble && low ? 2 : 1) + (fx.consecrate ? holyPart : 0) + (crit && fx.critHeal ? fx.critHeal : 0);
       if (lifeOnHit > 0) { const h = heal(att, lifeOnHit); if (h) push({ type: 'heal', src: att.id, amount: h }, att); }
+      // Night Lord: a hit out of hiding marks the target
+      if (ambush && fx.markPop && def.alive && !def.mark) def.mark = { by: att, until: t + fx.markPop, dmg: r.dealt };
+      // Thorns and Retaliate hurt the attacker
+      const back = (def.thorns || 0) + (dfx.retaliate || 0);
+      if (back && att.alive && !counter) {
+        const rb = damage(att, back, def);
+        push({ type: 'thorns', src: def.id, tgt: att.id, amount: rb.dealt }, att);
+        afterDamage(att, def);
+      }
       if (att.s.healEvery && att.hitsLanded % att.s.healEvery.n === 0) {
         const h = heal(att, att.s.healEvery.amount);
         if (h) push({ type: 'heal', src: att.id, amount: h }, att);
@@ -231,8 +290,8 @@ window.G = window.G || {};
       }
       afterDamage(def, att);
       if (def.alive) {
-        applyBleed(def, Math.max(att.s.bleed || 0, crit && fx.critBleed ? fx.critBleed : 0));
-        if (roll(att.s.stun)) { def.nextAtk = Math.max(def.nextAtk, t + 1); push({ type: 'stun', src: att.id, tgt: def.id }); }
+        applyBleed(def, Math.max(att.s.bleed || 0, crit && fx.critBleed ? fx.critBleed : 0, ambush && fx.ambushBleed ? fx.ambushBleed : 0), att);
+        if (roll(att.s.stun) || (fx.fourthStun && att.hitsLanded % fx.fourthStun === 0)) stun(att, def, 1);
       }
       return r.dealt;
     }
@@ -299,8 +358,31 @@ window.G = window.G || {};
       for (let i = pending.length - 1; i >= 0; i--) if (pending[i].at <= t) { const p = pending.splice(i, 1)[0]; echo(p.f, p.sp); }
       for (const f of fighters) {
         if (!f.alive) continue;
-        if (f.s.spec === 'shadow' && !f.invis && t >= f.nextInvis) { f.invis = true; f.invisUntil = t + SH.duration; f.nextInvis = t + SH.every; f.stealthCrit = true; push({ type: 'stealth_on', src: f.id }); }
+        const ffx = f.s.fx || {};
+        if (f.s.spec === 'shadow' && !f.invis && t >= f.nextInvis) {
+          f.invis = true; f.invisUntil = t + SH.duration + (ffx.hideLonger || 0); f.nextInvis = t + (ffx.hideEvery || SH.every); f.stealthCrit = true;
+          push({ type: 'stealth_on', src: f.id });
+        }
         else if (f.invis && t >= f.invisUntil) { f.invis = false; push({ type: 'stealth_off', src: f.id }); }
+        // Phoenix Heart cost: 1 burn damage a second
+        if (t >= f.selfBurnNext) {
+          f.selfBurnNext = t + 1;
+          const r = damage(f, PX.selfBurn, null);
+          push({ type: 'burn', tgt: f.id, amount: r.dealt, self: true }, f);
+          afterDamage(f, null);
+          if (!f.alive) continue;
+        }
+        // Night Lord mark pops for half the damage dealt during it
+        if (f.mark && t >= f.mark.until) {
+          const m = f.mark; f.mark = null;
+          const pop = 2 * Math.floor(m.dmg / 4);
+          if (pop > 0) {
+            const r = damage(f, pop, null);
+            push({ type: 'spellhit', src: m.by.id, tgt: f.id, amount: r.dealt, absorbed: r.absorbed, name: 'Night Lord' }, f);
+            afterDamage(f, m.by);
+            if (!f.alive) continue;
+          }
+        }
         if (f.burnUntil >= t && t >= f.nextBurn) {
           f.nextBurn = t + 1;
           const r = damage(f, f.burn, null);
@@ -322,7 +404,7 @@ window.G = window.G || {};
         const tg = target(f);
         if (!tg || Math.abs(tg.pos - f.pos) > f.range + 1e-6) continue;
         const fx = f.s.fx || {};
-        const spd = f.s.spd + (fx.shieldSpd && f.shield > 0 ? fx.shieldSpd : 0);
+        const spd = f.s.spd + (fx.shieldSpd && f.shield > 0 ? fx.shieldSpd : 0) + (fx.lowSpd && f.hp < f.maxHp / 2 ? fx.lowSpd : 0);
         f.nextAtk = t + 10 / spd;
         attack(f);
       }
@@ -342,7 +424,7 @@ window.G = window.G || {};
     return {
       events, tracks, fighters: meta, winner, timeout, duration: t,
       aHp: Math.max(0, A.hp), bHp: B0 ? Math.max(0, B0.hp) : 0,
-      revived: result.revived, goldStolen: result.goldStolen, bloodrage: result.bloodrage,
+      revived: result.revived, goldStolen: result.goldStolen, bloodrage: result.bloodrage, phoenixWin: result.phoenixWin,
     };
   }
 

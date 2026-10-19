@@ -13,6 +13,7 @@
   --r-grey: #b5b0a6;
   --r-green: #72d064;
   --r-gold: #f2c14a;
+  --r-rare: #5aa8ff;
   --up: #7fd26f;
   --down: #e0705f;
   --f-display: 'Grenze Gotisch', 'Palatino Linotype', Georgia, serif;
@@ -37,7 +38,7 @@ body {
 button { font: inherit; color: inherit; }
 h1, h2, h3, h4 { font-family: var(--f-display); font-weight: 500; text-wrap: balance; margin: 0; letter-spacing: 0.01em; }
 small { color: var(--muted); }
-.r-grey { color: var(--r-grey); } .r-green { color: var(--r-green); } .r-gold { color: var(--r-gold); }
+.r-grey { color: var(--r-grey); } .r-green { color: var(--r-green); } .r-rare { color: var(--r-rare); } .r-gold { color: var(--r-gold); }
 
 /* ---------- Buttons ---------- */
 button {
@@ -410,3 +411,78 @@ table.tour { width: 100%; border-collapse: collapse; font-size: 15px; font-varia
 .b-col { flex-basis: 168px; }
 .b-col.champ { flex-basis: 130px; }
 .rarity-dots span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* ---------- v4 ---------- */
+.ico-wrap.r-rare { border-color: #22508a; color: var(--r-rare); box-shadow: inset 0 0 12px rgba(90, 168, 255, .22); }
+.card.item.r-rare { border-color: #24507e; background: linear-gradient(var(--bg-3), #18233a); }
+.rarity-dots i.r-rare { background: var(--r-rare); }
+.rarity-dots i { cursor: help; }
+.rarity-dots i.tagged { box-shadow: 0 0 0 2px var(--set); }
+.slot .fx-dot { position: absolute; top: 6px; left: 6px; width: 8px; height: 8px; border-radius: 2px; background: var(--r-rare); transform: rotate(45deg); }
+
+/* Hearts and level in the top bar */
+.hearts { display: inline-flex; gap: 3px; align-items: center; }
+.hearts i { width: 14px; height: 13px; background: #3a2a26; clip-path: path('M7 13 L1.2 6.6 A3.3 3.3 0 0 1 7 2.4 A3.3 3.3 0 0 1 12.8 6.6 Z'); }
+.hearts i.on { background: #e0505a; }
+.hearts.sm i { width: 10px; height: 10px; clip-path: path('M5 10 L0.9 5 A2.4 2.4 0 0 1 5 1.8 A2.4 2.4 0 0 1 9.1 5 Z'); }
+.lvl { display: flex; flex-direction: column; gap: 3px; min-width: 52px; cursor: help; }
+.lvl b { font: 600 13px var(--f-mono); }
+.lvl i { height: 4px; background: var(--bg-3); border-radius: 2px; overflow: hidden; }
+.lvl i span { display: block; height: 100%; background: #b39cff; }
+.pips i.duel { box-shadow: inset 0 0 0 2px #e0505a; }
+@media (max-width: 640px) { .vitals { flex-wrap: wrap; justify-content: flex-end; flex-direction: row; } .lvl { min-width: 40px; } }
+
+/* Stats in columns */
+.statcols { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 4px 14px; min-width: 0; flex: 1; }
+.statcols h4 { font: 600 11px var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 2px; }
+.statcols ul { list-style: none; margin: 0; padding: 0; }
+.statcols li { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px solid rgba(61, 50, 42, .5); font-size: 14px; cursor: help; }
+.statcols li b { font: 600 13px var(--f-mono); font-variant-numeric: tabular-nums; }
+.statcols.compact li { font-size: 13px; padding: 2px 0; }
+
+/* Character block (under the doors and on victory screens) */
+.charblock { display: flex; gap: 16px; align-items: center; padding: 10px 14px; background: var(--bg-3); border: 1px solid var(--line); border-left: 3px solid var(--pv); border-radius: 8px; flex-wrap: wrap; }
+.charblock .pv-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 0 1 290px; }
+.charblock .preview-slot { width: 130px; height: 90px; }
+.charblock .preview-slot canvas { width: 130px !important; height: 89px !important; }
+.charblock .pv-info b { color: var(--pv); }
+@media (max-width: 520px) { .charblock .pv-left { flex-basis: 100%; } }
+
+/* Set supply */
+.supply { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.supply-row { width: 100%; min-height: 34px; padding: 4px 6px; display: flex; align-items: center; gap: 10px; background: transparent; border: 1px solid var(--line); font: 500 13px var(--f-body); color: var(--muted); }
+.supply-bars { flex: 1; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.supply-bars i { height: 8px; border-radius: 2px; background: linear-gradient(90deg, var(--set) var(--fill), var(--bg) var(--fill)); border: 1px solid var(--line); }
+.supply-row .chev { font-size: 12px; }
+.supply-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+.supply-table th { font-weight: 500; color: var(--muted); text-align: left; padding: 3px 4px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.supply-table td { padding: 3px 4px; border-bottom: 1px solid rgba(61, 50, 42, .5); }
+.supply + .hint, .supply .hint { font-size: 12px; margin-top: 6px; }
+
+/* Items: trade-offs and build effects */
+.stat-list .affix.cost, .tt-stats .affix.cost { color: #f09a8a; }
+.stat-list .effect, .tt-stats .effect { color: #9cc8ff; font-family: var(--f-body); font-size: 13px; line-height: 1.4; }
+.stat-list .effect b, .tt-stats .effect b { color: var(--r-rare); }
+
+/* Rivals */
+.rv-top { flex-wrap: wrap; row-gap: 2px; cursor: help; }
+.rv-top .lv { font: 600 11px var(--f-mono); color: var(--muted); }
+.rv-spec { font-size: 12.5px; color: var(--r-gold); flex: none; }
+
+/* Spoils, tree, forge */
+.card.spoil .spec-head b { color: var(--ember); font-size: 22px; }
+.card.spoil p { margin: 0; }
+.cards.one { grid-template-columns: minmax(0, 360px); }
+.tree-peek { margin: 0; }
+
+/* Tournament standings */
+.tour tr.out td { opacity: .5; }
+.b-row.ghost b { color: #b9c3d8; font-style: italic; }
+.door-trash .door-arch { color: #a89a7a; } .door-vault .door-arch { color: var(--r-rare); }
+.door-forge .door-arch { color: #ff9a3c; } .door-trainer .door-arch { color: #b39cff; } .door-wager .door-arch { color: #e0505a; }
+
+.bracket .b-row { grid-template-columns: minmax(0, 1fr); }
+.supply-table { table-layout: fixed; font-size: 11.5px; }
+.supply-table th, .supply-table td { padding: 3px 2px; overflow: hidden; text-overflow: ellipsis; }
+.supply-table th:first-child, .supply-table td:first-child { width: 58px; }
+.supply-table th:nth-child(2), .supply-table td:nth-child(2) { width: 42px; }
