@@ -226,7 +226,7 @@ window.G = window.G || {};
 
   function autoSpec(hero, opts) { G.Hero.setSpec(hero, opts[0]); return opts[0]; }
   function autoGem(hero, opts) {
-    const pref = ['pure', 'phoenix', 'devil', 'gaia', 'vulture', 'stone'];
+    const pref = ['pure', 'devil', 'gaia', 'vulture', 'phoenix', 'stone'];
     const pick = pref.find(g => opts.includes(g)) || opts[0];
     G.Hero.setGem(hero, pick);
     return pick;
