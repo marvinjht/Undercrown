@@ -41,6 +41,7 @@ window.G = window.G || {};
     door_armory: P('M4 21V8l8-5 8 5v13M9 21v-6h6v6M8 11l8 0M12 3v4'),
     door_venom: P('M12 3c3 5 6 8 6 11a6 6 0 0 1-12 0c0-3 3-6 6-11zM9 14l2 2 4-4'),
     door_purify: P('M12 3c3 5 6 8 6 11a6 6 0 0 1-12 0c0-3 3-6 6-11zM8.5 15c1 2 2.5 2.5 4 2'),
+    crown: P('M3 18h18M4 18l-1-10 5 4 4-7 4 7 5-4-1 10z'),
     gem: P('M7 4h10l4 5-9 12L3 9zM3 9h18M9 4l3 5 3-5M12 9v12'),
   };
   const POTION_COLORS = { potion: '#d0473a', greater: '#ff6b5a', antidote: '#7fd67a', iron: '#b8b8c8', salve: '#8fb4ff', fury: '#ff9a3c', tonic: '#f2e28c', draught: '#b39cff' };

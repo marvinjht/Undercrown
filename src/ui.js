@@ -214,11 +214,12 @@ window.G = window.G || {};
       slots.push(`<div class="bag-slot ${open ? 'open' : ''}">
         <button class="bag-item" data-act="bag-menu" data-i="${i}" ${tip(itemTip(it, p))} aria-label="${esc(it.name)}">
           <span class="ico-wrap ${it.kind === 'gear' ? 'r-' + it.rarity : ''}">${G.Art.icon(it.iconKey)}</span><small>${esc(it.name)}</small></button>
-        ${open ? `<div class="bag-menu"><button data-act="bag-use" data-i="${i}">${it.kind === 'gear' ? 'Equip' : 'Use'}</button><button class="ghost" data-act="bag-drop" data-i="${i}">Discard</button></div>` : ''}
+        ${open ? `<div class="bag-menu"><button data-act="bag-use" data-i="${i}">${it.kind === 'gear' ? 'Equip' : 'Use'}</button><button class="ghost" data-act="bag-drop" data-i="${i}">${it.kind === 'gear' ? `Scrap +${CFG().salvage[it.rarity]}g` : 'Discard'}</button></div>` : ''}
       </div>`);
     }
     const buffs = Object.entries(p.buffs || {}).filter(([, v]) => v).map(([k, v]) => k === 'fullMana' ? 'Full mana' : `+${v} ${G.STAT_INFO[k].label}`);
-    return `<section class="panel"><h3>Bag <span class="chip muted">${p.bag.length}/${size}</span></h3>
+    return `<section class="panel"><h3>Bag <span class="chip ${p.bag.length >= size ? 'full' : 'muted'}">${p.bag.length}/${size}</span></h3>
+      <p class="hint bag-hint">Items you take land here. Click one to equip or use it.</p>
       <div class="bag">${slots.join('')}</div>
       ${buffs.length ? `<p class="buffs">Next fight: ${buffs.join(', ')}</p>` : ''}
       ${st.bagMsg ? `<p class="bag-msg">${esc(st.bagMsg)}</p>` : ''}</section>`;
@@ -274,12 +275,16 @@ window.G = window.G || {};
   function topbar(st) {
     const p = st.player, max = G.Hero.maxHp(p);
     const pips = [];
-    for (let r = 1; r <= CFG().rooms; r++) {
+    for (let r = 1; r <= CFG().tournamentRoom; r++) {
+      const kind = G.Dungeon.roomKind(r);
       const cls = r < st.room ? 'done' : r === st.room ? 'now' : '';
-      pips.push(`<i class="${cls} ${CFG().bossRooms[r] ? 'boss' : ''} ${CFG().shopRooms.includes(r) ? 'shop' : ''} ${CFG().duelRooms.includes(r) ? 'duel' : ''}"></i>`);
+      const info = ROOM_INFO[kind];
+      const extra = kind === 'boss' && r === CFG().gemRoom ? ' Then you choose your heart gem.' : '';
+      pips.push(`<i class="pip k-${kind} ${cls}" ${tip(`<div class="tt-title">Room ${r}: ${info.name}</div><p>${info.text}${extra}</p>`)}>${info.icon ? G.Art.icon(info.icon) : ''}</i>`);
     }
-    let roomLabel = `Room ${st.room} <small>of ${CFG().rooms}${st.room === 1 ? ' · the Armory' : ''}</small>`;
+    let roomLabel = `Room ${st.room} <small>of ${CFG().tournamentRoom}${st.room === 1 ? ' · the Armory' : ''}</small>`;
     if (st.room > CFG().rooms) roomLabel = 'Tournament';
+    else if (G.Dungeon.roomKind(st.room) === 'merchant' && st.phase === 'merchant') roomLabel = `Room ${st.room} <small>· Merchant</small>`;
     else if (st.phase === 'spec' || st.phase === 'tree') roomLabel = `Level up <small>after room ${st.room}</small>`;
     else if (st.phase === 'gem') roomLabel = `Heart gem <small>after room ${st.room}</small>`;
     else if (st.phase === 'duelIntro' || (st.battle && st.battle.duel && st.phase === 'battle')) roomLabel = `Duel <small>after room ${st.room}</small>`;
@@ -289,7 +294,7 @@ window.G = window.G || {};
     const need = p.level >= L.max ? 1 : G.Hero.xpToNext(p.level);
     const xpPct = p.level >= L.max ? 100 : Math.round(p.xp / need * 100);
     return `<header class="top">
-      <div class="brand">Thirty Doors</div>
+      <div class="brand">Thirty Doors <button class="sound-btn" data-act="sound" aria-label="${G.Sound && G.Sound.muted ? 'Turn sound on' : 'Turn sound off'}" title="Sound">${G.Sound && G.Sound.muted ? 'Sound off' : 'Sound on'}</button></div>
       <div class="track"><div class="room-label">${roomLabel}</div><div class="pips" aria-hidden="true">${pips.join('')}</div></div>
       <div class="clock" id="clock" ${tip('<div class="tt-title">Round timer</div><p>Every choice is timed for everyone and ends early once everyone is ready. Fights don’t count against it. Anything you haven’t decided at zero is decided for you.</p>')}><b id="clock-num">${timerText()}</b><i><span id="clock-bar" style="width:${timerPct()}%"></span></i></div>
       <div class="vitals">
@@ -299,6 +304,17 @@ window.G = window.G || {};
         <div class="gold" ${tip('<div class="tt-title">Gold</div><p>Spend it at Merchants, the Forge and Wagers. Passing at a shop round also gives gold.</p>')}><span class="coin"></span>${p.gold}</div></div>
     </header>`;
   }
+
+  // What each kind of room is, for the room counter's tooltips
+  const ROOM_INFO = {
+    armory: { name: 'The Armory', icon: null, text: 'Pick one of three weapons.' },
+    doors: { name: 'Two doors', icon: null, text: 'Choose between two doors: fights, treasure, campfires and more.' },
+    shop: { name: 'Shop round', icon: 'door_shop', text: 'Free picks for everyone. Fewer hearts and lower health pick first.' },
+    merchant: { name: 'Merchant', icon: 'door_merchant', text: 'Spend gold on gear, potions and buffs, or sell blood.' },
+    boss: { name: 'Boss', icon: 'door_boss', text: 'A single sealed door with a boss behind it. Guaranteed rare item.' },
+    duel: { name: 'Duel', icon: 'door_fight', text: 'Everyone is paired with a rival. The loser loses a heart.' },
+    tournament: { name: 'Tournament', icon: 'crown', text: 'Everyone with hearts fights round after round. Last one standing wins.' },
+  };
 
   function timerText() {
     const t = G.Game.timeLeft();
@@ -341,9 +357,9 @@ window.G = window.G || {};
     const b = st.battle;
     return `<section class="screen battle">
       <h2>${esc(b.title)}</h2>
-      ${b.duel || b.tour ? '<p class="lede">Player fights: every hit deals a quarter damage, so fights last longer.</p>' : ''}
+      ${b.duel || b.tour ? '<p class="lede">Player fights: every hit deals a quarter damage, and the fight goes to the death. Past one minute, both lose a heart.</p>' : ''}
       <div id="arena-slot" class="arena-slot"></div>
-      <div class="battle-bar"><span class="speed-tag" id="speed-tag">1x speed</span><small>Fights speed up to 2x after ${CFG().combat.fastAfter} seconds. The round timer waits for the fight.</small></div>
+      <div class="battle-bar"><span class="speed-tag" id="speed-tag">1x speed</span><small>Fights speed up to 2x after ${CFG().combat.fastAfter} seconds. The round timer waits for the fight.${b.duel || b.tour ? '' : ` If time runs out (${CFG().combat.maxTime}s), you get half the gold and XP and no items.`}</small></div>
       <ol id="battle-log" class="log" aria-live="polite"></ol>
     </section>`;
   }
@@ -358,13 +374,10 @@ window.G = window.G || {};
 
   function rewardScreen(st) {
     const o = st.offer, p = st.player, full = G.Hero.bagFull(p);
-    const cards = o.items.map(it => {
-      if (it.kind === 'consumable') return itemCard(it, p, `<button data-act="take" data-id="${it.id}" data-mode="bag" ${full ? 'disabled' : ''}>${full ? 'Bag full' : 'Put in bag'}</button>`);
-      return itemCard(it, p, `<button data-act="take" data-id="${it.id}" data-mode="equip">Equip</button><button class="ghost" data-act="take" data-id="${it.id}" data-mode="bag" ${full ? 'disabled' : ''}>${full ? 'Bag full' : 'Keep in bag'}</button>`);
-    }).join('');
+    const cards = o.items.map(it => itemCard(it, p, `<button data-act="take" data-id="${it.id}" ${full ? 'disabled' : ''}>${full ? 'Bag full' : 'Take it'}</button>`)).join('');
     return `<section class="screen">
       <h2>${esc(o.title)}</h2><p class="lede">${esc(o.text)}</p>
-      ${full ? '<p class="hint">Your bag is full. Discard something from it to keep a new item there.</p>' : ''}
+      ${full ? '<p class="warn">Your bag is full. Equip or scrap something from your bag to make space, or whatever you leave here is lost.</p>' : '<p class="hint">What you take goes into your bag. Equip it from there.</p>'}
       <div class="cards">${cards}</div>
       <div class="row-actions">${o.gold ? `<button class="ghost" data-act="gold">Leave the items, take ${o.gold} gold</button>` : `<button class="ghost" data-act="gold">Take nothing</button>`}</div>
       ${characterBlock(p)}
@@ -392,18 +405,19 @@ window.G = window.G || {};
       const now = i === sh.turn && !reviewing;
       const state = sh.picks[id] ? `took ${esc(sh.picks[id])}` : now ? `<b id="turn-num">${turnLeft()}s</b> ${h.isPlayer ? 'to pick' : 'picking…'}` : 'waiting';
       const bar = now ? `<i class="turnbar ${h.isPlayer ? 'mine' : ''}"><span id="turn-bar" style="width:${turnPct()}%"></span></i>` : '';
-      return `<li class="${now ? 'now' : ''} ${h.isPlayer ? 'me' : ''}"><span>${i + 1}</span><b>${esc(h.name)}</b><small>${Math.round(h.hp / G.Hero.maxHp(h) * 100)}% health</small><em>${state}</em>${bar}</li>`;
+      return `<li class="${now ? 'now' : ''} ${h.isPlayer ? 'me' : ''}"><span>${i + 1}</span><b>${esc(h.name)}</b><small>${heartsRow(h.hearts, 'sm')} ${Math.round(h.hp / G.Hero.maxHp(h) * 100)}%</small><em>${state}</em>${bar}</li>`;
     }).join('');
     const myNow = myTurn && !reviewing;
     const table = sh.table.map(it => itemCard(it, p, myNow
-      ? `<button data-act="shop-pick" data-id="${it.id}" ${it.kind === 'consumable' && full ? 'disabled' : ''}>${it.kind === 'consumable' && full ? 'Bag full' : 'Take this'}</button>`
+      ? `<button data-act="shop-pick" data-id="${it.id}" ${full ? 'disabled' : ''}>${full ? 'Bag full' : 'Take this'}</button>`
       : `<button disabled>${picked ? 'Picked' : reviewing ? 'Picks start soon' : 'Wait for your turn'}</button>`)).join('');
     const review = reviewing ? `<div class="review"><span>Look over the table. Picks start in <b id="review-num">${reviewLeft()}s</b></span><i class="turnbar"><span id="review-bar" style="width:${reviewPct()}%"></span></i></div>` : '';
     return `${review}<h3 class="sub">Pick order</h3>
       <ol class="pick-order">${order}</ol>
       <h3 class="sub">Free table ${myNow ? '<span class="chip">Your turn</span>' : ''}</h3>
-      ${myNow ? `<div class="pass-row"><button class="ghost" data-act="shop-pass">Pass and take ${CFG().shop.passGold} gold</button><small>If your timer runs out, you pass.</small></div>` : ''}
-      <div class="cards">${table || '<p class="hint">The table is empty.</p>'}</div>`;
+      ${myNow && full ? '<p class="warn">Your bag is full. Equip or scrap something from your bag to take an item, or pass.</p>' : ''}
+      <div class="cards">${table || '<p class="hint">The table is empty.</p>'}</div>
+      ${myNow ? `<div class="pass-row bottom"><button data-act="shop-pass">Pass and take ${CFG().shop.passGold} gold</button><small>If your timer runs out, you pass.</small></div>` : ''}`;
   }
 
   // Rival picks only refresh this part, so clicks and tooltips aren't lost to a re-render
@@ -417,7 +431,7 @@ window.G = window.G || {};
     const sh = st.shop, S = CFG().shop;
     return `<section class="screen shop">
       <h2>Shop round</h2>
-      <p class="lede">Free picks go weakest first: the lowest health percentage picks first. Everyone gets ${S.reviewSeconds} seconds to look, then ${S.turnSeconds} seconds per turn. Pass to take ${S.passGold} gold instead.</p>
+      <p class="lede">Free picks go weakest first: fewer hearts pick first, then lower health. Everyone gets ${S.reviewSeconds} seconds to look, then ${S.turnSeconds} seconds per turn. Pass to take ${S.passGold} gold instead.</p>
       ${sh.msg ? `<p class="notice">${esc(sh.msg)}</p>` : ''}
       <div id="shop-picks">${shopPicks(st)}</div></section>`;
   }
@@ -427,7 +441,7 @@ window.G = window.G || {};
     const full = G.Hero.bagFull(p);
     const stock = m.stock.map(it => {
       const price = G.Dungeon.merchantPrice(p, m, it), sold = m.bought.includes(it.id);
-      return itemCard(it, p, sold ? '<button disabled>Sold</button>' : `<button data-act="shop-buy" data-kind="gear" data-id="${it.id}" ${p.gold < price ? 'disabled' : ''}>${price === 0 ? 'Take it free (Haggler)' : `Buy for ${price} gold`}</button>`);
+      return itemCard(it, p, sold ? '<button disabled>Sold</button>' : `<button data-act="shop-buy" data-kind="gear" data-id="${it.id}" ${p.gold < price || full ? 'disabled' : ''}>${full ? 'Bag full' : price === 0 ? 'Take it free (Haggler)' : `Buy for ${price} gold`}</button>`);
     }).join('');
     const consRow = (id, price, note, disabled, label) => {
       const c = G.CONSUMABLES[id];
@@ -509,23 +523,41 @@ window.G = window.G || {};
       const S = G.SPECS[id], T = G.SPEC_TREES[id];
       return `<article class="card spec"><div class="spec-head"><b>${S.name}</b><small>${S.role}</small></div>
         <p>${esc(S.desc)}</p><p class="trait">${esc(S.tip)}</p>
-        <p class="tree-peek"><small>Level 10: ${esc(T.t10.map(n => n.name).join(' or '))} · Level 15: ${esc(T.t15.map(n => n.name).join(' or '))} · Level 20: ${esc(T.t20.name)}</small></p>
+        <div class="mini-tree"><span>Lv 10</span><i>${esc(T.t10[0].name)}</i><i>${esc(T.t10[1].name)}</i><span>Lv 15</span><i>${esc(T.t15[0].name)}</i><i>${esc(T.t15[1].name)}</i><span>Lv 20</span><i class="cap">${esc(T.t20.name)}</i></div>
         <button data-act="spec" data-id="${id}">Become a ${S.name}</button></article>`;
     }).join('');
-    return `<section class="screen"><h2>Level ${CFG().levels.specLevel}: choose your specialization</h2>
+    return `<section class="screen levelup"><h2>Level ${CFG().levels.specLevel}: choose your specialization</h2>
       <p class="lede">Three random options. Each one has a skill tree: a choice at level 10, another at 15, and a capstone at 20.</p>
       <div class="cards three">${cards}</div></section>`;
   }
 
+  // The skill tree drawn as a tree: spec at the top, two paths at 10 and 15, the capstone at 20
+  function treeGraph(spec, picks, pickLevel) {
+    const T = G.SPEC_TREES[spec], S = G.SPECS[spec];
+    const node = (n, lv, side) => {
+      const taken = picks[lv] === n.id, other = picks[lv] && !taken;
+      const live = pickLevel === lv && !picks[lv];
+      const cls = taken ? 'taken' : other ? 'skipped' : live ? 'live' : 'locked';
+      const inner = `<b>${esc(n.name)}</b><small>${esc(n.desc)}</small>`;
+      return live ? `<button class="tnode ${cls}" data-act="tree" data-id="${n.id}" aria-label="${esc(n.name)}"><em>${lv === 20 ? 'Capstone' : side}</em>${inner}</button>`
+        : `<div class="tnode ${cls}"><em>${taken ? 'Chosen' : other ? 'Not taken' : lv === 20 ? 'Capstone' : side}</em>${inner}</div>`;
+    };
+    return `<div class="tree">
+      <div class="trow"><span class="tlv">Lv 5</span><div class="tnode taken root"><em>Specialization</em><b>${esc(S.name)}</b><small>${esc(S.desc)}</small></div></div>
+      <div class="tlink two"></div>
+      <div class="trow"><span class="tlv">Lv 10</span>${node(T.t10[0], 10, 'Left')}${node(T.t10[1], 10, 'Right')}</div>
+      <div class="tlink two"></div>
+      <div class="trow"><span class="tlv">Lv 15</span>${node(T.t15[0], 15, 'Left')}${node(T.t15[1], 15, 'Right')}</div>
+      <div class="tlink one"></div>
+      <div class="trow"><span class="tlv">Lv 20</span>${node(T.t20, 20)}</div>
+    </div>`;
+  }
+
   function treeScreen(st) {
     const p = st.player, lv = st.treeLevel, S = G.SPECS[p.spec];
-    const opts = G.Stats.treeOptions(p.spec, lv);
-    const cards = opts.map((n, i) => `<article class="card spec"><div class="spec-head"><b>${esc(n.name)}</b><small>${lv === 20 ? 'Capstone' : i === 0 ? 'Left' : 'Right'}</small></div>
-      <p>${esc(n.desc)}.</p><button data-act="tree" data-id="${n.id}">${lv === 20 ? 'Claim it' : 'Take this path'}</button></article>`).join('');
-    const taken = G.Stats.treeFx(p).nodes.map(n => n.name).join(', ');
-    return `<section class="screen"><h2>Level ${lv}: ${esc(S.name)} skill tree</h2>
-      <p class="lede">${lv === 20 ? 'The capstone of your specialization.' : 'Pick a path. You can’t change it later.'}${taken ? ` So far: ${esc(taken)}.` : ''}</p>
-      <div class="cards ${opts.length === 1 ? 'one' : ''}">${cards}</div></section>`;
+    return `<section class="screen levelup"><h2>Level ${lv}: ${esc(S.name)} skill tree</h2>
+      <p class="lede">${lv === 20 ? 'Claim the capstone of your specialization.' : 'Choose a path. It’s permanent.'}</p>
+      ${treeGraph(p.spec, p.treePicks, lv)}</section>`;
   }
 
   function gemScreen(st) {
@@ -549,7 +581,7 @@ window.G = window.G || {};
     }).join('');
     const opp = m.a.hero && m.a.hero.isPlayer ? m.b : m.a;
     return `<section class="screen"><h2>Duel</h2>
-      <p class="lede">Everyone still in is paired up. ${opp.ghost ? `You're the odd one out, so you face a ghost: a half-strength copy of ${esc(opp.of.name)}. Losing to it costs no heart.` : `You face <b>${esc(opp.hero.name)}</b>. The loser loses a heart.`} You fight at your current health, and it goes back to what it was afterward.</p>
+      <p class="lede">Everyone still in is paired up. ${opp.ghost ? `You're the odd one out, so you face a ghost: a half-strength copy of ${esc(opp.of.name)}. Losing to it costs no heart.` : `You face <b>${esc(opp.hero.name)}</b>. The loser loses a heart.`} You fight at your current health. The winner's health goes back to what it was; the loser comes back at full. Past one minute, both lose a heart.</p>
       ${others ? `<div class="round"><h4>Other duels</h4><ul>${others}</ul></div>` : ''}
       <div class="row-actions"><button data-act="duel-go">Fight</button></div>
       <p class="waiting">Starts in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p></section>`;
@@ -561,27 +593,36 @@ window.G = window.G || {};
       <div class="row-actions"><button data-act="ending">See how the match ended</button><button class="ghost" data-act="title">Try again</button></div></section>`;
   }
 
-  // Standings: every player's hearts and health, this round's pairings, past results
-  function standings(T) {
-    const rows = T.entrants.slice().sort((a, b) => (a.out - b.out) || (b.hero.hearts - a.hero.hearts) || (b.hp - a.hp)).map(e => {
-      const build = buildLabel(e.hero);
-      return `<tr class="${e.hero.isPlayer ? 'me' : ''} ${e.out ? 'out' : ''}"><td>${esc(e.hero.isPlayer ? 'You' : e.hero.name)}</td><td>${heartsRow(e.hero.hearts, 'sm')}</td>
-        <td>${e.out ? `<small>${ord(e.place)}</small>` : `<b>${e.hp}</b> <small>/ ${e.maxHp}</small>`}</td><td><small>${esc(build)}</small></td></tr>`;
-    }).join('');
-    return `<div class="table-wrap"><table class="tour"><thead><tr><th>Player</th><th>Hearts</th><th>Health</th><th>Build</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-  }
   const ord = n => n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : n + 'th';
 
+  // Tournament bracket: rounds from left to right, each fight showing both players' hearts and health
   function roundsList(T) {
     if (!T.rounds.length) return '';
     const next = G.Tournament.nextMatch(T);
-    return `<div class="bracket">${T.rounds.slice().reverse().map(r => `<div class="b-col"><h4>Round ${r.n}</h4><div class="b-list">${r.pairs.map(p => {
-      const row = (e, won) => `<div class="b-row ${e.ghost ? 'ghost' : ''} ${!e.ghost && e.hero.isPlayer ? 'me' : ''} ${won === true ? 'won' : won === false ? 'lost' : ''}"><b>${esc(nameOf(e))}</b></div>`;
-      const wa = p.result ? p.winner === p.a : null;
-      const mine = (p.a.hero && p.a.hero.isPlayer) || (!p.ghost && p.b.hero.isPlayer);
-      const note = p.result ? (p.ghost ? 'Ghost fight: no heart at stake' : p.lostHeart ? `${esc(nameOf(p.lostHeart))} loses a heart${p.lostHeart.out ? ' and is out' : ''}` : '') : p === next ? (mine ? 'Your fight is next' : 'Up next') : 'Waiting';
-      return `<div class="b-match ${p === next ? 'next' : ''}">${row(p.a, wa === null ? null : wa)}<div class="b-vs">vs</div>${row(p.b, wa === null ? null : !wa)}<div class="b-note">${note}</div></div>`;
-    }).join('')}</div></div>`).join('')}</div>`;
+    const row = (e, won, p, i) => {
+      if (e.ghost) return `<div class="b-row ghost ${won === true ? 'won' : won === false ? 'lost' : ''}"><b>${esc(e.name)}</b><span class="b-meta"><small>no heart at stake</small></span></div>`;
+      const snap = p.snap && p.snap[i];
+      const hearts = snap ? snap.hearts : e.hero.hearts;
+      const hp = p.result ? (won ? `${snap ? snap.hp : e.hp} hp left` : p.draw ? 'out of time' : snap && snap.out ? 'out' : 'lost') : `${e.hp} hp`;
+      return `<div class="b-row ${e.hero.isPlayer ? 'me' : ''} ${won === true ? 'won' : won === false ? 'lost' : ''}"><b>${esc(nameOf(e))}</b>
+        <span class="b-meta">${heartsRow(hearts, 'sm')}<small>${hp}</small></span></div>`;
+    };
+    const cols = T.rounds.map((r, ri) => `<div class="b-col ${ri ? 'linked' : ''}"><h4>Round ${r.n}</h4><div class="b-list">${r.pairs.map(p => {
+      const wa = p.result && !p.draw ? p.winner === p.a : null;
+      const mine = (p.a.hero && p.a.hero.isPlayer) || (!p.ghost && p.b.hero && p.b.hero.isPlayer);
+      let note = '';
+      if (p.result) {
+        const li = p.lostHeart === p.a ? 0 : 1, wasOut = p.snap && p.snap[li] && p.snap[li].out;
+        const who = p.lostHeart && nameOf(p.lostHeart), verb = who === 'You' ? 'lose' : 'loses';
+        note = p.draw ? (p.suddenDeath ? 'Out of time: sudden death' : 'Out of time: both lose a heart') : p.ghost ? 'Ghost fight' : p.lostHeart ? `${esc(who)} ${verb} a heart${wasOut ? (who === 'You' ? ' and are out' : ' and is out') : ''}` : '';
+      }
+      else note = p === next ? (mine ? 'Your fight is next' : 'Up next') : 'Waiting';
+      return `<div class="b-match ${p === next ? 'next' : ''} ${mine ? 'mine' : ''}">${row(p.a, wa === null ? null : wa, p, 0)}<div class="b-vs">vs</div>${row(p.b, wa === null ? null : !wa, p, 1)}<div class="b-note">${note}</div></div>`;
+    }).join('')}</div></div>`).join('');
+    const champ = T.champion ? `<div class="b-col linked champ"><h4>Champion</h4><div class="b-list"><div class="b-match won"><div class="b-row ${T.champion.hero.isPlayer ? 'me' : ''} won"><b>${esc(T.champion.hero.isPlayer ? 'You' : T.champion.hero.name)}</b><span class="b-meta">${heartsRow(T.champion.hero.hearts, 'sm')}</span></div></div></div></div>` : '';
+    const out = T.entrants.filter(e => e.out).sort((a, b) => a.place - b.place);
+    const outRow = out.length ? `<p class="b-out">Out: ${out.map(e => `${esc(e.hero.isPlayer ? 'You' : e.hero.name)} <small>(${ord(e.place)})</small>`).join(', ')}</p>` : '';
+    return `<div class="bracket" role="list" aria-label="Tournament bracket">${cols}${champ}</div>${outRow}`;
   }
 
   function placements(T) {
@@ -601,8 +642,7 @@ window.G = window.G || {};
     const m = G.Tournament.nextMatch(T);
     const mine = m && ((m.a.hero && m.a.hero.isPlayer) || (!m.ghost && m.b.hero.isPlayer));
     return `<section class="screen"><h2>The Tournament</h2>
-      <p class="lede">Last one with hearts wins. Each round everyone is paired up again. Winners keep the health they finish with; losers lose a heart and come back at full health. Every hit deals a quarter damage.</p>
-      ${standings(T)}
+      <p class="lede">Last one with hearts wins. Each round everyone is paired up again. Winners keep the health they finish with; losers lose a heart and come back at full health. Fights go to the death; past one minute, both lose a heart.</p>
       ${roundsList(T)}
       <p class="waiting">${mine ? 'Your fight starts' : 'Next fights start'} in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p></section>`;
   }
@@ -625,8 +665,8 @@ window.G = window.G || {};
         <li><b>Hearts</b>Dying or losing a duel costs a heart. You come back at full health. Lose all three and you're out.</li>
         <li><b>Class sets</b>Some gear carries a class, and every match has a limited supply. 2, 4 or 6 pieces, or 4 + 2 for a hybrid.</li>
         <li><b>Levels</b>Fights give XP. Pick a spec at level ${CFG().levels.specLevel}, then skill tree choices at ${CFG().levels.treeLevels.join(', ')}.</li>
-        <li><b>Duels</b>After the bosses in rooms ${CFG().duelRooms.join(' and ')}, everyone fights a rival.</li>
-        <li><b>Shops</b>Rooms ${CFG().shopRooms.join(', ')}: free picks, weakest first. Merchants, the Forge and Wagers take gold.</li>
+        <li><b>Every 10 rooms</b>Room 5 is a shop round, 7 a merchant, 8 a boss, and 10 a duel against a rival. Room 30 is the tournament.</li>
+        <li><b>Your bag</b>Everything you take goes into your 6-slot bag. Equip or scrap it from there.</li>
         <li><b>The tournament</b>After room 30, everyone with hearts fights round after round until one is left.</li>
       </ul>
       <div class="row-actions"><button class="enter" data-act="start">Enter the dungeon</button></div>
@@ -731,6 +771,7 @@ window.G = window.G || {};
 
   // ---------- Input ----------
   function onClick(e) {
+    if (G.Sound) G.Sound.unlock();
     const el = e.target.closest('[data-act]');
     if (!el || el.disabled) return;
     const a = el.dataset.act, Gm = G.Game;
@@ -739,7 +780,7 @@ window.G = window.G || {};
       case 'start': Gm.newRun(); break;
       case 'door': Gm.chooseDoor(+el.dataset.i); break;
       case 'weapon': Gm.pickWeapon(el.dataset.id); break;
-      case 'take': Gm.takeItem(el.dataset.id, el.dataset.mode); break;
+      case 'take': Gm.takeItem(el.dataset.id); break;
       case 'gold': Gm.takeGold(); break;
       case 'spoils': Gm.takeSpoils(el.dataset.id); break;
       case 'mystery': Gm.mysteryAct(el.dataset.v); break;
@@ -762,6 +803,7 @@ window.G = window.G || {};
       case 'merchant-leave': Gm.leaveMerchant(); break;
       case 'ending': Gm.seeEnding(); break;
       case 'title': Gm.toTitle(); break;
+      case 'sound': { const m = G.Sound.toggle(); el.textContent = m ? 'Sound off' : 'Sound on'; break; }
     }
   }
 

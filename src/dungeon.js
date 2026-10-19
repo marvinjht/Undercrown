@@ -98,19 +98,26 @@ window.G = window.G || {};
     wager:    { title: 'Wager',    text: d => `${monsterName(d.monster, 'fight')}, tougher than usual. Bet gold: win and you double it.` },
   };
 
-  // Merchant doors stay away from room 1, boss rooms, and the rooms next to a shop round
-  function merchantOk(room) {
-    const gap = CFG().merchantGapFromShop;
-    if (room <= 1 || CFG().bossRooms[room] || room >= CFG().rooms) return false;
-    return !CFG().shopRooms.some(r => Math.abs(r - room) <= gap);
+  // What kind of room this is in the repeating 10-room pattern
+  function roomKind(room) {
+    const C = CFG();
+    if (room === 1) return 'armory';
+    if (room >= C.tournamentRoom) return 'tournament';
+    if (C.duelRooms.includes(room)) return 'duel';
+    if (C.shopRooms.includes(room)) return 'shop';
+    if (C.merchantRooms.includes(room)) return 'merchant';
+    if (C.bossRooms[room]) return 'boss';
+    return 'doors';
   }
 
   function makeDoors(hero, room, rng) {
     if (room === 1) return [{ type: 'armory' }];
-    if (CFG().shopRooms.includes(room)) return [{ type: 'shop' }];
-    if (CFG().bossRooms[room]) return [{ type: 'boss', monster: monsterFor(room, 'boss', rng) }];
+    const kind = roomKind(room);
+    if (kind === 'shop') return [{ type: 'shop' }];
+    if (kind === 'merchant') return [{ type: 'merchant' }];
+    if (kind === 'boss') return [{ type: 'boss', monster: monsterFor(room, 'boss', rng) }];
     const w = t => (t === 'purify' && hero.poison > 0 ? CFG().purifyWeightPoisoned : CFG().doorWeights[t]);
-    const types = Object.keys(CFG().doorWeights).filter(t => room >= CFG().doorMinRoom[t] && (t !== 'merchant' || merchantOk(room)));
+    const types = Object.keys(CFG().doorWeights).filter(t => room >= CFG().doorMinRoom[t]);
     const first = rng.weighted(types.map(t => [t, w(t)]));
     const rest = types.filter(t => t !== first);
     const second = rest.length ? rng.weighted(rest.map(t => [t, w(t)])) : first;
@@ -308,7 +315,7 @@ window.G = window.G || {};
 
   G.Dungeon = {
     monsterFor, buildEnemies, monsterName, makeDoors, doorInfo, danger, goldFor, itemPrice, doorFoes,
-    specOptions, gemOptions, rollMystery, fight, applyFight, tickPoison, useItem, fightOpts, merchantOk, merchantStock, merchantPrice,
+    specOptions, gemOptions, rollMystery, fight, applyFight, tickPoison, useItem, fightOpts, roomKind, merchantStock, merchantPrice,
     gearDrops, spoilsOptions, takeSpoils, forgeStrengthen, forgeReroll,
   };
 
@@ -436,7 +443,14 @@ window.G = window.G || {};
       const nm = monsterName(door.monster, kind === 'wager' ? 'fight' : kind, door.trait);
       if (out === 'dead') { hero.gold = Math.max(0, hero.gold - bet); return `fell to ${nm} and is out`; }
       if (out === 'heart') { hero.gold = Math.max(0, hero.gold - bet); return `lost a heart to ${nm}`; }
-      if (out === 'timeout') { hero.gold = Math.max(0, hero.gold - bet); G.Hero.gainXp(hero, CFG().xp.fight); return `fought ${nm} to a standstill`; }
+      if (out === 'timeout') {
+        // Out of time: half the gold and XP, no items
+        hero.gold = Math.max(0, hero.gold - bet);
+        const k = kind === 'wager' ? 'fight' : kind;
+        G.Hero.gainXp(hero, Math.round((CFG().xp[k] || CFG().xp.fight) / 2));
+        hero.gold += 2 * Math.round(goldFor(k, hero, rng) / 4);
+        return `ran out of time against ${nm}`;
+      }
       if (bet) hero.gold += bet;
       return `beat ${nm}, ${autoReward(hero, kind, room, rng)}`;
     };
@@ -507,6 +521,7 @@ window.G = window.G || {};
   function aiRoom(hero, room) {
     const rng = hero.rng;
     if (!hero.alive) return;
+    if (roomKind(room) === 'duel' || roomKind(room) === 'tournament') return;   // duels are run for everyone at once
     const hearts = hero.hearts;
     tickPoison(hero, room);
     if (!hero.alive) { hero.lastText = 'succumbed to poison and is out'; return; }

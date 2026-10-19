@@ -2,7 +2,7 @@
 // spd = attacks per 10 seconds. armor/ward/dodge/crit/stun/leech/bleed are flat.
 // pack = how many show up together (each with the listed hp/hit).
 // split = on death, spawns `count` copies of the next stage (Splitting Slime).
-// steal = gold taken per hit; escapeAfter = hits before a thief runs off with it.
+// steal = gold taken per hit (thieves keep fighting; they never run off).
 // Sprite key = 'monster_' + (sprite || id). All monsters are melee in v2.
 window.G = window.G || {};
 
@@ -15,7 +15,7 @@ G.MONSTERS = [
   { id: 'wolf',     name: 'Wolf Pack',        minRoom: 3,  maxRoom: 14, pack: 3, memberName: 'Wolf', hp: 0.45, hit: 0.5, spd: 14, bleed: 2 },
   { id: 'skeleton', name: 'Skeleton',         minRoom: 3,  maxRoom: 14, hp: 1.0, hit: 1.0, spd: 10, armor: 2 },
   { id: 'goblin',   name: 'Goblin Cutthroat', minRoom: 4,  maxRoom: 16, hp: 0.8, hit: 0.75, spd: 16, dodge: 12, crit: 10 },
-  { id: 'thief',    name: 'Thieves',          minRoom: 5,  maxRoom: 20, pack: 2, memberName: 'Thief', hp: 0.65, hit: 0.55, spd: 14, dodge: 10, steal: 2, escapeAfter: 3 },
+  { id: 'thief',    name: 'Thieves',          minRoom: 5,  maxRoom: 20, pack: 2, memberName: 'Thief', hp: 0.65, hit: 0.55, spd: 14, dodge: 10, steal: 2 },
   { id: 'orc',      name: 'Orc Brute',        minRoom: 8,  maxRoom: 24, hp: 1.3, hit: 1.3, spd: 8, armor: 4 },
   { id: 'golem',    name: 'Rock Golems',      minRoom: 8,  maxRoom: 22, pack: 2, memberName: 'Rock Golem', hp: 0.65, hit: 0.8, spd: 6, armor: 6, stun: 20 },
   { id: 'wraith',   name: 'Wraith',           minRoom: 12, maxRoom: 30, hp: 0.9, hit: 1.0, spd: 12, dodge: 20, ward: 4 },

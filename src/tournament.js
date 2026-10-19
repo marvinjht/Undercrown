@@ -24,7 +24,7 @@ window.G = window.G || {};
   function pvp(a, b, rng) {
     const bSpec = b.ghost ? b : { s: G.Stats.compute(b.hero), name: b.hero.isPlayer ? 'You' : b.hero.name, hp: b.hp, sprite: 'hero', tint: b.hero.tint };
     return G.simulateFight(G.Stats.compute(a.hero), [bSpec],
-      { seed: rng.int(0, 1e9), aHp: a.hp, aName: a.hero.isPlayer ? 'You' : a.hero.name, pvp: true });
+      { seed: rng.int(0, 1e9), aHp: a.hp, aName: a.hero.isPlayer ? 'You' : a.hero.name, pvp: true, maxTime: CFG().arena.maxTime });
   }
 
   // Pair players up. sortKey decides who meets whom (closest first); the last player left fights a ghost.
@@ -53,7 +53,8 @@ window.G = window.G || {};
   }
 
   // ---------- Duels (rooms 10 and 20) ----------
-  // Fight at current health; afterward health goes back to what it was. The loser loses a heart.
+  // Fight at current health. The winner's health goes back to what it was; the loser loses a heart and comes
+  // back at full health. Past the time limit, both lose a heart.
   const Duel = {
     pairs(heroes, rng) {
       const list = heroes.filter(h => h.alive).map(h => ({ hero: h, hp: h.hp }));
@@ -66,18 +67,18 @@ window.G = window.G || {};
       const sides = [pair.a, pair.b];
       const winnerSide = res.winner === 'a' ? 0 : 1;
       pair.winner = sides[winnerSide]; pair.result = res;
+      pair.draw = !!res.draw;
       for (let i = 0; i < 2; i++) {
         const e = sides[i];
         if (e.ghost) continue;
-        const h = e.hero, won = i === winnerSide;
-        h.hp = e.hp;                                      // health goes back to what it was
+        const h = e.hero, won = i === winnerSide && !res.draw;
+        h.hp = e.hp;                                      // the winner's health goes back to what it was
         if (!pair.ghost) h.opponents.push(sides[1 - i].hero.id);
         G.Hero.gainXp(h, won ? X.duelWin : X.duelLoss);
         if (won && !pair.ghost) h.gold += CFG().duel.winGold;
         if (!won && !pair.ghost) {
-          h.hearts = Math.max(0, h.hearts - 1);
           out.heartLost.push(h);
-          if (h.hearts <= 0) { h.alive = false; h.hp = 0; h.diedRoom = room; h.outIn = 'duel'; }
+          if (!G.Hero.loseHeart(h, room)) h.outIn = 'duel';   // back at full health, or out
         }
       }
       return out;
@@ -156,11 +157,19 @@ window.G = window.G || {};
     m.winner = sides[wi];
     const loser = sides[1 - wi];
     const hpOf = i => Math.max(0, i === 0 ? res.aHp : res.bHp);
-    m.lostHeart = null;
+    m.lostHeart = null; m.lostHearts = [];
+    m.draw = !!res.draw;
     for (let i = 0; i < 2; i++) {
       const e = sides[i];
       if (e.ghost) continue;
       if (!m.ghost) T.lastOpp[e.hero.id] = sides[1 - i].hero.id;
+      if (m.draw && !m.ghost) {
+        // Past the time limit: both lose a heart and come back at full health
+        e.hero.hearts = Math.max(0, e.hero.hearts - 1);
+        m.lostHearts.push(e); e.hp = e.maxHp;
+        continue;
+      }
+      if (m.draw) { e.hp = Math.max(10, hpOf(i)); continue; }
       if (i === wi) {
         e.hp = Math.max(1, hpOf(i));
         // Warrior 6 (Bloodrage): the kill heal carries into the next fight
@@ -171,12 +180,17 @@ window.G = window.G || {};
         e.hp = Math.max(10, hpOf(i));
       } else {
         e.hero.hearts = Math.max(0, e.hero.hearts - 1);
-        m.lostHeart = e;
+        m.lostHeart = e; m.lostHearts.push(e);
         e.hp = e.maxHp;
       }
     }
-    if (m.lostHeart && m.lostHeart.hero.hearts <= 0) eliminate(T, m.lostHeart);
-    if (m.lostHeart) vultureFeed(T, m.lostHeart.hero);
+    // If a time-out would knock out the last two players at once, they keep their last heart and go again
+    const outNow = m.lostHearts.filter(e => e.hero.hearts <= 0);
+    if (outNow.length && outNow.length >= alive(T).length) { for (const e of outNow) e.hero.hearts = 1; m.suddenDeath = true; }
+    for (const e of m.lostHearts) if (e.hero.hearts <= 0) eliminate(T, e);
+    for (const e of m.lostHearts) vultureFeed(T, e.hero);
+    // Remember how things stood right after this fight, so the bracket shows history correctly
+    m.snap = sides.map(e => (e.ghost ? null : { hearts: e.hero.hearts, hp: e.hp, out: e.out }));
     void loser;
     if (currentRound(T).pairs.every(p => p.result)) {
       if (!checkDone(T)) buildRound(T);

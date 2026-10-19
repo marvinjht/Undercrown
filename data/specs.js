@@ -5,8 +5,8 @@ window.G = window.G || {};
 G.SPECS = {
   shadow: {
     name: 'Shadow', role: 'Rogue',
-    params: { every: 6, duration: 2 },
-    desc: 'Every 6 seconds you vanish for 2 seconds. Enemies can’t hit you while hidden, and your first hit out of hiding is a crit.',
+    params: { every: 6, bleed: 4 },
+    desc: 'Every 6 seconds your next attack is a Cheap Shot: a guaranteed crit that causes Bleed 4.',
     tip: 'Best with fast weapons and crit.',
     affinity: ['daggers', 'saber'],
   },
@@ -48,11 +48,11 @@ G.SPECS = {
 
 G.SPEC_TREES = {
   shadow: {
-    t10: [{ id: 'linger', name: 'Lingering Shadows', fx: { hideLonger: 1 }, desc: 'Hide for 3 seconds instead of 2' },
-          { id: 'ambush', name: 'Ambush', fx: { ambushDmg: 10 }, desc: 'Your hit out of hiding deals +10' }],
-    t15: [{ id: 'step', name: 'Shadow Step', fx: { hideEvery: 4 }, desc: 'Hide every 4 seconds instead of 6' },
-          { id: 'poison', name: 'Poisoned Blade', fx: { ambushBleed: 6 }, desc: 'Hits out of hiding cause Bleed 6' }],
-    t20: { id: 'nightlord', name: 'Night Lord', fx: { markPop: 5 }, desc: 'Hitting out of hiding marks the enemy for 5 seconds. When the mark ends it pops for half the damage you dealt it during the mark' },
+    t10: [{ id: 'quick', name: 'Quick Hands', fx: { cheapEvery: 4 }, desc: 'Cheap Shot every 4 seconds instead of 6' },
+          { id: 'dirty', name: 'Dirty Fighting', fx: { cheapDmg: 10 }, desc: 'Cheap Shots deal +10' }],
+    t15: [{ id: 'poison', name: 'Poisoned Blade', fx: { cheapBleed: 8 }, desc: 'Cheap Shots cause Bleed 8 instead of 4' },
+          { id: 'smoke', name: 'Smoke Bomb', fx: { smokeDodge: 20 }, desc: 'After a Cheap Shot, +20 Dodge for 2 seconds' }],
+    t20: { id: 'nightlord', name: 'Night Lord', fx: { openInvis: 5 }, desc: 'Start every fight invisible for 5 seconds: enemies can’t target you' },
   },
   bloodthirst: {
     t10: [{ id: 'gorge', name: 'Gorge', fx: { overhealShield: 20 }, desc: 'Healing past full health becomes Shield, up to 20' },

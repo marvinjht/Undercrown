@@ -140,6 +140,7 @@ window.G = window.G || {};
       }
       if (e.h) for (const id in e.h) { const f = F[id]; if (f) { [f.hp, f.shield, f.mana] = e.h[id]; } }
       const att = F[e.src], def = F[e.tgt];
+      this.playSfx(e, att, def);
       switch (e.type) {
         case 'hit':
           if (!att || !def) break;
@@ -148,6 +149,7 @@ window.G = window.G || {};
           if (e.amount > 0) this.float(def, e.crit ? e.amount + '!' : String(e.amount), e.crit ? '#ffd34d' : '#ff7a66', e.crit ? 24 : 17);
           if (e.absorbed) this.float(def, 'SHIELD ' + e.absorbed, '#9fc4ff', 12, 26 * def.dir);
           if (e.counter) this.float(att, 'COUNTER', '#9fe3ff', 12);
+          if (e.cheap) this.float(att, 'CHEAP SHOT', '#c8a2ff', 12);
           break;
         case 'cast': {
           if (!att) break;
@@ -172,6 +174,7 @@ window.G = window.G || {};
         case 'stun': if (def) this.float(def, 'STUNNED', '#ffd34d', 13); break;
         case 'double': if (att) this.float(att, 'DOUBLE SHOT', '#8fcf78', 12); break;
         case 'steal': if (att) this.float(att, `-${e.amount}g`, '#f2c14a', 13); break;
+        case 'cheap_ready': break;
         case 'escape':
           if (att) {
             att.gone = true; this.float(att, `ESCAPED +${e.amount}g`, '#f2c14a', 13);
@@ -188,7 +191,7 @@ window.G = window.G || {};
         case 'kite': if (att) this.float(att, 'KITE', '#8fcf78', 12); break;
         case 'thorns': if (def) this.float(def, String(e.amount), '#c9a26b', 12, 14); break;
         case 'undying': if (att) this.float(att, 'UNDYING', '#ff5b4a', 16); break;
-        case 'stealth_on': if (att) { this.tweens.add({ targets: att.cont, alpha: 0.22, duration: 160 / this.speed }); if (e.label) this.float(att, 'VANISH', '#b9a7d9', 14); } break;
+        case 'stealth_on': if (att) { this.tweens.add({ targets: att.cont, alpha: 0.22, duration: 160 / this.speed }); if (e.label) this.float(att, e.label === 'Night Lord' ? 'NIGHT LORD' : 'VANISH', '#b9a7d9', 14); } break;
         case 'stealth_off': if (att) this.tweens.add({ targets: att.cont, alpha: 1, duration: 160 / this.speed }); break;
         case 'death':
           if (def) { def.dead = true; def.body.setTint(0x555555); this.tweens.add({ targets: def.cont, alpha: 0.35, angle: def.dir * 80, duration: 450 / this.speed }); }
@@ -196,6 +199,39 @@ window.G = window.G || {};
         case 'timeout': { const a = F.a; if (a) this.float(a, 'TIME', '#ece3d6', 16); break; }
       }
       if (this.cfg.onEvent) this.cfg.onEvent(e);
+    }
+
+    // Sound for an event: weapon sounds for heroes, claws and thuds for monsters, spells by name
+    playSfx(e, att, def) {
+      const S = G.Sound;
+      if (!S) return;
+      const weaponOf = f => { const v = (this.cfg.visual && this.cfg.visual[f.id]) || {}; const w = v.weapon || f.m.weapon; return w ? w.replace('weapon_', '') : null; };
+      switch (e.type) {
+        case 'hit': {
+          if (!att) break;
+          const w = weaponOf(att);
+          S.play(e.cleave ? 'chop' : w ? S.WEAPON_SFX[w] || 'slash' : 'claw');
+          if (e.crit) S.play('crit', 0.1);
+          if (e.cheap) S.play('cheap');
+          if (e.absorbed && !e.amount) S.play('shield', 0.12);
+          if (def && def.id === 'a' && !e.crit) S.play('hurt', 0.12);
+          break;
+        }
+        case 'cast': S.play(e.echo ? 'arcane' : S.SPELL_SFX[e.name] || 'arcane', 0.2); break;
+        case 'heal': S.play('heal', 0.25); break;
+        case 'dodge': S.play('dodge'); break;
+        case 'parry': S.play('parry'); break;
+        case 'stun': S.play('stun'); break;
+        case 'stealth_on': S.play('stealth'); break;
+        case 'double': S.play('double'); break;
+        case 'kite': S.play('kite'); break;
+        case 'burst': S.play('explode'); break;
+        case 'revive': S.play('revive'); break;
+        case 'undying': S.play('revive'); break;
+        case 'death': S.play('death', 0.12); break;
+        case 'bleed': case 'burn': S.play('bleed', 0.3); break;
+        case 'steal': S.play('coin', 0.2); break;
+      }
     }
 
     drawBar(f) {

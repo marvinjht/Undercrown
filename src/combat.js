@@ -32,7 +32,8 @@ window.G = window.G || {};
         hp: spec.hp != null ? Math.min(spec.hp, s.maxHp) : s.maxHp, maxHp: s.maxHp,
         shield: s.shield || 0, mana: Math.min(CB.manaMax, s.startMana || 0), alive: true,
         nextAtk: 0.3 + rng.range(0, 0.4) * 10 / s.spd, atkCount: 0, hitsLanded: 0, incoming: 0,
-        invis: false, invisUntil: -1, nextInvis: s.spec === 'shadow' ? 2.5 : Infinity, stealthCrit: false, ambush: false,
+        invis: !!(s.fx && s.fx.openInvis), invisUntil: s.fx && s.fx.openInvis ? s.fx.openInvis : -1,
+        nextCheap: s.spec === 'shadow' ? 2 : Infinity, cheapShot: false, smokeUntil: -1, stunImmuneUntil: -1, crack: 0,
         bleed: 0, bleedUntil: -1, nextBleed: Infinity,
         firstCrits: Math.max((s.fx && s.fx.firstCrits) || 0, 0), dmgBonus: 0, hurtBonus: 0, nextHitBonus: 0,
         swUsed: false, reviveAvail: !!spec.revive, vanishUsed: false,
@@ -40,7 +41,7 @@ window.G = window.G || {};
         selfBurnNext: s.gem === 'phoenix' ? 1 : Infinity, exploded: false, undyingUsed: false, undyingUntil: -1,
         quarterUsed: false, overShield: 0, parryDodge: 0, shred: 0, shredUntil: -1, mark: null,
         thorns: spec.thorns || (s.fx && s.fx.thorns) || 0, shieldBreak: !!(spec.shieldBreak || (s.fx && s.fx.shieldBreak)),
-        steal: spec.steal || 0, stolen: 0, escapeAfter: spec.escapeAfter || 0, split: spec.split || null,
+        steal: spec.steal || 0, stolen: 0, split: spec.split || null,
         range: CB.ranges[s.range || 'melee'] || 1,
         ...extra,
       };
@@ -88,7 +89,8 @@ window.G = window.G || {};
           def.shield -= used; absorbed = Math.ceil(used / 2); amt -= absorbed;
         } else { absorbed = Math.min(def.shield, amt); def.shield -= absorbed; amt -= absorbed; }
       }
-      if (amt > 0 && def.s.gem === 'stone') amt = 1;
+      // Heart of Stone: each hit to health deals 1 more than the last, up to the cap
+      if (amt > 0 && def.s.gem === 'stone') { def.crack = Math.min(G.CONFIG.stoneCrack, def.crack + 1); amt = def.crack; }
       def.hp -= amt;
       // Berserker: Undying Rage keeps you at 1 for a few seconds
       if (def.hp <= 0 && def.undyingUntil >= t) def.hp = 1;
@@ -174,15 +176,17 @@ window.G = window.G || {};
       const shred = att && att.s.fx && att.s.fx.bleedShred;
       if (shred) { def.shred = shred; def.shredUntil = def.bleedUntil; }
     }
+    // Stuns can't chain: after one, the target can't be stunned again for a few seconds
     function stun(att, def, secs = 1) {
-      if (!def.alive || (def.s.fx && def.s.fx.stunImmune)) return;
+      if (!def.alive || (def.s.fx && def.s.fx.stunImmune) || t < def.stunImmuneUntil) return;
       def.nextAtk = Math.max(def.nextAtk, t + secs);
+      def.stunImmuneUntil = t + secs + CB.stunImmune;
       push({ type: 'stun', src: att.id, tgt: def.id });
     }
 
     function cast(f) {
       const sp = f.s.spell, fx = f.s.fx || {};
-      const tgts = sp.aoe ? foes(f) : [target(f)].filter(Boolean);
+      const tgts = (sp.aoe ? foes(f) : [target(f)].filter(Boolean)).filter(x => !x.invis);
       push({ type: 'cast', src: f.id, name: sp.name, aoe: sp.aoe, tgts: tgts.map(x => x.id) }, f);
       for (const d of tgts) {
         if (!d.alive) continue;
@@ -222,7 +226,8 @@ window.G = window.G || {};
       const fx = att.s.fx || {};
       if (def.invis) { push({ type: 'hidden', src: att.id, tgt: def.id }); return 0; }
       const dfx = def.s.fx || {};
-      if (roll(Math.min(CB.dodgeCap, (def.s.dodge || 0) + def.parryDodge))) {
+      const smoke = def.smokeUntil >= t && dfx.smokeDodge ? dfx.smokeDodge : 0;
+      if (roll(Math.min(CB.dodgeCap + smoke, (def.s.dodge || 0) + def.parryDodge + smoke))) {
         push({ type: 'dodge', src: att.id, tgt: def.id });
         if (dfx.afterDodge) def.nextHitBonus = dfx.afterDodge;
         return 0;
@@ -238,14 +243,14 @@ window.G = window.G || {};
         }
       }
       let crit = false, ambush = false;
-      if (att.stealthCrit) { crit = true; att.stealthCrit = false; ambush = att.s.spec === 'shadow'; }
+      if (att.cheapShot) { crit = true; att.cheapShot = false; ambush = true; if (fx.smokeDodge) att.smokeUntil = t + 2; }
       else if (att.firstCrits > 0) { crit = true; att.firstCrits--; }
       else if (counter && fx.counterCrit) crit = true;
       else crit = roll(att.s.crit);
       let raw = att.s.dmg + att.dmgBonus + att.hurtBonus + att.nextHitBonus;
       att.nextHitBonus = 0;
       if (counter && fx.counterDmg) raw += fx.counterDmg;
-      if (ambush && fx.ambushDmg) raw += fx.ambushDmg;
+      if (ambush && fx.cheapDmg) raw += fx.cheapDmg;
       if (att.s.spec === 'berserker') raw += Math.min(fx.berserkCap || CB.berserkCap, Math.floor((att.maxHp - att.hp) / BE.per) * BE.dmg);
       if (crit) raw = raw * 2 + (att.s.critDmg || 0) + (fx.critDmgFlat || 0);
       if (dfx.takeMore) raw += dfx.takeMore;
@@ -259,15 +264,13 @@ window.G = window.G || {};
       amt += holyPart;
       if (fx.everyFourthMagic && att.atkCount % 4 === 0) amt += Math.max(0, fx.everyFourthMagic - (def.s.ward || 0));
       const r = damage(def, amt, att);
-      push({ type: 'hit', src: att.id, tgt: def.id, amount: r.dealt, absorbed: r.absorbed, crit, counter: !!counter, kind: att.s.type, ranged: att.range > 1 }, att, def);
+      push({ type: 'hit', src: att.id, tgt: def.id, amount: r.dealt, absorbed: r.absorbed, crit, cheap: ambush, counter: !!counter, kind: att.s.type, ranged: att.range > 1 }, att, def);
       att.hitsLanded++;
       if (def.s.fx && def.s.fx.hurtStack) def.hurtBonus = Math.min(def.s.fx.hurtCap, def.hurtBonus + def.s.fx.hurtStack);
       // Life on Hit, plus Paladin 6: Consecration (holy damage heals you), plus crit heals
       const low = att.hp < att.maxHp / 2;
       const lifeOnHit = (att.s.leech || 0) * (fx.lowLeechDouble && low ? 2 : 1) + (fx.consecrate ? holyPart : 0) + (crit && fx.critHeal ? fx.critHeal : 0);
       if (lifeOnHit > 0) { const h = heal(att, lifeOnHit); if (h) push({ type: 'heal', src: att.id, amount: h }, att); }
-      // Night Lord: a hit out of hiding marks the target
-      if (ambush && fx.markPop && def.alive && !def.mark) def.mark = { by: att, until: t + fx.markPop, dmg: r.dealt };
       // Thorns and Retaliate hurt the attacker
       const back = (def.thorns || 0) + (dfx.retaliate || 0);
       if (back && att.alive && !counter) {
@@ -280,17 +283,14 @@ window.G = window.G || {};
         if (h) push({ type: 'heal', src: att.id, amount: h }, att);
       }
       if (crit && fx.critMana) addMana(att, fx.critMana);
+      // Thieves take gold on every hit and keep fighting
       if (att.steal && att.alive) {
-        att.stolen += att.steal;
+        att.stolen += att.steal; result.goldStolen += att.steal;
         push({ type: 'steal', src: att.id, amount: att.steal });
-        if (att.hitsLanded >= att.escapeAfter) {
-          att.alive = false; att.escaped = true; result.goldStolen += att.stolen;
-          push({ type: 'escape', src: att.id, amount: att.stolen }, att);
-        }
       }
       afterDamage(def, att);
       if (def.alive) {
-        applyBleed(def, Math.max(att.s.bleed || 0, crit && fx.critBleed ? fx.critBleed : 0, ambush && fx.ambushBleed ? fx.ambushBleed : 0), att);
+        applyBleed(def, Math.max(att.s.bleed || 0, crit && fx.critBleed ? fx.critBleed : 0, ambush ? (fx.cheapBleed || SH.bleed) : 0), att);
         if (roll(att.s.stun) || (fx.fourthStun && att.hitsLanded % fx.fourthStun === 0)) stun(att, def, 1);
       }
       return r.dealt;
@@ -321,8 +321,10 @@ window.G = window.G || {};
 
     const done = () => !A.alive || !fighters.some(f => f.side === 'b' && f.alive);
     let winner = null;
+    for (const f of fighters) if (f.invis) push({ type: 'stealth_on', src: f.id, label: 'Night Lord' });
+    const maxTime = opts.maxTime || CB.maxTime;
 
-    while (t < CB.maxTime && !done()) {
+    while (t < maxTime && !done()) {
       t = Math.round((t + CB.dt) * 1000) / 1000;
       // Move into range (or finish a Kiting step back)
       for (const f of fighters) {
@@ -359,11 +361,12 @@ window.G = window.G || {};
       for (const f of fighters) {
         if (!f.alive) continue;
         const ffx = f.s.fx || {};
-        if (f.s.spec === 'shadow' && !f.invis && t >= f.nextInvis) {
-          f.invis = true; f.invisUntil = t + SH.duration + (ffx.hideLonger || 0); f.nextInvis = t + (ffx.hideEvery || SH.every); f.stealthCrit = true;
-          push({ type: 'stealth_on', src: f.id });
+        // Shadow: every few seconds the next attack is a Cheap Shot
+        if (f.s.spec === 'shadow' && !f.cheapShot && t >= f.nextCheap) {
+          f.cheapShot = true; f.nextCheap = t + (ffx.cheapEvery || SH.every);
+          push({ type: 'cheap_ready', src: f.id });
         }
-        else if (f.invis && t >= f.invisUntil) { f.invis = false; push({ type: 'stealth_off', src: f.id }); }
+        if (f.invis && t >= f.invisUntil) { f.invis = false; push({ type: 'stealth_off', src: f.id }); }
         // Phoenix Heart cost: 1 burn damage a second
         if (t >= f.selfBurnNext) {
           f.selfBurnNext = t + 1;
@@ -415,6 +418,7 @@ window.G = window.G || {};
     else if (!fighters.some(f => f.side === 'b' && f.alive)) winner = 'a';
     else {
       timeout = true;
+      result.draw = !!opts.pvp;   // player fights that run out of time: both lose
       const bs = fighters.filter(f => f.side === 'b' && f.alive);
       const bf = bs.reduce((x, f) => x + f.hp, 0) / Math.max(1, bs.reduce((x, f) => x + f.maxHp, 0));
       winner = A.hp / A.maxHp >= bf ? 'a' : 'b';
@@ -424,7 +428,7 @@ window.G = window.G || {};
     return {
       events, tracks, fighters: meta, winner, timeout, duration: t,
       aHp: Math.max(0, A.hp), bHp: B0 ? Math.max(0, B0.hp) : 0,
-      revived: result.revived, goldStolen: result.goldStolen, bloodrage: result.bloodrage, phoenixWin: result.phoenixWin,
+      revived: result.revived, goldStolen: result.goldStolen, bloodrage: result.bloodrage, phoenixWin: result.phoenixWin, draw: !!result.draw,
     };
   }
 

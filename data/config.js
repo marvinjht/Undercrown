@@ -3,23 +3,27 @@
 window.G = window.G || {};
 
 G.CONFIG = {
-  rooms: 30,               // room 1 is the Armory (pick 1 of 3 weapons)
-  gemRoom: 10,             // heart gem pick comes right after this room's boss
-  duelRooms: [10, 20],     // after the boss, everyone is paired up for a duel
-  shopRooms: [8, 16, 24],  // these rooms are shop rounds (free picks) instead of doors
-  bossRooms: { 10: 'boneKing', 20: 'gorehorn', 30: 'warden' },
+  // A 10-room pattern that repeats: 5 = shop round, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
+  rooms: 29,               // dungeon rooms; the tournament is room 30. Room 1 is the Armory.
+  tournamentRoom: 30,
+  gemRoom: 8,              // heart gem pick is part of the first boss round
+  duelRooms: [10, 20],     // everyone is paired up for a duel
+  shopRooms: [5, 15, 25],  // shop rounds (free picks, weakest first)
+  merchantRooms: [7, 17, 27],
+  bossRooms: { 8: 'boneKing', 18: 'gorehorn', 28: 'warden' },
 
   roundSeconds: 45,        // doors, rewards, spec picks... (fights don't count against it)
   tourBreakSeconds: 6,
-  bagSize: 3,
+  bagSize: 6,
 
   player: { baseHp: 100, baseCrit: 6 },
 
   hearts: 3,               // lose one when you die in the dungeon or lose a duel/tournament fight
 
   // Leveling: going from level N to N+1 costs xpBase + N XP
-  levels: { max: 20, xpBase: 9, hpPerLevel: 4, specLevel: 5, treeLevels: [10, 15, 20] },
-  xp: { fight: 12, elite: 24, boss: 45, duelWin: 24, duelLoss: 12, trainer: 36, spoils: 18 },
+  levels: { max: 20, xpBase: 9, hpPerLevel: 4, specLevel: 5, treeLevels: [10, 15, 20],
+    bump: 2 },            // every even level alternates +2 Damage (2, 6, 10...) and +2 Armor (4, 8, 12...)
+  xp: { fight: 12, elite: 24, boss: 45, duelWin: 24, duelLoss: 12, trainer: 18, spoils: 18 },
 
   restHeal: 30,            // campfire (does not clear poison)
   springHeal: 20,          // mystery: healing spring
@@ -30,11 +34,12 @@ G.CONFIG = {
 
   phoenix: { burst: 50, burn: 10, burnSeconds: 5, selfBurn: 1, standUp: 10 },
   stoneHp: 25,
+  stoneCrack: 5,           // Heart of Stone: each hit deals 1 more than the last, up to this
   gaiaShield: 100,
   vultureHeal: 30,
 
   // PvP (duels and the tournament): every hit deals half damage so fights last longer
-  arena: { damageMult: 0.25 },
+  arena: { damageMult: 0.25, maxTime: 60 },   // past 60 seconds, both players lose a heart
   // Ghosts fill in when a duel or tournament round has an odd number of players
   ghost: { hpMult: 0.5, dmgMult: 0.5 },
   duel: { winGold: 20 },
@@ -54,9 +59,8 @@ G.CONFIG = {
   salvage: { grey: 2, green: 8, rare: 20 },
 
   // Door weights (out of the total). Trash Pile replaces Treasure; the Vault is rare.
-  doorWeights: { fight: 46, elite: 16, trash: 8, vault: 4, rest: 10, mystery: 7, venom: 5, purify: 5, merchant: 18, forge: 7, trainer: 7, wager: 6 },
-  doorMinRoom: { fight: 2, elite: 4, trash: 3, vault: 6, rest: 4, mystery: 3, venom: 5, purify: 5, merchant: 3, forge: 5, trainer: 3, wager: 6 },
-  merchantGapFromShop: 1,
+  doorWeights: { fight: 46, elite: 16, trash: 8, vault: 4, rest: 10, mystery: 7, venom: 5, purify: 5, forge: 7, trainer: 7, wager: 6 },
+  doorMinRoom: { fight: 2, elite: 4, trash: 3, vault: 6, rest: 4, mystery: 3, venom: 5, purify: 5, forge: 5, trainer: 3, wager: 6 },
   purifyWeightPoisoned: 18,
 
   forge: { upgradeCost: 40, rerollCost: 25 },
@@ -81,7 +85,8 @@ G.CONFIG = {
     tierGrowth: 0.25,
     chanceTierGrowth: 0.10,
     treasureHunterRooms: 6,
-    tagChance: { green: 45, rare: 65 },   // out of 100: how often an item carries a class tag
+    tagChance: { green: 45, rare: 65 },
+    treasureHunterTag: 20,                // Treasure Hunter: this much more often   // out of 100: how often an item carries a class tag
     tradeoffChance: 50,                   // out of 100: an uncommon item's bonus is a trade-off
     setMatchChance: 70,                   // out of 100: a tag leans toward a class you already wear
   },
@@ -90,10 +95,10 @@ G.CONFIG = {
   supplyPerClass: 12,
 
   monster: {
-    hpBase: 50, hpGrowth: 1.08,
-    hitBase: 6, hitGrowth: 1.065,
+    hpBase: 52, hpGrowth: 1.09,
+    hitBase: 7, hitGrowth: 1.072,
     elite: { hp: 1.35, hit: 1.15, packExtra: 1 },
-    boss:  { hp: 1.5, hit: 1.0 },
+    boss:  { hp: 1.6, hit: 1.1 },
     swarmCopy: { hp: 0.35, hit: 0.5 },
   },
 
@@ -111,5 +116,6 @@ G.CONFIG = {
     berserkCap: 20,
     manaMax: 100,
     minSpd: 4,
+    stunImmune: 3,        // after being stunned, you can't be stunned again for this many seconds
   },
 };

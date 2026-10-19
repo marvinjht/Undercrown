@@ -35,7 +35,7 @@ for (let mi = 0; mi < MATCHES; mi++) {
       const r = G.Duel.runAll(heroes, room, rng);
       for (const p of r.pairs) stats.duelLen.push(p.result.duration);
     }
-    if (room === 10 || room === 20 || room === 30) for (const h of heroes) if (h.alive) stats.levelAt[room].push(h.level);
+    if (room === 10 || room === 20 || room === 29) for (const h of heroes) if (h.alive) stats.levelAt[room === 29 ? 30 : room].push(h.level);
     if (G.CLASS_ORDER.some(c => G.Supply.left(c) <= 2)) stats.supplyLow++;
   }
   for (const h of heroes) {

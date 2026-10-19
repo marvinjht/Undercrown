@@ -39,15 +39,16 @@ G.TRADEOFFS = {
 };
 
 // Build effects (rare): reward a direction instead of raw stats. fx keys are read by stats.js and combat.js.
+// classes = the class tags (or weapon classes) this effect fits. Untagged armor only rolls the general ones.
 G.EFFECTS = {
-  warlord:  { name: 'Warlord',   fx: { perWarriorDmg: 2 },  desc: '+2 Damage for each Warrior piece you wear' },
-  hawkeye:  { name: 'Hawkeye',   fx: { perArcherPierce: 1 }, desc: '+1 Pierce for each Archer piece you wear' },
-  rending:  { name: 'Rending',   fx: { bleedShred: 2 },     desc: 'Your bleed also lowers the target’s Armor by 2' },
-  bloodied: { name: 'Bloodied',  fx: { critHeal: 4 },       desc: 'Crits heal you 4' },
-  primed:   { name: 'Primed',    fx: { openingSpell: 1 },   desc: 'Your first spell each fight goes off at the start' },
-  concuss:  { name: 'Concussive', fx: { fourthStun: 4 },    desc: 'Every 4th hit stuns' },
-  counter:  { name: 'Counterpoise', fx: { afterDodge: 8 },  desc: 'After you dodge, your next hit deals +8' },
-  bastion:  { name: 'Bastion',   fx: { shieldSpd: 2 },      desc: 'While your Shield holds, +2 Speed' },
+  warlord:  { name: 'Warlord',      classes: ['warrior'],            fx: { perWarriorDmg: 2 },  desc: '+2 Damage for each Warrior piece you wear' },
+  hawkeye:  { name: 'Hawkeye',      classes: ['archer'],             fx: { perArcherPierce: 1 }, desc: '+1 Pierce for each Archer piece you wear' },
+  rending:  { name: 'Rending',      classes: ['warrior', 'rogue'],   general: true, fx: { bleedShred: 2 }, desc: 'Your bleed also lowers the target’s Armor by 2' },
+  bloodied: { name: 'Bloodied',     classes: ['rogue', 'archer'],    general: true, fx: { critHeal: 4 },   desc: 'Crits heal you 4' },
+  primed:   { name: 'Primed',       classes: ['mage'],               fx: { openingSpell: 1 },   desc: 'Your first spell each fight goes off at the start' },
+  concuss:  { name: 'Concussive',   classes: ['warrior', 'paladin'], general: true, fx: { fourthStun: 4 }, desc: 'Every 4th hit stuns' },
+  counter:  { name: 'Counterpoise', classes: ['rogue', 'archer'],    general: true, fx: { afterDodge: 8 }, desc: 'After you dodge, your next hit deals +8' },
+  bastion:  { name: 'Bastion',      classes: ['paladin', 'warrior'], general: true, fx: { shieldSpd: 2 },  desc: 'While your Shield holds, +2 Speed' },
 };
 G.EFFECT_ORDER = Object.keys(G.EFFECTS);
 

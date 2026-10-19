@@ -75,7 +75,8 @@ window.G = window.G || {};
     let itemSet = null;
     if (rarity !== 'grey') {
       const allowed = slot === 'weapon' ? G.WEAPONS[weaponType].classes : null;
-      const tagged = set || forceTag || rng.int(1, 100) <= (L().tagChance[rarity] || 0);
+      const thBonus = hero && hero.spec === 'treasureHunter' ? L().treasureHunterTag : 0;
+      const tagged = set || forceTag || rng.int(1, 100) <= (L().tagChance[rarity] || 0) + thBonus;
       if (tagged) itemSet = set && (!allowed || allowed.includes(set)) && Supply.left(set) > 0 ? set : rollSet(hero, rng, allowed);
     }
 
@@ -102,10 +103,20 @@ window.G = window.G || {};
       }
       if (affixes.length) name += ' ' + G.AFFIXES[affixes[0]].suffix;
     }
-    if (R.effect) effect = rng.pick(G.EFFECT_ORDER);
+    if (R.effect) effect = pickEffect(rng, itemSet, slot === 'weapon' ? G.WEAPONS[weaponType].classes : null);
 
     return { id: G.uid('item'), kind: 'gear', slot, rarity, room, tier, weaponType: weaponType || null, set: itemSet,
       name, base, stats, affixStats, affixes, tradeoff, effect, trait, iconKey };
+  }
+
+  // Build effects fit the item: a tagged item rolls effects for its class, an untagged weapon for the classes
+  // it can belong to, and untagged armor only the general effects
+  function pickEffect(rng, tag, weaponClasses) {
+    let pool;
+    if (tag) pool = G.EFFECT_ORDER.filter(id => G.EFFECTS[id].classes.includes(tag));
+    else if (weaponClasses) pool = G.EFFECT_ORDER.filter(id => G.EFFECTS[id].classes.some(c => weaponClasses.includes(c)));
+    else pool = G.EFFECT_ORDER.filter(id => G.EFFECTS[id].general);
+    return rng.pick(pool.length ? pool : G.EFFECT_ORDER);
   }
 
   function fmtStat(k, v, isWeapon) {

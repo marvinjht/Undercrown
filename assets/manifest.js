@@ -45,4 +45,12 @@ G.ASSETS = {
     icon_door_rest: null, icon_door_shop: null, icon_door_mystery: null, icon_door_armory: null,
     icon_door_venom: null, icon_door_purify: null, icon_door_merchant: null, icon_door_trash: null, icon_door_vault: null, icon_door_forge: null, icon_door_trainer: null, icon_door_wager: null,
   },
+
+  // Sound effects: null = the built-in sound made in code (src/sound.js). Put a file path (e.g. 'assets/sfx/thud.mp3') to use your own.
+  sounds: {
+    slash: null, chop: null, thud: null, clang: null, bow: null, zap: null, claw: null, hurt: null, crit: null,
+    firebolt: null, meteor: null, arcane: null, heal: null, shield: null, dodge: null, parry: null, stun: null,
+    cheap: null, stealth: null, double: null, kite: null, bleed: null, explode: null, revive: null, death: null,
+    levelup: null, coin: null, heart: null,
+  },
 };

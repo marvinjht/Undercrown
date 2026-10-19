@@ -1,23 +1,23 @@
-# Thirty Doors (prototype v4)
+# Thirty Doors (prototype v5)
 
-Single-player prototype of a dungeon auto battler. You and 5 AI rivals each walk 30 rooms with 3 hearts.
-Room 1 is the Armory. Rooms 8, 16 and 24 are shop rounds (free picks, weakest first). After the bosses in
-rooms 10 and 20 everyone duels a rival. After room 30, everyone with hearts fights in a last-one-standing
-tournament. Every round is timed and ends as soon as everyone is ready; fights don't count against the clock.
+Single-player prototype of a dungeon auto battler. You and 5 AI rivals each walk 29 rooms with 3 hearts,
+then fight a last-one-standing tournament in room 30. Rooms follow a 10-room pattern that repeats:
+5 = shop round (free picks), 7 = merchant, 8 = boss (the first one also gives your heart gem), 10 = duel.
+Every round is timed and ends as soon as everyone is ready; fights don't count against the clock.
 
-v4 adds:
-- Hearts: dying or losing a duel costs one; you come back at full health but get nothing from that room.
-- Duels at rooms 10 and 20, and a heart-based tournament where winners keep their health.
-- Ghosts (half-strength copies of the strongest player) instead of byes. Player fights deal a quarter damage.
-- Shared set supply: 12 pieces of each class per match (src/items.js `Supply`).
-- XP and levels: spec at level 5, skill tree picks at 10, 15 and 20 (data/specs.js `SPEC_TREES`).
-- Slower gear: normal fights drop gear 1 in 3; otherwise you pick Spoils. New rooms: Trash Pile, Treasure Vault,
-  Forge, Trainer, Wager.
-- Rarity is Common (grey), Uncommon (green), Rare (blue). Trade-off bonuses and build effects (data/armor.js).
-- Elite traits that counter one-note builds (data/monsters.js `ELITE_TRAITS`).
-- Weaker set bonuses, less healing, less health from gear.
+v5 adds:
+- The repeating room pattern, shown on the room counter with icons and tooltips.
+- A 6-slot bag: everything you take lands there first; equip or scrap it from the bag.
+- Player fights go to the death; past 60 seconds both players lose a heart. Duel losers come back at full health.
+- Monster fights that time out give half gold and XP and no items. Thieves steal but never run away.
+- Stuns can't chain (3 seconds of stun immunity after each). Level-ups give small stat bumps.
+- Shadow reworked around Cheap Shots; its capstone is 5 seconds of invisibility at the start of each fight.
+- Heart of Stone: each hit deals 1 more than the last, up to 5.
+- Build effects only roll where they fit the item's class. Treasure Hunter finds more class-tagged items.
+- Sound effects made in code (src/sound.js), replaceable with files via assets/manifest.js.
+- A skill tree screen and a left-to-right tournament bracket.
 
-Earlier versions are kept in git as the tags `v1`, `v2` and `v3`.
+Earlier versions are kept in git as the tags `v1` to `v4`.
 
 ## Stats (all flat, even numbers)
 

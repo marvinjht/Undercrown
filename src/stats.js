@@ -84,8 +84,11 @@ window.G = window.G || {};
     add(tree.stats);
     // Permanent stats from Spoils
     add(hero.bonus);
-    // Levels: +4 max health each level past 1
-    t.hp += Math.max(0, (hero.level || 1) - 1) * C().levels.hpPerLevel;
+    // Levels: +4 max health each level past 1; even levels alternate +2 Damage (2, 6, 10...) and +2 Armor (4, 8, 12...)
+    const lv = hero.level || 1, LV = C().levels;
+    t.hp += Math.max(0, lv - 1) * LV.hpPerLevel;
+    t.dmg += Math.floor((lv + 2) / 4) * LV.bump;
+    t.armor += Math.floor(lv / 4) * LV.bump;
     // Midas: +2 Damage and +8 Health for every 50 gold you hold
     if (fx.midas) { const n = Math.floor((hero.gold || 0) / fx.midas); t.dmg += 2 * n; t.hp += 8 * n; }
 
@@ -186,11 +189,12 @@ window.G = window.G || {};
     if (s.fx.consecrate) def *= 1 + Math.min(0.3, s.holy * 0.03);
     if (s.fx.vanish) def *= 1.1;
     if (s.fx.bloodrage) def *= 1.08;
-    if (s.spec === 'shadow') { def *= 1.4; off *= 1.1; }
+    if (s.spec === 'shadow') { off *= 1.2; def *= 1.05; }
+    if (s.fx.openInvis) def *= 1.1;
     if (s.spec === 'duelist') def *= 1.3;
     if (s.spec === 'berserker') off *= 1.25;
     if (s.gem === 'devil') { off *= 2; def /= 2; }
-    if (s.gem === 'stone') def *= 6;
+    if (s.gem === 'stone') def *= 2.5;
     if (s.gem === 'phoenix') { def *= 1.25; off *= 1.05; }
     if (s.fx.critHeal) def *= 1 + s.crit / 400;
     if (s.fx.fourthStun) off *= 1.06;

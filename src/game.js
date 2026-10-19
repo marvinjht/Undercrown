@@ -82,7 +82,10 @@ window.G = window.G || {};
       if (dmg) say(s, `Poison deals ${dmg} damage.`);
       if (!p.alive) { this.playerOut(`Poison took your last heart in room ${s.room}.`); return; }
       if (p.hearts < before[p.id]) say(s, 'Poison took a heart. You come back at full health, poison cleared.');
-      if (CFG().shopRooms.includes(s.room)) { this.startShop(); return; }
+      const kind = G.Dungeon.roomKind(s.room);
+      if (kind === 'shop') { this.startShop(); return; }
+      if (kind === 'duel') { s.roundKind = 'after'; s.rivalsPlayedRoom = s.room; s.gemDone = true; this.startDuels(); return; }
+      if (kind === 'merchant') { s.merchant = G.Dungeon.merchantStock(p, s.room, s.rng); s.phase = 'merchant'; this.startTimer(CFG().roundSeconds); render(); return; }
       s.doors = G.Dungeon.makeDoors(p, s.room, s.rng);
       for (const d of s.doors) if (d.monster) d.danger = G.Dungeon.danger(p, d, s.room);
       s.phase = 'doors';
@@ -109,7 +112,7 @@ window.G = window.G || {};
           break;
         }
         case 'armory': { const it = s.rng.pick(s.armory); G.Hero.equip(p, it); auto = `Time ran out. You grabbed the ${it.name}.`; break; }
-        case 'reward': auto = `Time ran out. You ${G.AI.autoLoot(p, s.offer.items, s.room, s.offer.gold > 0)}.`; break;
+        case 'reward': auto = `Time ran out. ${this.autoTakeToBag(s.offer.items, s.offer.gold)}`; break;
         case 'spoils': auto = `Time ran out. You ${G.AI.autoSpoils(p, s.spoils)}.`; break;
         case 'mystery':
           if (s.mystery.id === 'ambush') { this.startBattle({ type: 'fight', monster: G.Dungeon.monsterFor(s.room, 'fight', s.rng) }, 'fight'); return; }
@@ -145,7 +148,13 @@ window.G = window.G || {};
     nextStep() {
       const s = this.s, p = s.player;
       if (!p.alive) { this.playerOut(s.notice || `You ran out of hearts in room ${s.room}.`); return; }
+      // The heart gem is part of the first boss round
+      if (s.room === CFG().gemRoom && !p.gem && !s.gemDone) {
+        s.phase = 'gem'; s.gemOptions = s.gemOptions || G.Dungeon.gemOptions(p, s.rng);
+        this.startTimer(CFG().roundSeconds); render(); return;
+      }
       const pick = G.Hero.pendingPick(p);
+      if (pick && G.Sound) G.Sound.play('levelup');
       if (pick && pick.kind === 'spec') {
         s.phase = 'spec'; s.specOptions = s.specOptions && s.specFor === p.level ? s.specOptions : G.Dungeon.specOptions(p, s.rng); s.specFor = p.level;
         this.startTimer(CFG().roundSeconds); render(); return;
@@ -154,11 +163,6 @@ window.G = window.G || {};
         s.phase = 'tree'; s.treeLevel = pick.level;
         this.startTimer(CFG().roundSeconds); render(); return;
       }
-      if (s.room === CFG().gemRoom && !p.gem && !s.gemDone) {
-        s.phase = 'gem'; s.gemOptions = s.gemOptions || G.Dungeon.gemOptions(p, s.rng);
-        this.startTimer(CFG().roundSeconds); render(); return;
-      }
-      if (CFG().duelRooms.includes(s.room) && !s.duelDone) { this.startDuels(); return; }
       s.room++;
       s.specOptions = null; s.gemOptions = s.room > CFG().gemRoom ? null : s.gemOptions;
       if (s.room > CFG().rooms) { this.startTournament(); return; }
@@ -251,11 +255,16 @@ window.G = window.G || {};
         return;
       }
       const k = b.kind === 'wager' ? 'fight' : b.kind;
-      const lv = G.Hero.gainXp(p, CFG().xp[k] || CFG().xp.fight);
+      const fullXp = CFG().xp[k] || CFG().xp.fight;
+      const lv = G.Hero.gainXp(p, out === 'timeout' ? Math.round(fullXp / 2) : fullXp);
       const xpNote = `+${CFG().xp[k] || CFG().xp.fight} XP${lv.length ? ` (you reached level ${p.level})` : ''}`;
       if (out === 'timeout') {
+        // Out of time: half the gold and XP, no items
         p.gold = Math.max(0, p.gold - bet);
-        this.completeRoom([...notes, `Neither side could finish it. ${xpNote}, no loot this time.${bet ? ` The bet is lost.` : ''}`].join(' '));
+        const halfXp = Math.round((CFG().xp[k] || CFG().xp.fight) / 2);
+        const g = 2 * Math.round(G.Dungeon.goldFor(k, p, s.rng) / 4);
+        p.gold += g;
+        this.completeRoom([...notes, `Time ran out before either side fell. Half rewards: ${g} gold, +${halfXp} XP, no items.${bet ? ' The bet is lost.' : ''}`].join(' '));
         return;
       }
       if (bet) { p.gold += bet; notes.push(`You won the wager: +${bet} gold.`); }
@@ -276,20 +285,22 @@ window.G = window.G || {};
       if (!silent) render();
     },
 
-    // mode: 'equip' | 'bag'
-    takeItem(id, mode) {
+    // Everything you take goes into your bag first; equip it from there
+    takeItem(id) {
       const s = this.s, p = s.player;
       const it = s.offer.items.find(x => x.id === id);
       if (!it) return;
-      if (it.kind === 'consumable' || mode === 'bag') {
-        if (G.Hero.bagFull(p)) return;
-        p.bag.push(it);
-        this.completeRoom(`Put ${it.name} in your bag.`);
-        return;
-      }
-      const old = G.Hero.equip(p, it);
-      if (old) p.gold += CFG().salvage[old.rarity];
-      this.completeRoom(old ? `Equipped ${it.name}. Scrapped ${old.name} for ${CFG().salvage[old.rarity]} gold.` : `Equipped ${it.name}.`);
+      if (G.Hero.bagFull(p)) { s.bagMsg = 'Your bag is full. Equip or discard something to make space, or this item is lost.'; render(); return; }
+      p.bag.push(it);
+      this.completeRoom(`${it.name} went into your bag.${it.kind === 'gear' ? ' Click it there to equip it.' : ''}`);
+    },
+    // When time runs out: the best item goes into your bag if there's room, otherwise the gold
+    autoTakeToBag(items, gold) {
+      const p = this.s.player;
+      const up = G.AI.bestUpgrade(p, items) || items.find(it => it.kind === 'consumable');
+      if (up && !G.Hero.bagFull(p)) { p.bag.push(up); return `${up.name} went into your bag.`; }
+      if (gold) { p.gold += gold; return `You took ${gold} gold.`; }
+      return up ? 'Your bag was full, so the item was lost.' : 'You took nothing.';
     },
     takeGold() {
       const s = this.s;
@@ -334,7 +345,13 @@ window.G = window.G || {};
     useBag(i) {
       const s = this.s, p = s.player, it = p.bag[i];
       if (!it || s.phase === 'battle') return;
-      s.bagMsg = G.Dungeon.useItem(p, it);
+      if (it.kind === 'gear') {
+        // Equipping swaps: what you were wearing goes into the bag in its place
+        p.bag.splice(i, 1);
+        const old = G.Hero.equip(p, it);
+        if (old) p.bag.splice(i, 0, old);
+        s.bagMsg = old ? `Equipped ${it.name}. ${old.name} went into your bag.` : `Equipped ${it.name}.`;
+      } else s.bagMsg = G.Dungeon.useItem(p, it);
       if (s.phase === 'doors') for (const d of s.doors) if (d.monster) d.danger = G.Dungeon.danger(p, d, s.room);
       render();
     },
@@ -342,7 +359,8 @@ window.G = window.G || {};
       const s = this.s, p = s.player, it = p.bag[i];
       if (!it || s.phase === 'battle') return;
       p.bag.splice(i, 1);
-      s.bagMsg = `Discarded ${it.name}.`;
+      if (it.kind === 'gear') { const g = CFG().salvage[it.rarity]; p.gold += g; s.bagMsg = `Scrapped ${it.name} for ${g} gold.`; }
+      else s.bagMsg = `Discarded ${it.name}.`;
       render();
     },
 
@@ -428,9 +446,10 @@ window.G = window.G || {};
           this.afterHeartLoss(before);
           const won = res.winner === 'a';
           const X = CFG().xp;
-          if (pair.ghost) s.notice = won ? `You beat the ${oppName}. +${X.duelWin} XP.` : `The ${oppName} got the better of you. No heart lost. +${X.duelLoss} XP.`;
+          if (pair.ghost) s.notice = res.draw ? `Time ran out against the ${oppName}. No heart lost.` : won ? `You beat the ${oppName}. +${X.duelWin} XP.` : `The ${oppName} got the better of you. No heart lost. +${X.duelLoss} XP.`;
+          else if (res.draw) s.notice = `A full minute and nobody fell: you and ${oppName} both lose a heart. You come back at full health (${s.player.hearts} left).`;
           else s.notice = won ? `You beat ${oppName}! +${CFG().duel.winGold} gold, +${X.duelWin} XP. Your health goes back to what it was.`
-            : `${oppName} won the duel. You lose a heart (${s.player.hearts} left). +${X.duelLoss} XP. Your health goes back to what it was.`;
+            : `${oppName} won the duel. You lose a heart (${s.player.hearts} left) and come back at full health. +${X.duelLoss} XP.`;
           s.duel.mine = null;
           s.roundKind = 'after';
           this.nextStep();
@@ -447,7 +466,8 @@ window.G = window.G || {};
       const alive = this.all().filter(h => h.alive);
       // weakest first: lowest health percentage picks first
       const pct = h => h.hp / G.Hero.maxHp(h);
-      const order = alive.slice().sort((a, b) => pct(a) - pct(b) || G.Hero.power(a) - G.Hero.power(b));
+      // fewer hearts pick first, then lower health percentage
+      const order = alive.slice().sort((a, b) => a.hearts - b.hearts || pct(a) - pct(b) || G.Hero.power(a) - G.Hero.power(b));
       s.roundKind = 'shop';
       s.phase = 'shop';
       s.shop = {
@@ -506,9 +526,11 @@ window.G = window.G || {};
       if (!h || !h.isPlayer) return;
       const it = sh.table.find(x => x.id === id);
       if (!it) return;
-      if (it.kind === 'consumable' && G.Hero.bagFull(s.player)) return;
-      this.shopPick(h, it);
-      sh.msg = `You took ${it.name}.`;
+      if (G.Hero.bagFull(s.player)) return;
+      sh.table = sh.table.filter(x => x !== it);
+      s.player.bag.push(it);
+      sh.picks[h.id] = it.name; sh.turn++; sh.turnStart = Date.now();
+      sh.msg = `${it.name} went into your bag.`;
       this.shopAfterPick(true);
     },
     playerShopPass() {
@@ -547,12 +569,12 @@ window.G = window.G || {};
         const it = m.stock.find(x => x.id === id);
         const price = it && G.Dungeon.merchantPrice(p, m, it);
         if (!it || m.bought.includes(id) || p.gold < price) return;
+        if (G.Hero.bagFull(p)) { m.msg = 'Your bag is full. Equip or discard something first.'; render(); return; }
         p.gold -= price;
         if (price === 0) m.freeUsed = true;
-        const old = G.Hero.equip(p, it);
-        if (old) p.gold += CFG().salvage[old.rarity];
+        p.bag.push(it);
         m.bought.push(id);
-        m.msg = price === 0 ? `Haggled ${it.name} for free and equipped it.` : `Bought and equipped ${it.name}.`;
+        m.msg = price === 0 ? `Haggled ${it.name} for free. It's in your bag.` : `Bought ${it.name}. It's in your bag.`;
       } else if (kind === 'cons') {
         const c = G.CONSUMABLES[id];
         const price = id === 'potion' ? S.potionCost : c.price;
@@ -619,10 +641,11 @@ window.G = window.G || {};
           // Resolve from the match's own orientation
           const fixed = flip ? { ...res, winner: res.winner === 'a' ? 'b' : 'a', aHp: res.bHp, bHp: res.aHp,
             bloodrage: res.bloodrage ? { a: res.bloodrage.b, b: res.bloodrage.a } : null } : res;
+          const won = res.winner === 'a' && !res.draw;
           G.Tournament.resolve(T, m, fixed);
           const me = T.entrants.find(e => e.hero.isPlayer);
-          const won = res.winner === 'a';
-          if (m.ghost) s.notice = won ? `You beat the ${oppName}. You keep ${me.hp} health.` : `The ${oppName} beat you. No heart lost; you go on with ${me.hp} health.`;
+          if (fixed.draw && !m.ghost) s.notice = m.suddenDeath ? `A full minute and nobody fell. Sudden death: you both keep your last heart and go again.` : `A full minute and nobody fell: you and ${oppName} both lose a heart and come back at full health.`;
+          else if (m.ghost) s.notice = won ? `You beat the ${oppName}. You keep ${me.hp} health.` : `The ${oppName} beat you. No heart lost; you go on with ${me.hp} health.`;
           else if (won) s.notice = `You beat ${oppName}. You go into the next round with ${me.hp} health.${m.rageHeal ? ` Bloodrage: +${m.rageHeal}.` : ''}`;
           else s.notice = me.out ? `${oppName} took your last heart.` : `${oppName} won. You lose a heart (${s.player.hearts} left) and come back at full health.`;
           s.phase = 'tournament';
@@ -642,6 +665,7 @@ window.G = window.G || {};
         for (let room = s.room; room <= CFG().rooms; room++) {
           if (s.rivalsPlayedRoom !== room) for (const r of s.rivals) if (r.alive) G.AI.aiRoom(r, room);
           if (CFG().duelRooms.includes(room) && !(room === s.room && s.duelDone)) G.Duel.runAll(s.rivals, room, s.rng);
+          if (room === CFG().gemRoom) for (const r of s.rivals) if (r.alive && !r.gem) G.AI.autoGem(r, G.Dungeon.gemOptions(r, r.rng));
         }
         const field = s.rivals.filter(h => h.alive);
         s.tour = field.length ? G.Tournament.create(field, s.rng.fork()) : null;
