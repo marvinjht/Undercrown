@@ -276,12 +276,14 @@ window.G = window.G || {};
       s.phase = 'shop';
       s.shop = {
         table: G.Loot.shopTable(s.room, alive.length + CFG().shop.extraTableItems, s.rng),
-        order: order.map(h => h.id), turn: 0, turnStart: now(), picks: {}, lastCall: false, ready: false,
+        order: order.map(h => h.id), turn: 0, reviewUntil: now() + CFG().shop.reviewSeconds * 1000, reviewDone: false,
+        turnStart: now() + CFG().shop.reviewSeconds * 1000, picks: {}, lastCall: false, ready: false,
+        totalSeconds: CFG().shop.reviewSeconds + CFG().shop.turnSeconds * order.length,
         stock: G.Loot.offer(s.player, s.room, 'shop', s.rng, CFG().shop.gearCount),
         buffs: this.pickBuffs(), potions: 0, bought: [], msg: null,
       };
       for (const r of s.rivals) if (r.alive) r.lastText = G.AI.aiMerchant(r, s.room, r.rng);
-      this.startTimer(CFG().shop.seconds);
+      this.startTimer(s.shop.totalSeconds);
       render();
     },
     pickBuffs() {
@@ -315,6 +317,8 @@ window.G = window.G || {};
     shopTick() {
       const s = this.s, sh = s.shop;
       if (!sh || sh.turn >= sh.order.length) return;
+      if (now() < sh.reviewUntil) return;
+      if (!sh.reviewDone) { sh.reviewDone = true; sh.turnStart = now(); G.UI.refreshShopPicks(); return; }
       const h = this.shopTurnHero();
       const waited = (now() - sh.turnStart) / 1000;
       if (!h.isPlayer && waited >= CFG().shop.aiPickDelay) { this.autoShopPick(h); this.shopAfterPick(); }
@@ -326,7 +330,10 @@ window.G = window.G || {};
     },
     shopAfterPick(full) {
       const sh = this.s.shop;
-      if (sh.turn >= sh.order.length && sh.ready) { this.endShop(); return; }
+      if (sh.turn >= sh.order.length) {
+        if (sh.ready) { this.endShop(); return; }
+        if (!sh.lastCall) { sh.lastCall = true; this.startTimer(CFG().shop.lastCall); render(); return; }
+      }
       if (full) render(); else G.UI.refreshShopPicks();
     },
     playerShopPick(id) {
@@ -347,9 +354,11 @@ window.G = window.G || {};
     },
     shopTimeUp() {
       const s = this.s, sh = s.shop;
+      if (sh.lastCall) { this.endShop(); return; }
       while (sh.turn < sh.order.length) this.autoShopPick(this.shopTurnHero());
-      if (!sh.lastCall) { sh.lastCall = true; this.startTimer(CFG().shop.lastCall); render(); return; }
-      this.endShop();
+      sh.lastCall = true;
+      this.startTimer(CFG().shop.lastCall);
+      render();
     },
     endShop() {
       const s = this.s;

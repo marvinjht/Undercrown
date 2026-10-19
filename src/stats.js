@@ -90,7 +90,7 @@ window.G = window.G || {};
     // Heart gems
     if (hero.gem === 'pure') { s.maxHp += 20; s.dmg += 2; }
     if (hero.gem === 'gaia') s.shield += 50;
-    if (hero.gem === 'phoenix') s.maxHp = Math.max(2, even(s.maxHp / 2));
+    if (hero.gem === 'phoenix') s.maxHp = 50;
     if (hero.gem === 'stone') s.maxHp = 30;
 
     // Bag buffs (next fight only)
@@ -162,7 +162,8 @@ window.G = window.G || {};
       hero.gem = id;
       const max = compute(hero).maxHp;
       hero.hp = Math.max(1, Math.min(max, hero.hp));
-      if (id === 'stone') hero.hp = Math.min(30, Math.max(1, Math.round(hero.hp * 30 / Math.max(1, compute({ ...hero, gem: null }).maxHp))));
+      const cap = id === 'stone' ? 30 : id === 'phoenix' ? 50 : 0;
+      if (cap) hero.hp = Math.min(cap, Math.max(1, Math.round(hero.hp * cap / Math.max(1, compute({ ...hero, gem: null }).maxHp))));
     },
     // All healing outside fights goes through here so heart gems apply
     heal(hero, amount) {

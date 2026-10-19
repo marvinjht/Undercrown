@@ -242,7 +242,7 @@ window.G = window.G || {};
   function timerPct() {
     const st = G.Game.s, t = G.Game.timeLeft();
     if (!st || !st.roundEnds || t == null) return 0;
-    const total = st.roundKind === 'tour' ? CFG().tourBreakSeconds : st.roundKind === 'shop' ? (st.shop && st.shop.lastCall ? CFG().shop.lastCall : CFG().shop.seconds) : CFG().roundSeconds;
+    const total = st.roundKind === 'tour' ? CFG().tourBreakSeconds : st.roundKind === 'shop' ? (st.shop && st.shop.lastCall ? CFG().shop.lastCall : st.shop.totalSeconds) : CFG().roundSeconds;
     return Math.max(0, Math.min(100, (t / total) * 100));
   }
 
@@ -309,17 +309,22 @@ window.G = window.G || {};
     const myTurn = turnHero && turnHero.isPlayer;
     const picked = !!sh.picks[p.id];
     const full = G.Hero.bagFull(p);
+    const reviewing = Date.now() < sh.reviewUntil;
     const order = sh.order.map((id, i) => {
       const h = byId(id);
-      const state = sh.picks[id] ? `took ${esc(sh.picks[id])}` : i === sh.turn ? (h.isPlayer ? `<b id="turn-num">${turnLeft()}s</b> to pick` : 'picking…') : 'waiting';
-      return `<li class="${i === sh.turn ? 'now' : ''} ${h.isPlayer ? 'me' : ''}"><span>${i + 1}</span><b>${esc(h.name)}</b><small>${h.hp} health</small><em>${state}</em></li>`;
+      const now = i === sh.turn && !reviewing;
+      const state = sh.picks[id] ? `took ${esc(sh.picks[id])}` : now ? `<b id="turn-num">${turnLeft()}s</b> ${h.isPlayer ? 'to pick' : 'picking\u2026'}` : 'waiting';
+      const bar = now ? `<i class="turnbar ${h.isPlayer ? 'mine' : ''}"><span id="turn-bar" style="width:${turnPct()}%"></span></i>` : '';
+      return `<li class="${now ? 'now' : ''} ${h.isPlayer ? 'me' : ''}"><span>${i + 1}</span><b>${esc(h.name)}</b><small>${h.hp} health</small><em>${state}</em>${bar}</li>`;
     }).join('');
-    const table = sh.table.map(it => itemCard(it, p, myTurn
+    const myNow = myTurn && !reviewing;
+    const table = sh.table.map(it => itemCard(it, p, myNow
       ? `<button data-act="shop-pick" data-id="${it.id}" ${it.kind === 'consumable' && full ? 'disabled' : ''}>${it.kind === 'consumable' && full ? 'Bag full' : 'Take this'}</button>`
-      : `<button disabled>${picked ? 'Picked' : 'Wait for your turn'}</button>`)).join('');
-    return `<h3 class="sub">Pick order</h3>
+      : `<button disabled>${picked ? 'Picked' : reviewing ? 'Picks start soon' : 'Wait for your turn'}</button>`)).join('');
+    const review = reviewing ? `<div class="review"><span>Look over the table. Picks start in <b id="review-num">${reviewLeft()}s</b></span><i class="turnbar"><span id="review-bar" style="width:${reviewPct()}%"></span></i></div>` : '';
+    return `${review}<h3 class="sub">Pick order</h3>
       <ol class="pick-order">${order}</ol>
-      <h3 class="sub">Free table ${myTurn ? '<span class="chip">Your turn</span>' : ''}</h3>
+      <h3 class="sub">Free table ${myNow ? '<span class="chip">Your turn</span>' : ''}</h3>
       <div class="cards">${table || '<p class="hint">The table is empty.</p>'}</div>`;
   }
 
@@ -348,7 +353,7 @@ window.G = window.G || {};
     const allPicked = sh.turn >= sh.order.length;
     return `<section class="screen shop">
       <h2>Shared shop</h2>
-      <p class="lede">Free picks go weakest first: lowest health picks first. Each turn lasts ${S.turnSeconds} seconds. The merchant is open the whole round${sh.lastCall ? ' — last call!' : '.'}</p>
+      <p class="lede">Free picks go weakest first: lowest health picks first. Everyone gets ${S.reviewSeconds} seconds to look, then ${S.turnSeconds} seconds per turn. The merchant is open the whole round${sh.lastCall ? ' — last call!' : '.'}</p>
       ${sh.msg ? `<p class="notice">${esc(sh.msg)}</p>` : ''}
       <div id="shop-picks">${shopPicks(st)}</div>
       <h3 class="sub">Merchant</h3>
@@ -365,11 +370,16 @@ window.G = window.G || {};
         <button id="shop-ready" data-act="shop-ready" ${sh.ready ? 'disabled' : ''}>${sh.ready ? (allPicked ? 'Ready' : 'Ready — waiting for picks') : 'I’m ready'}</button>
       </div></section>`;
   }
-  function turnLeft() {
+  function turnRaw() {
     const sh = G.Game.s && G.Game.s.shop;
     if (!sh) return 0;
-    return Math.max(0, Math.ceil(CFG().shop.turnSeconds - (Date.now() - sh.turnStart) / 1000));
+    return Math.max(0, CFG().shop.turnSeconds - Math.max(0, Date.now() - sh.turnStart) / 1000);
   }
+  const turnLeft = () => Math.ceil(turnRaw());
+  const turnPct = () => (turnRaw() / CFG().shop.turnSeconds) * 100;
+  function reviewRaw() { const sh = G.Game.s && G.Game.s.shop; return sh ? Math.max(0, (sh.reviewUntil - Date.now()) / 1000) : 0; }
+  const reviewLeft = () => Math.ceil(reviewRaw());
+  const reviewPct = () => (reviewRaw() / CFG().shop.reviewSeconds) * 100;
 
   function mysteryScreen(st) {
     const m = st.mystery, p = st.player;
@@ -513,6 +523,9 @@ window.G = window.G || {};
     const b = document.getElementById('clock-bar'); if (b) b.style.width = timerPct() + '%';
     const w = document.getElementById('wait-num'); if (w) w.textContent = Math.ceil(left || 0) + 's';
     const tn = document.getElementById('turn-num'); if (tn) tn.textContent = turnLeft() + 's';
+    const tb = document.getElementById('turn-bar'); if (tb) { tb.style.width = turnPct() + '%'; tb.parentNode.classList.toggle('low', turnRaw() <= 5); }
+    const rn = document.getElementById('review-num'); if (rn) rn.textContent = reviewLeft() + 's';
+    const rb = document.getElementById('review-bar'); if (rb) rb.style.width = reviewPct() + '%';
     const c = document.getElementById('clock');
     if (c) c.classList.toggle('low', !!(G.Game.s && G.Game.s.roundEnds) && left <= 5);
   }

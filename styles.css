@@ -324,3 +324,13 @@ table.tour { width: 100%; border-collapse: collapse; font-size: 15px; font-varia
 .item-name .tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
 .item-name .tags .set-chip { margin-top: 0; }
 .item-name b { overflow-wrap: anywhere; }
+
+.pick-order li { position: relative; }
+.turnbar { grid-column: 1 / -1; display: block; height: 6px; margin-top: 4px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+.turnbar span { display: block; height: 100%; background: var(--muted); transition: width .2s linear; }
+.turnbar.mine span { background: var(--ember); }
+.turnbar.low span { background: var(--blood); }
+.pick-order li.now.me { outline: 2px solid var(--ember); background: #3a2818; }
+.review { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--ember-dim); border-radius: 6px; background: var(--bg-3); }
+.review b { font-family: var(--f-mono); }
+.review .turnbar span { background: var(--ember); }

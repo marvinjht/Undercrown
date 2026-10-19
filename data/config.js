@@ -23,7 +23,10 @@ G.CONFIG = {
   poison: { venomStacks: 3, purifyHeal: 10 },
 
   shop: {
-    seconds: 60, lastCall: 10, turnSeconds: 10, aiPickDelay: 1.4,
+    reviewSeconds: 10,  // everyone looks over the table before picks start
+    turnSeconds: 20,    // each player's turn to pick
+    lastCall: 10,       // after the last pick, time left for merchant purchases
+    aiPickDelay: 1.4,
     extraTableItems: 2,                   // free table = players + this
     potionCost: 30, potionsPerShop: 1,
     gearCount: 4, restockCost: 10,

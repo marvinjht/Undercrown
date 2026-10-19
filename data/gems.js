@@ -5,7 +5,7 @@ G.GEMS = {
   phoenix: {
     name: 'Phoenix Heart', color: '#ff8a4c',
     up: 'Once per run, when you would die (dungeon or tournament), revive at full health.',
-    cost: 'Max Health halved for the rest of the run.',
+    cost: 'Max Health becomes 50 for the rest of the run (gear Health ignored).',
   },
   stone: {
     name: 'Heart of Stone', color: '#a8a39a',
