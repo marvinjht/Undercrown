@@ -659,7 +659,7 @@ window.G = window.G || {};
 
   function titleScreen() {
     return `<div class="title-screen">
-      <header class="hero-head"><div class="eyebrow">Prototype v4 · single player</div><h1>Thirty Doors</h1>
+      <header class="hero-head"><div class="eyebrow">Prototype v5 · single player</div><h1>Thirty Doors</h1>
         <p>Six warriors. Thirty rooms each. Three hearts. Health carries from room to room and healing is limited, so spend it wisely. Build an archetype, fight your rivals along the way, and be the last one standing.</p></header>
       <ul class="rules">
         <li><b>Hearts</b>Dying or losing a duel costs a heart. You come back at full health. Lose all three and you're out.</li>
