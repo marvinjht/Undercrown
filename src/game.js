@@ -1,11 +1,18 @@
-// Single-player run state and actions. Every round lasts CONFIG.roundSeconds for everyone;
-// when time runs out, whatever is left is decided automatically (like a server would).
+// Single-player run state and actions. Every round is timed; it ends as soon as every player is
+// ready (the AI rivals are always ready, so in single player that's as soon as you finish).
+// When the clock hits zero, whatever is left is decided automatically, like a server would.
 window.G = window.G || {};
 
 (function (G) {
   const CFG = () => G.CONFIG;
   const render = () => G.UI.render();
   const now = () => Date.now();
+
+  // What a hero looks like in the arena (class silhouette + hybrid trim)
+  function visualFor(hero) {
+    const st = G.Stats.sets(hero);
+    return { look: st.main, trim: st.trim, weapon: hero.gear.weapon ? 'weapon_' + hero.gear.weapon.weaponType : null, tint: hero.tint };
+  }
 
   const Game = {
     s: null,
@@ -15,57 +22,58 @@ window.G = window.G || {};
       const rng = new G.RNG(seed);
       const player = G.Hero.create({ name: 'You', isPlayer: true, tint: G.PLAYER_TINT }, rng.fork());
       const rivals = G.RIVALS.map(r => G.Hero.create({ name: r.name, tint: r.tint }, rng.fork()));
-      this.s = { seed, rng, player, rivals, room: 1, phase: 'doors', roundKind: 'room', roundEnds: 0, notice: null, lastText: '' };
+      this.s = { seed, rng, player, rivals, room: 1, phase: 'doors', roundKind: 'room', roundEnds: 0, notice: null, bagMsg: null, log: [] };
       this.startRoom();
     },
-
     toTitle() { this.s = null; render(); },
+    all() { return [this.s.player, ...this.s.rivals]; },
 
-    // ---------- Round timing ----------
+    // ---------- Timing ----------
     startTimer(seconds) { this.s.roundEnds = now() + seconds * 1000; },
     timeLeft() { const s = this.s; return s && s.roundEnds ? Math.max(0, (s.roundEnds - now()) / 1000) : null; },
     tick() {
       const s = this.s;
-      if (!s || !s.roundEnds || now() < s.roundEnds) return;
+      if (!s) return;
+      if (s.phase === 'shop') this.shopTick();
+      if (!s.roundEnds || now() < s.roundEnds) return;
       s.roundEnds = 0;
       if (s.roundKind === 'tour') this.tourStep();
+      else if (s.roundKind === 'shop') this.shopTimeUp();
       else this.timeUp();
     },
 
+    // ---------- Rooms ----------
     startRoom() {
-      const s = this.s;
+      const s = this.s, p = s.player;
       s.roundKind = 'room';
-      s.doors = G.Dungeon.makeDoors(s.player, s.room, s.rng);
-      for (const d of s.doors) if (d.monster) d.danger = G.Dungeon.danger(s.player, d, s.room);
+      const dmg = G.Dungeon.tickPoison(p, s.room);
+      if (dmg) s.notice = [s.notice, `Poison deals ${dmg} damage.`].filter(Boolean).join(' ');
+      if (!p.alive) { s.phase = 'dead'; s.notice = `Poison finished you off in room ${s.room}.`; s.roundEnds = 0; render(); return; }
+      if (CFG().shopRooms.includes(s.room)) { this.startShop(); return; }
+      s.doors = G.Dungeon.makeDoors(p, s.room, s.rng);
+      for (const d of s.doors) if (d.monster) d.danger = G.Dungeon.danger(p, d, s.room);
       s.phase = 'doors';
       this.startTimer(CFG().roundSeconds);
       render();
     },
 
-    // Player finished the room early: wait for the clock like everyone else
+    // Player finished: in single player everyone is ready, so the round ends now
     completeRoom(text) {
-      const s = this.s;
-      if (text) s.lastText = text;
-      s.phase = 'wait';
-      render();
+      if (text) this.s.notice = text;
+      this.endRound();
     },
 
-    // Time ran out: decide whatever the player hasn't
     timeUp() {
       const s = this.s, p = s.player;
       let auto = null;
       switch (s.phase) {
         case 'doors': {
           const d = G.AI.chooseDoor(p, s.doors, s.room, p.rng);
+          G.AI.autoBag(p, d);
           auto = `Time ran out, so the dungeon chose for you: ${G.Dungeon.doorInfo(d).title}. You ${G.AI.resolveDoor(p, d, s.room, s.rng)}.`;
           break;
         }
-        case 'armory': {
-          const it = s.rng.pick(s.armory);
-          G.Hero.equip(p, it);
-          auto = `Time ran out. You grabbed the ${it.name}.`;
-          break;
-        }
+        case 'armory': { const it = s.rng.pick(s.armory); G.Hero.equip(p, it); auto = `Time ran out. You grabbed the ${it.name}.`; break; }
         case 'battle': {
           G.Arena.stop();
           this.battleDone(true);
@@ -76,60 +84,78 @@ window.G = window.G || {};
         case 'mystery':
           if (s.mystery.id === 'ambush') auto = 'Time ran out. You ' + G.AI.resolveDoor(p, { type: 'fight', monster: G.Dungeon.monsterFor(s.room, 'fight', s.rng) }, s.room, s.rng);
           break;
-        case 'spec': {
-          const id = G.AI.autoSpec(p, s.specOptions);
-          auto = `Time ran out. You became a ${G.SPECS[id].name}.`;
-          break;
-        }
+        case 'spec': { const id = G.AI.autoSpec(p, s.specOptions); auto = `Time ran out. You became a ${G.SPECS[id].name}.`; break; }
+        case 'gem': { const id = G.AI.autoGem(p, s.gemOptions); auto = `Time ran out. You took the ${G.GEMS[id].name}.`; break; }
       }
       if (!p.alive) { s.phase = 'dead'; s.roundEnds = 0; s.notice = auto; render(); return; }
       s.notice = auto;
       this.endRound();
     },
 
+    // Everyone else dies? Vulture's Heart heals to full.
+    vultureCheck(before) {
+      const s = this.s;
+      const died = this.all().filter(h => before.includes(h.id) && !h.alive).length;
+      if (!died) return;
+      for (const h of this.all()) {
+        if (h.alive && h.gem === 'vulture') {
+          h.hp = G.Hero.maxHp(h);
+          if (h.isPlayer) s.notice = [s.notice, 'A rival fell. Vulture’s Heart heals you to full.'].filter(Boolean).join(' ');
+        }
+      }
+    },
+
     endRound() {
       const s = this.s;
+      s.bagMsg = null;
       if (s.roundKind === 'room') {
+        const before = this.all().filter(h => h.alive).map(h => h.id);
         for (const r of s.rivals) if (r.alive) G.AI.aiRoom(r, s.room);
+        this.vultureCheck(before);
         if (s.room === CFG().specRoom && !s.player.spec) {
-          s.roundKind = 'spec';
-          s.specOptions = G.Dungeon.specOptions(s.player, s.rng);
-          s.phase = 'spec';
-          this.startTimer(CFG().roundSeconds);
-          render();
-          return;
+          s.roundKind = 'spec'; s.specOptions = G.Dungeon.specOptions(s.player, s.rng); s.phase = 'spec';
+          this.startTimer(CFG().roundSeconds); render(); return;
         }
+        if (s.room === CFG().gemRoom && !s.player.gem) {
+          s.roundKind = 'gem'; s.gemOptions = G.Dungeon.gemOptions(s.player, s.rng); s.phase = 'gem';
+          this.startTimer(CFG().roundSeconds); render(); return;
+        }
+      }
+      if (s.roundKind === 'spec' && s.room === CFG().gemRoom && !s.player.gem) {
+        s.roundKind = 'gem'; s.gemOptions = G.Dungeon.gemOptions(s.player, s.rng); s.phase = 'gem';
+        this.startTimer(CFG().roundSeconds); render(); return;
       }
       s.room++;
       if (s.room > CFG().rooms) { this.startTournament(); return; }
       this.startRoom();
     },
 
-    // ---------- Room actions ----------
     chooseDoor(i) {
       const s = this.s, d = s.doors[i], p = s.player;
       if (s.phase !== 'doors') return;
-      s.door = d; s.notice = null;
+      s.notice = null;
       switch (d.type) {
-        case 'armory':
-          s.armory = G.Loot.armory(s.rng);
-          s.phase = 'armory'; break;
-        case 'fight': case 'elite': case 'boss':
-          this.startBattle(d.monster, d.type, d.type); return;
+        case 'armory': s.armory = G.Loot.armory(s.rng); s.phase = 'armory'; break;
+        case 'fight': case 'elite': case 'boss': this.startBattle(d.monster, d.type, d.type); return;
         case 'treasure':
           s.offer = { items: G.Loot.offer(p, s.room, 'treasure', s.rng), gold: CFG().gold.skipItemBase + 2 * Math.round(s.room / 2), title: 'Treasure', text: 'A chest, untouched. Take one item.' };
           s.phase = 'reward'; break;
-        case 'rest': {
-          const healed = G.Hero.heal(p, CFG().restHeal);
-          this.completeRoom(healed > 0 ? `You rested by the fire and recovered ${healed} health.` : 'You rested by the fire. You were already at full health.');
+        case 'venom':
+          p.poison += CFG().poison.venomStacks;
+          s.offer = { items: G.Loot.offer(p, s.room, 'shrine', s.rng), gold: 0, title: 'Venom Cache', text: `The lid bites. You gain ${CFG().poison.venomStacks} poison (${p.poison} total). Take one item.` };
+          s.phase = 'reward'; break;
+        case 'purify': {
+          const n = p.poison; p.poison = 0;
+          const h = G.Hero.heal(p, CFG().poison.purifyHeal);
+          this.completeRoom(n ? `The spring washes away ${n} poison${h ? ` and heals ${h}` : ''}.` : `Clean water${h ? `: +${h} health` : ''}. You weren't poisoned.`);
           return;
         }
-        case 'shop':
-          s.shop = { items: G.Loot.offer(p, s.room, 'shop', s.rng, 2), bought: [], potions: 0, msg: null };
-          s.phase = 'shop'; break;
-        case 'mystery':
-          s.mystery = G.Dungeon.rollMystery(s.rng);
-          s.phase = 'mystery'; break;
+        case 'rest': {
+          const h = G.Hero.heal(p, CFG().restHeal);
+          this.completeRoom(h > 0 ? `You rested by the fire and recovered ${h} health.` : 'You rested by the fire, but nothing came back.');
+          return;
+        }
+        case 'mystery': s.mystery = G.Dungeon.rollMystery(s.rng); s.phase = 'mystery'; break;
       }
       render();
     },
@@ -137,19 +163,16 @@ window.G = window.G || {};
     pickWeapon(id) {
       const s = this.s, it = s.armory.find(x => x.id === id);
       G.Hero.equip(s.player, it);
-      this.completeRoom(`You took the ${it.name}. The real run starts next room.`);
+      this.completeRoom(`You took the ${it.name}. The real run starts now.`);
     },
 
     startBattle(monster, kind, lootKind) {
-      const s = this.s;
-      const ms = G.Dungeon.monsterStats(monster, s.room, kind);
-      const ps = G.Stats.compute(s.player);
-      const res = G.simulateFight(ps, ms, { seed: s.rng.int(0, 1e9), aHp: s.player.hp });
+      const s = this.s, p = s.player;
+      const foes = G.Dungeon.buildEnemies(monster, s.room, kind);
+      const res = G.simulateFight(G.Stats.compute(p, { buffs: true }), foes, G.Dungeon.fightOpts(p, s.rng.int(0, 1e9)));
       s.battle = {
         kind, lootKind, monster, res, title: G.Dungeon.monsterName(monster, kind),
-        left: { name: 'You', texture: 'hero', weapon: 'weapon_' + ps.weaponType, tint: G.PLAYER_TINT, hp: s.player.hp, maxHp: ps.maxHp, shield: ps.shield },
-        right: { name: G.Dungeon.monsterName(monster, kind), texture: 'monster_' + monster.id, tint: kind === 'elite' ? 0xffb8a8 : null,
-          hp: ms.maxHp, maxHp: ms.maxHp, shield: 0, scale: kind === 'elite' ? 1.15 : 1 },
+        visual: { a: { ...visualFor(p), tint: G.PLAYER_TINT } },
         done: false, onDone: () => this.battleDone(false),
       };
       s.phase = 'battle';
@@ -161,28 +184,34 @@ window.G = window.G || {};
       if (!b || b.done || b.tour) return;
       b.done = true;
       const out = G.Dungeon.applyFight(p, b.res, s.room);
+      const notes = [];
+      if (b.res.revived.a) notes.push('Phoenix Heart burned: you rose again at full health.');
+      if (b.res.goldStolen) notes.push(`A thief escaped with ${b.res.goldStolen} gold.`);
       if (out === 'dead') { s.phase = 'dead'; s.roundEnds = 0; if (!silent) render(); return; }
-      if (out === 'timeout') {
-        s.phase = 'wait';
-        s.lastText = 'Neither of you could finish it. The monster slinks away. No loot this time.';
-        if (!silent) render();
-        return;
-      }
+      if (out === 'timeout') { this.completeRoom([...notes, 'Neither side could finish it. No loot this time.'].join(' ')); return; }
       const gold = G.Dungeon.goldFor(b.kind === 'fight' ? 'fight' : b.kind, p, s.rng);
       p.gold += gold;
       s.offer = {
         items: G.Loot.offer(p, s.room, b.lootKind, s.rng), gold: CFG().gold.skipItemBase + 2 * Math.round(s.room / 2),
-        title: 'Victory', text: `${b.title} is down. You found ${gold} gold. Choose one item.`,
+        title: 'Victory', text: [...notes, `${b.title} is down. You found ${gold} gold. Choose one.`].join(' '),
       };
       s.phase = 'reward';
       if (!silent) render();
     },
 
-    takeItem(id) {
-      const s = this.s;
+    // mode: 'equip' | 'bag'
+    takeItem(id, mode) {
+      const s = this.s, p = s.player;
       const it = s.offer.items.find(x => x.id === id);
-      const old = G.Hero.equip(s.player, it);
-      if (old) s.player.gold += CFG().salvage[old.rarity];
+      if (!it) return;
+      if (it.kind === 'consumable' || mode === 'bag') {
+        if (G.Hero.bagFull(p)) return;
+        p.bag.push(it);
+        this.completeRoom(`Put ${it.name} in your bag.`);
+        return;
+      }
+      const old = G.Hero.equip(p, it);
+      if (old) p.gold += CFG().salvage[old.rarity];
       this.completeRoom(old ? `Equipped ${it.name}. Scrapped ${old.name} for ${CFG().salvage[old.rarity]} gold.` : `Equipped ${it.name}.`);
     },
     takeGold() {
@@ -191,38 +220,23 @@ window.G = window.G || {};
       this.completeRoom(s.offer.gold ? `Took ${s.offer.gold} gold.` : 'You left with nothing.');
     },
 
-    // ---------- Shop ----------
-    buyPotion() {
-      const s = this.s, S = CFG().shop;
-      if (s.player.gold < S.potionCost || s.shop.potions >= S.potionsPerVisit) return;
-      s.player.gold -= S.potionCost;
-      s.shop.potions++;
-      s.shop.msg = `Drank a potion: +${G.Hero.heal(s.player, S.potionHeal)} health.`;
+    // ---------- Bag ----------
+    useBag(i) {
+      const s = this.s, p = s.player, it = p.bag[i];
+      if (!it || s.phase === 'battle') return;
+      s.bagMsg = G.Dungeon.useItem(p, it);
+      if (s.phase === 'doors') for (const d of s.doors) if (d.monster) d.danger = G.Dungeon.danger(p, d, s.room);
       render();
     },
-    bleedForGold() {
-      const s = this.s, S = CFG().shop;
-      if (s.player.hp <= S.bloodCost[1]) return;
-      const cost = 2 * s.rng.int(S.bloodCost[0] / 2, S.bloodCost[1] / 2);
-      s.player.hp -= cost;
-      s.player.gold += S.bloodGold;
-      s.shop.msg = `The merchant takes ${cost} health and hands you ${S.bloodGold} gold.`;
+    discardBag(i) {
+      const s = this.s, p = s.player, it = p.bag[i];
+      if (!it || s.phase === 'battle') return;
+      p.bag.splice(i, 1);
+      s.bagMsg = `Discarded ${it.name}.`;
       render();
     },
-    buyItem(id) {
-      const s = this.s, it = s.shop.items.find(x => x.id === id);
-      const price = G.Dungeon.itemPrice(it);
-      if (!it || s.player.gold < price || s.shop.bought.includes(id)) return;
-      s.player.gold -= price;
-      const old = G.Hero.equip(s.player, it);
-      if (old) s.player.gold += CFG().salvage[old.rarity];
-      s.shop.bought.push(id);
-      s.shop.msg = `Bought and equipped ${it.name}.`;
-      render();
-    },
-    leaveShop() { this.completeRoom(this.s.shop.msg || 'You left the merchant.'); },
 
-    // ---------- Mystery events ----------
+    // ---------- Mystery ----------
     mysteryAct(act) {
       const s = this.s, p = s.player;
       if (act === 'spring') this.completeRoom(`The water is cold and clean. +${G.Hero.heal(p, CFG().springHeal)} health.`);
@@ -242,22 +256,153 @@ window.G = window.G || {};
       const s = this.s;
       if (s.phase !== 'spec') return;
       G.Hero.setSpec(s.player, id);
-      s.lastText = `You are now a ${G.SPECS[id].name}.`;
-      s.phase = 'wait';
+      s.notice = `You are now a ${G.SPECS[id].name}.`;
+      this.endRound();
+    },
+    chooseGem(id) {
+      const s = this.s;
+      if (s.phase !== 'gem') return;
+      G.Hero.setGem(s.player, id);
+      s.notice = `The ${G.GEMS[id].name} settles into your chest.`;
+      this.endRound();
+    },
+
+    // ---------- Shared shop round ----------
+    startShop() {
+      const s = this.s;
+      const alive = this.all().filter(h => h.alive);
+      const order = alive.slice().sort((a, b) => a.hp - b.hp || G.Hero.power(a) - G.Hero.power(b));
+      s.roundKind = 'shop';
+      s.phase = 'shop';
+      s.shop = {
+        table: G.Loot.shopTable(s.room, alive.length + CFG().shop.extraTableItems, s.rng),
+        order: order.map(h => h.id), turn: 0, turnStart: now(), picks: {}, lastCall: false, ready: false,
+        stock: G.Loot.offer(s.player, s.room, 'shop', s.rng, CFG().shop.gearCount),
+        buffs: this.pickBuffs(), potions: 0, bought: [], msg: null,
+      };
+      for (const r of s.rivals) if (r.alive) r.lastText = G.AI.aiMerchant(r, s.room, r.rng);
+      this.startTimer(CFG().shop.seconds);
+      render();
+    },
+    pickBuffs() {
+      const ids = G.BUFF_IDS.slice(), out = [];
+      while (out.length < 3 && ids.length) out.push(ids.splice(this.s.rng.int(0, ids.length - 1), 1)[0]);
+      return out;
+    },
+    shopTurnHero() {
+      const sh = this.s.shop;
+      const id = sh.order[sh.turn];
+      return id ? this.all().find(h => h.id === id) : null;
+    },
+    shopPick(hero, item) {
+      const s = this.s, sh = s.shop;
+      sh.table = sh.table.filter(x => x !== item);
+      if (item) {
+        if (item.kind === 'consumable' && G.Hero.bagFull(hero)) hero.gold += 10;
+        else G.AI.take(hero, item);
+      }
+      sh.picks[hero.id] = item ? item.name : 'nothing';
+      if (!hero.isPlayer) hero.lastText = `picked ${item ? item.name : 'nothing'}`;
+      sh.turn++;
+      sh.turnStart = now();
+    },
+    autoShopPick(hero) {
+      const sh = this.s.shop;
+      const up = G.AI.bestUpgrade(hero, sh.table);
+      const pick = up || sh.table.find(it => it.kind === 'consumable' && !G.Hero.bagFull(hero)) || sh.table[0] || null;
+      this.shopPick(hero, pick);
+    },
+    shopTick() {
+      const s = this.s, sh = s.shop;
+      if (!sh || sh.turn >= sh.order.length) return;
+      const h = this.shopTurnHero();
+      const waited = (now() - sh.turnStart) / 1000;
+      if (!h.isPlayer && waited >= CFG().shop.aiPickDelay) { this.autoShopPick(h); this.shopAfterPick(); }
+      else if (h.isPlayer && waited >= CFG().shop.turnSeconds) {
+        this.autoShopPick(h);
+        sh.msg = 'Your turn ran out, so you took your best upgrade.';
+        this.shopAfterPick(true);
+      }
+    },
+    shopAfterPick(full) {
+      const sh = this.s.shop;
+      if (sh.turn >= sh.order.length && sh.ready) { this.endShop(); return; }
+      if (full) render(); else G.UI.refreshShopPicks();
+    },
+    playerShopPick(id) {
+      const s = this.s, sh = s.shop;
+      const h = this.shopTurnHero();
+      if (!h || !h.isPlayer) return;
+      const it = sh.table.find(x => x.id === id);
+      if (!it) return;
+      if (it.kind === 'consumable' && G.Hero.bagFull(s.player)) return;
+      this.shopPick(h, it);
+      sh.msg = `You took ${it.name}.`;
+      this.shopAfterPick(true);
+    },
+    shopReady() {
+      const sh = this.s.shop;
+      sh.ready = true;
+      if (sh.turn >= sh.order.length) this.endShop(); else render();
+    },
+    shopTimeUp() {
+      const s = this.s, sh = s.shop;
+      while (sh.turn < sh.order.length) this.autoShopPick(this.shopTurnHero());
+      if (!sh.lastCall) { sh.lastCall = true; this.startTimer(CFG().shop.lastCall); render(); return; }
+      this.endShop();
+    },
+    endShop() {
+      const s = this.s;
+      s.roundEnds = 0;
+      s.notice = 'The merchant packs up. On to the next room.';
+      s.room++;
+      this.startRoom();
+    },
+    shopBuy(kind, id) {
+      const s = this.s, sh = s.shop, p = s.player, S = CFG().shop;
+      if (kind === 'gear') {
+        const it = sh.stock.find(x => x.id === id);
+        const price = it && G.Dungeon.itemPrice(it);
+        if (!it || sh.bought.includes(id) || p.gold < price) return;
+        p.gold -= price;
+        const old = G.Hero.equip(p, it);
+        if (old) p.gold += CFG().salvage[old.rarity];
+        sh.bought.push(id);
+        sh.msg = `Bought and equipped ${it.name}.`;
+      } else if (kind === 'cons') {
+        const c = G.CONSUMABLES[id];
+        const price = id === 'potion' ? S.potionCost : c.price;
+        if (p.gold < price || G.Hero.bagFull(p)) return;
+        if (id === 'potion' && sh.potions >= S.potionsPerShop) return;
+        p.gold -= price;
+        if (id === 'potion') sh.potions++;
+        p.bag.push(G.Items.consumable(id));
+        sh.msg = `Bought ${c.name}. It's in your bag.`;
+      } else if (kind === 'restock') {
+        if (p.gold < S.restockCost) return;
+        p.gold -= S.restockCost;
+        sh.stock = G.Loot.offer(p, s.room, 'shop', s.rng, S.gearCount);
+        sh.bought = [];
+        sh.msg = 'Fresh stock on the table.';
+      } else if (kind === 'blood') {
+        if (p.hp <= S.bloodCost[1]) return;
+        const cost = 2 * s.rng.int(S.bloodCost[0] / 2, S.bloodCost[1] / 2);
+        p.hp -= cost; p.gold += S.bloodGold;
+        sh.msg = `The merchant takes ${cost} health and hands you ${S.bloodGold} gold.`;
+      }
       render();
     },
 
-    // ---------- Tournament (runs on its own clock) ----------
+    // ---------- Tournament ----------
     startTournament() {
       const s = this.s;
-      const field = [s.player, ...s.rivals].filter(h => h.alive);
+      const field = this.all().filter(h => h.alive);
       s.tour = G.Tournament.create(field, s.rng.fork());
       s.phase = 'tournament';
       s.roundKind = 'tour';
       if (!s.tour.champion) this.startTimer(CFG().tourBreakSeconds); else s.roundEnds = 0;
       render();
     },
-    // Resolve AI matches until the player's match is up or the round changes
     tourStep() {
       const s = this.s, T = s.tour;
       s.notice = null;
@@ -273,13 +418,9 @@ window.G = window.G || {};
     tourBattle(m) {
       const s = this.s, T = s.tour;
       const res = G.Tournament.simulate(T, m);
-      const def = e => {
-        const st = G.Stats.compute(e.hero);
-        return { name: e.hero.name, texture: 'hero', weapon: 'weapon_' + st.weaponType, tint: e.hero.tint, hp: e.entryHp, maxHp: e.maxHp, shield: st.shield };
-      };
       s.battle = {
         tour: true, match: m, res, title: `${G.Tournament.currentRound(T).name}: ${m.a.hero.name} vs ${m.b.hero.name}`,
-        left: def(m.a), right: def(m.b), done: false,
+        visual: { a: visualFor(m.a.hero), b0: visualFor(m.b.hero) }, done: false,
         onDone: () => {
           if (s.battle.done) return;
           s.battle.done = true;
@@ -293,10 +434,13 @@ window.G = window.G || {};
       render();
     },
 
-    // After the player dies: finish the run for everyone else
     seeEnding() {
       const s = this.s;
-      for (let room = s.room; room <= CFG().rooms; room++) for (const r of s.rivals) if (r.alive) G.AI.aiRoom(r, room);
+      for (let room = s.room; room <= CFG().rooms; room++) {
+        const before = this.all().filter(h => h.alive).map(h => h.id);
+        for (const r of s.rivals) if (r.alive) G.AI.aiRoom(r, room);
+        this.vultureCheck(before);
+      }
       const field = s.rivals.filter(h => h.alive);
       s.tour = field.length ? G.Tournament.create(field, s.rng.fork()) : null;
       if (s.tour) G.Tournament.runAll(s.tour);
@@ -306,4 +450,5 @@ window.G = window.G || {};
   };
 
   G.Game = Game;
+  G.visualFor = visualFor;
 })(window.G);

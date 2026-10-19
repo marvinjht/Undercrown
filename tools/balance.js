@@ -5,14 +5,14 @@ const root = path.join(__dirname, '..');
 const ctx = { console, Math };
 ctx.window = ctx;
 vm.createContext(ctx);
-for (const f of ['data/config.js', 'data/weapons.js', 'data/armor.js', 'data/specs.js', 'data/monsters.js',
+for (const f of ['data/config.js', 'data/weapons.js', 'data/armor.js', 'data/sets.js', 'data/gems.js', 'data/consumables.js', 'data/specs.js', 'data/monsters.js',
   'src/rng.js', 'src/stats.js', 'src/items.js', 'src/combat.js', 'src/dungeon.js', 'src/tournament.js']) {
   vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 }
 const G = ctx.G; G._fightLog = [];
 const RUNS = +process.argv[2] || 400;
 const rng = new G.RNG(12345);
-const deathsByRoom = {}, survivors = [], byWeapon = {}, bySpec = {}, fightTimes = [];
+const deathsByRoom = {}, survivors = [], byWeapon = {}, bySpec = {}, fightTimes = [], byGem = {}, setsSeen = {}, hybridsSeen = {};
 let finalRarity = { grey: 0, green: 0, gold: 0 };
 
 for (let i = 0; i < RUNS; i++) {
@@ -25,6 +25,8 @@ for (let i = 0; i < RUNS; i++) {
   const sp = h.spec || 'none';
   bySpec[sp] = bySpec[sp] || { n: 0, alive: 0, wins: 0 };
   bySpec[sp].n++;
+  const gm = h.gem || 'none'; byGem[gm] = byGem[gm] || { n: 0, alive: 0 }; byGem[gm].n++; if (h.alive) byGem[gm].alive++;
+  const st = G.Stats.sets(h); for (const a of st.active) setsSeen[a.cls + a.tier] = (setsSeen[a.cls + a.tier] || 0) + 1; if (st.hybrid) hybridsSeen[st.hybrid] = (hybridsSeen[st.hybrid] || 0) + 1;
   if (h.alive) {
     byWeapon[wt].alive++; bySpec[sp].alive++;
     survivors.push(h);
@@ -46,6 +48,8 @@ for (let i = 0; i + 6 <= survivors.length; i += 6) {
   G.Tournament.runAll(T);
   bySpec[T.champion.hero.spec || 'none'].wins++;
 }
+console.log('By gem:', Object.fromEntries(Object.entries(byGem).map(([k, v]) => [k, `${v.alive}/${v.n}`])));
+console.log('Sets active at end:', setsSeen, 'hybrids:', hybridsSeen);
 console.log('By spec (alive/n, tournament wins):', Object.fromEntries(Object.entries(bySpec).map(([k, v]) => [k, `${v.alive}/${v.n}, ${v.wins}w`])));
 
 // Fight length sample
@@ -53,7 +57,7 @@ const h = G.Hero.create({ name: 'T' }, new G.RNG(9));
 G.Hero.equip(h, G.Items.generate(new G.RNG(1), { slot: 'weapon', rarity: 'grey', room: 1, weaponType: 'longsword' }));
 for (const room of [2, 10, 20, 30]) {
   const mon = G.MONSTERS.filter(m => room >= m.minRoom && room <= m.maxRoom)[0];
-  const r = G.simulateFight(G.Stats.compute(h), G.Dungeon.monsterStats(mon, room, 'fight'), { seed: 5 });
+  const r = G.simulateFight(G.Stats.compute(h), G.Dungeon.buildEnemies(mon, room, 'fight'), { seed: 5 });
   fightTimes.push(`room ${room} (grey gear): ${r.duration.toFixed(1)}s, ${r.winner}, hp ${r.aHp}`);
 }
 console.log(fightTimes.join('\n'));

@@ -70,6 +70,7 @@ button.ghost:hover:not(:disabled) { border-color: var(--muted); background: var(
 .pips i.now { background: var(--ember); border-color: var(--ember); box-shadow: 0 0 6px var(--ember); }
 .pips i.boss { border-radius: 50%; border-color: var(--blood); }
 .pips i.spec { border-color: var(--r-gold); }
+.pips i.shop { border-color: #7fd67a; border-radius: 1px; }
 .vitals { display: flex; gap: 12px; align-items: center; }
 .vitals .hpbar { width: 170px; }
 .gold { font: 600 15px var(--f-mono); display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
@@ -93,7 +94,12 @@ button.enter { font-size: 20px; padding: 14px 28px; border-color: var(--ember); 
 
 /* ---------- Health bars ---------- */
 .hpbar { position: relative; height: 20px; background: #0d0b09; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
-.hpbar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(#86d77a, var(--hp)); }
+.hpbar i { position: absolute; top: 0; bottom: 0; left: 0; }
+.hpbar i.fill { background: linear-gradient(#86d77a, var(--hp)); transition: width .35s ease-out; }
+.hpbar i.ghost.dmg { background: #e2563f; animation: drain .9s ease-in .25s forwards; }
+.hpbar i.ghost.heal { background: #c8ffb8; animation: glow 1.1s ease-out forwards; }
+@keyframes drain { to { width: 0; } }
+@keyframes glow { from { opacity: 1; } to { opacity: 0; } }
 .hpbar span { position: relative; display: block; text-align: center; font: 600 12px/18px var(--f-mono); text-shadow: 0 1px 2px #000; font-variant-numeric: tabular-nums; }
 .hpbar.thin { height: 8px; } .hpbar.thin span { display: none; }
 
@@ -151,7 +157,9 @@ img.ico { object-fit: contain; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
 .card { background: var(--bg-3); border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .card.item.r-green { border-color: #2f5a2a; } .card.item.r-gold { border-color: #7a5c1c; background: linear-gradient(var(--bg-3), #2c2416); }
-.card > button { margin-top: auto; }
+.card > button, .card > .btns { margin-top: auto; }
+.btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.btns button { flex: 1 1 auto; }
 .item-head { display: flex; gap: 10px; align-items: flex-start; }
 .item-name { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .item-name b { line-height: 1.2; }
@@ -265,3 +273,54 @@ table.tour { width: 100%; border-collapse: collapse; font-size: 15px; font-varia
 .weapon-pick .blurb { color: var(--muted); font-size: 14px; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ---------- v2 ---------- */
+.set-chip { display: inline-block; margin-top: 4px; width: fit-content; font: 600 11px var(--f-body); letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 99px; color: var(--set); border: 1px solid var(--set); }
+.slot { position: relative; }
+.set-dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--set); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.chip.gem { border-color: var(--gem); color: var(--gem); }
+.sets { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.sets li { display: grid; grid-template-columns: 74px 1fr auto; align-items: center; gap: 10px; padding: 4px 2px; cursor: help; font-size: 14px; }
+.sets li.off { opacity: .45; }
+.sets li.on .set-name { font-weight: 700; }
+.set-name { color: var(--set); }
+.sets b { font: 600 12px var(--f-mono); color: var(--muted); }
+.sets li.on b { color: var(--text); }
+.pips5 { display: flex; gap: 3px; }
+.pips5 i { width: 14px; height: 6px; border-radius: 2px; background: var(--bg-3); border: 1px solid var(--line); }
+.pips5 i.f { background: var(--ember); border-color: var(--ember); }
+.pips5 i.mark { margin-right: 4px; }
+.hybrid { margin: 10px 0 0; font-size: 13px; color: var(--muted); cursor: help; }
+.hybrid.on { color: var(--r-gold); }
+.bag { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.bag-slot { position: relative; min-height: 78px; border-radius: 6px; border: 1px dashed var(--line); display: flex; flex-direction: column; }
+.bag-slot.empty { align-items: center; justify-content: center; opacity: .6; }
+.bag-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; background: var(--bg-3); border: 1px solid var(--line); min-height: 78px; font-weight: 500; }
+.bag-item small { font-size: 11.5px; line-height: 1.2; text-align: center; }
+.bag-slot.open .bag-item { border-color: var(--ember); }
+.bag-menu { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.bag-menu button { min-height: 36px; padding: 6px; font-size: 14px; }
+.buffs, .bag-msg { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+.bag-msg { color: var(--text); }
+.poison { font: 600 12px var(--f-mono); color: #8fe07a; border: 1px solid #3d6b2a; border-radius: 4px; padding: 3px 6px; cursor: help; white-space: nowrap; }
+.hint { margin: 0; font-size: 14px; color: var(--muted); }
+.card.consumable { border-style: dashed; }
+.shop h3.sub { font-size: 20px; color: var(--ember); display: flex; align-items: center; gap: 8px; }
+.pick-order { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.pick-order li { display: grid; grid-template-columns: 24px minmax(70px, auto) auto 1fr; gap: 10px; align-items: baseline; padding: 6px 10px; background: var(--bg-3); border-radius: 4px; font-size: 14px; }
+.pick-order li span { font: 600 12px var(--f-mono); color: var(--muted); }
+.pick-order li em { font-style: normal; text-align: right; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-order li.now { outline: 1px solid var(--ember); }
+.pick-order li.me b { color: #9fdcff; }
+.potion .ico-wrap { flex: none; }
+.gemcard { border-color: var(--gem); }
+.gemcard .spec-head b { color: var(--gem); }
+.gem-ico { color: var(--gem); }
+.gemcard .up, .gemcard .down { font: 600 11px var(--f-mono); text-transform: uppercase; letter-spacing: .06em; margin-right: 6px; }
+@media (max-width: 520px) { .sets li { grid-template-columns: 64px 1fr auto; } .pick-order li { grid-template-columns: 20px auto 1fr; } .pick-order li small { display: none; } }
+
+.item-name .tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+.item-name .tags .set-chip { margin-top: 0; }
+.item-name b { overflow-wrap: anywhere; }

@@ -9,11 +9,23 @@ window.G = window.G || {};
   function tierFor(room) { return 1 + Math.floor((room - 1) / L().roomsPerTier); }
 
   function value(k, base, R, tier) {
-    const g = G.STAT_INFO[k].growth === 'flat' ? L().tierGrowth : L().chanceTierGrowth;
+    const growth = G.STAT_INFO[k].growth;
+    if (growth === 'fixed') return base;
+    const g = growth === 'flat' ? L().tierGrowth : L().chanceTierGrowth;
     return even(base * R.mult * (1 + (tier - 1) * g));
   }
 
-  function generate(rng, { slot, rarity, room, weaponType }) {
+  // Class tag for uncommon+ armor; often matches a class you already wear so sets come together
+  function rollSet(hero, rng) {
+    if (hero && rng.int(1, 100) <= L().setMatchChance) {
+      const counts = G.Stats.sets(hero).counts;
+      const best = G.CLASS_ORDER.filter(c => counts[c]).sort((a, b) => counts[b] - counts[a]);
+      if (best.length) return rng.chance(0.75) ? best[0] : rng.pick(best);
+    }
+    return rng.pick(G.CLASS_ORDER);
+  }
+
+  function generate(rng, { slot, rarity, room, weaponType, hero, set }) {
     const R = G.RARITY[rarity];
     const tier = tierFor(room);
     const stats = {};
@@ -33,6 +45,8 @@ window.G = window.G || {};
       name = A.bases[R.rank];
       iconKey = slot;
     }
+    let itemSet = null;
+    if (slot !== 'weapon' && rarity !== 'grey') itemSet = set || rollSet(hero, rng);
 
     const pool = Object.keys(G.AFFIXES).filter(k => !(G.AFFIXES[k].goldOnly && rarity !== 'gold') && !(G.AFFIXES[k].weaponOnly && slot !== 'weapon'));
     const affixes = [];
@@ -43,12 +57,12 @@ window.G = window.G || {};
     }
     if (affixes.length) name += ' ' + G.AFFIXES[affixes[0]].suffix;
 
-    return { id: G.uid('item'), slot, rarity, room, tier, weaponType: weaponType || null, name, stats, trait, iconKey, affixes };
+    return { id: G.uid('item'), kind: 'gear', slot, rarity, room, tier, weaponType: weaponType || null, set: itemSet, name, stats, trait, iconKey, affixes };
   }
 
   function fmtStat(k, v, isWeapon) {
     const label = G.STAT_INFO[k].label;
-    if (isWeapon && (k === 'dmg' || k === 'spd')) return `${v} ${label}`;
+    if (isWeapon && (k === 'dmg' || k === 'spd' || k === 'manaGain' || k === 'spellDmg' || k === 'startMana')) return `${v} ${label}`;
     return `+${v} ${label}`;
   }
 
@@ -66,7 +80,17 @@ window.G = window.G || {};
     return out;
   }
 
-  G.Items = { generate, fmtStat, statLines, compare, tierFor };
+  // Consumables (bag items)
+  function consumable(cid) {
+    const c = G.CONSUMABLES[cid];
+    return { id: G.uid('item'), kind: 'consumable', cid, name: c.name, rarity: 'potion', iconKey: 'potion_' + cid };
+  }
+  function rollConsumable(room, rng, pool) {
+    const ids = (pool || Object.keys(G.CONSUMABLES)).filter(k => !G.CONSUMABLES[k].minRoom || room >= G.CONSUMABLES[k].minRoom);
+    return consumable(rng.weighted(ids.map(k => [k, G.CONSUMABLES[k].weight])));
+  }
+
+  G.Items = { generate, fmtStat, statLines, compare, tierFor, consumable, rollConsumable, rollSet };
 
   // ---------- Loot ----------
   // Cadence:
@@ -128,13 +152,28 @@ window.G = window.G || {};
       const rarity = rollRarity(hero, room, floor, rng);
       let pick = null;
       for (const slot of slotOrder(hero, room, rng, exclude)) {
-        const it = generate(rng, { slot, rarity, room, weaponType: slot === 'weapon' ? rollWeaponType(hero, rng) : null });
+        const it = generate(rng, { slot, rarity, room, hero, weaponType: slot === 'weapon' ? rollWeaponType(hero, rng) : null });
         if (!pick) pick = it;                                   // fallback: first choice
         if (!hero.gear[slot] || G.Hero.powerWith(hero, it) > now * 1.02) { pick = it; break; }
       }
       exclude.push(pick.slot);
       items.push(pick);
     }
+    const chance = G.CONFIG.consumableChance[kind];
+    if (chance && rng.int(1, 100) <= chance) items.push(rollConsumable(room, rng));
+    return items;
+  }
+
+  // Shared shop: the free table everyone picks from (one legendary, rest uncommon+, two consumables)
+  function shopTable(room, count, rng) {
+    const items = [];
+    const nCons = Math.min(2, Math.max(0, count - 2));
+    for (let i = 0; i < count - nCons; i++) {
+      const slot = rng.pick(G.SLOTS);
+      const rarity = i === 0 ? 'gold' : (rng.int(1, 100) <= 25 ? 'gold' : 'green');
+      items.push(generate(rng, { slot, rarity, room, weaponType: slot === 'weapon' ? rng.pick(G.WEAPON_ORDER) : null }));
+    }
+    for (let i = 0; i < nCons; i++) items.push(rollConsumable(Math.max(room, 15), rng, ['greater', 'antidote', ...G.BUFF_IDS]));
     return items;
   }
 
@@ -143,10 +182,11 @@ window.G = window.G || {};
     const types = G.WEAPON_ORDER.slice(), out = [];
     while (out.length < 3) {
       const t = types.splice(Math.floor(rng.float() * types.length), 1)[0];
+      if (!t) break;
       out.push(generate(rng, { slot: 'weapon', rarity: 'grey', room: 1, weaponType: t }));
     }
     return out;
   }
 
-  G.Loot = { rarityWeights, rollRarity, offer, armory };
+  G.Loot = { rarityWeights, rollRarity, offer, armory, shopTable };
 })(window.G);

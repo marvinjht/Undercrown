@@ -1,20 +1,22 @@
-# Thirty Doors (prototype)
+# Thirty Doors (prototype v2)
 
 Single-player prototype of a dungeon auto battler. You and 5 AI rivals each walk 30 rooms.
-Room 1 is the Armory (pick 1 of 3 random weapons); from room 2 you pick one of two doors per
-room. Every round lasts 30 seconds for everyone; anything undecided at zero is decided for you.
-Health never refills on its own. After room 5 you pick a specialization. Survivors heal 30% of
-max health and fight a seeded tournament bracket.
+Room 1 is the Armory (pick 1 of 3 random weapons). Rooms 8, 16 and 24 are shared shop rounds.
+Every round is timed and ends as soon as everyone is ready. Health never refills on its own.
+
+v2 adds: 13 weapons (bows, wands, staff, maces) with range and physical/magic damage, mana and
+spells, five class sets with 3/5 and 5/5 bonuses and ten hybrid archetypes, heart gems after the
+room 10 boss, monster packs (wolves, golems, thieves, splitting slimes), a 3-slot item bag with
+potions and buffs, poison doors, and the shared shop with weakest-first free picks.
+v1 is kept in git as the tag `v1`.
 
 ## Stats (all flat, even numbers)
 
-- Health, Damage (per hit), Speed (attacks per 10 seconds)
-- Armor: subtracted from every hit you take (a hit always does at least 2)
+- Health, Damage (per hit), Speed (attacks per 10 seconds), Range (Melee 1 / Near 4 / Far 6 steps)
+- Armor: subtracted from physical hits. Ward: subtracted from magic hits (spells, wands, holy)
 - Crit / Dodge / Stun: out of 100. Crits deal double damage plus Crit Damage
 - Shield: soaks damage at the start of each fight. Bleed: damage per second for 3 seconds
-- Life on Hit: flat heal each hit (only on legendary weapons, or from Bloodthirst)
-
-Fights play at 1x, then 2x after 10 seconds. There is no skip.
+- Mana fills per attack; at 100 you cast your spell
 
 ## Run it
 
@@ -27,8 +29,11 @@ No build step, no server. Scripts are plain `<script>` files on purpose, so doub
 index.html          loads everything in order
 styles.css          menu / HUD styling
 data/               ALL the game content and balance numbers
-  config.js         heal amounts, door odds, loot odds, monster scaling, combat rules
-  weapons.js        the 6 weapon types
+  config.js         heal amounts, door odds, loot odds, monster scaling, combat rules, shop
+  weapons.js        the 13 weapon types
+  sets.js           class sets and hybrid archetypes
+  gems.js           heart gems
+  consumables.js    bag items (potions, antidote, buffs)
   armor.js          gear slots, bonus stats, rarities, stat descriptions (used in tooltips)
   specs.js          the 6 specializations
   monsters.js       monsters, bosses, rival names

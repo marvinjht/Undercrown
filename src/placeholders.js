@@ -18,80 +18,108 @@ window.G = window.G || {};
     longsword: P('M5 19L20 4M8 13l3 3M3 21l3-3'),
     greatAxe: P('M5 21L17 6M13 3c4-1 8 3 7 7l-4-1-3-3z'),
     greatHammer: P('M4 21L14 11M11 6l5-4 6 6-4 5z'),
+    mace: P('M5 19L14 10M14 10a4 4 0 1 0 5-5 4 4 0 0 0-5 5zM18 3l1 2M21 6l-2 1M12 6l2 1'),
+    maceShield: P('M15 4l5 2v4c0 4-2 6-5 8-3-2-5-4-5-8V6zM3 21l6-6M9 15a3 3 0 1 0-1-4'),
+    shortbow: P('M7 4c6 3 6 13 0 16M7 4v16M4 12h14l-3-2M18 12l-3 2'),
+    longbow: P('M6 2c9 4 9 16 0 20M6 2v20M3 12h17l-3-2M20 12l-3 2'),
+    wand: P('M5 19L15 9M17 4l1 3 3 1-3 1-1 3-1-3-3-1 3-1z'),
+    wandFocus: P('M4 20l8-8M14 5l1 2 2 1-2 1-1 2-1-2-2-1 2-1zM18 14a3 3 0 1 0 0 6 3 3 0 1 0 0-6'),
+    staff: P('M6 21L17 6M17 6a3 3 0 1 0 2-3 3 3 0 0 0-2 3z'),
+    potion: P('M10 3h4M10 3v5l-4 7a4 4 0 0 0 4 6h4a4 4 0 0 0 4-6l-4-7V3M8 14h8'),
     door_fight: P('M4 4l12 12M20 4L8 16M3 15l6 6M21 15l-6 6'),
     door_elite: P('M6 10a6 6 0 1 1 12 0v4l-2 2v3H8v-3l-2-2zM9 11h1M14 11h1M10 19v-2M14 19v-2'),
     door_boss: P('M3 18h18l-2-10-4 4-3-7-3 7-4-4z'),
     door_treasure: P('M3 10h18v10H3zM3 10l2-5h14l2 5M12 10v4'),
     door_rest: P('M12 3c3 4 5 6 5 9a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3 0-5 1-8zM5 21l14-2M5 19l14 2'),
     door_shop: P('M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18zM14.5 8.5c-.5-1-1.5-1.5-2.5-1.5-1.5 0-2.5 1-2.5 2s1 1.7 2.5 2 2.5 1 2.5 2-1 2-2.5 2c-1 0-2-.5-2.5-1.5M12 5.5v13'),
-    door_armory: P('M4 21V8l8-5 8 5v13M9 21v-6h6v6M8 11l8 0M12 3v4'),
     door_mystery: P('M9 9a3 3 0 1 1 4 3c-1 .5-1 1-1 2.5M12 18h.01'),
+    door_armory: P('M4 21V8l8-5 8 5v13M9 21v-6h6v6M8 11l8 0M12 3v4'),
+    door_venom: P('M12 3c3 5 6 8 6 11a6 6 0 0 1-12 0c0-3 3-6 6-11zM9 14l2 2 4-4'),
+    door_purify: P('M12 3c3 5 6 8 6 11a6 6 0 0 1-12 0c0-3 3-6 6-11zM8.5 15c1 2 2.5 2.5 4 2'),
+    gem: P('M7 4h10l4 5-9 12L3 9zM3 9h18M9 4l3 5 3-5M12 9v12'),
   };
+  const POTION_COLORS = { potion: '#d0473a', greater: '#ff6b5a', antidote: '#7fd67a', iron: '#b8b8c8', salve: '#8fb4ff', fury: '#ff9a3c', tonic: '#f2e28c', draught: '#b39cff' };
 
   function icon(key, cls = '') {
     const path = G.ASSETS.icons['icon_' + key];
     if (path) return `<img class="ico ${cls}" src="${path}" alt="">`;
-    const body = SVG[key] || P('M12 4a8 8 0 1 0 0 16 8 8 0 1 0 0-16z');
-    return `<svg class="ico ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+    let style = '', k = key;
+    if (key.startsWith('potion_')) { k = 'potion'; style = ` style="color:${POTION_COLORS[key.slice(7)] || 'inherit'}"`; }
+    const body = SVG[k] || P('M12 4a8 8 0 1 0 0 16 8 8 0 1 0 0-16z');
+    return `<svg class="ico ${cls}"${style} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
   }
 
   // ---------- Sprites (Phaser) ----------
-  function gfx(scene) { return scene.make.graphics({ x: 0, y: 0, add: false }); }
   function bake(scene, key, w, h, draw) {
     if (scene.textures.exists(key)) return;
-    const g = gfx(scene);
+    const g = scene.make.graphics({ x: 0, y: 0, add: false });
     draw(g);
     g.generateTexture(key, w, h);
     g.destroy();
   }
-
   const OUTLINE = 0x1a1410;
 
-  function drawHero(g) {
-    // Light grey so each hero can be tinted a color
+  // Heroes are drawn in light greys so each one can be tinted; class looks change the silhouette
+  function heroBase(g) {
     g.fillStyle(0x000000, 0.25).fillEllipse(32, 36, 46, 40);
-    g.fillStyle(0xd8d8d8).fillEllipse(32, 32, 34, 50);           // shoulders
+    g.fillStyle(0xd8d8d8).fillEllipse(32, 32, 34, 50);
     g.lineStyle(2, OUTLINE).strokeEllipse(32, 32, 34, 50);
-    g.fillStyle(0xb8b8b8).fillCircle(32, 14, 6).fillCircle(32, 50, 6); // pauldrons
-    g.fillStyle(0xffffff).fillCircle(34, 32, 11);                 // head
-    g.lineStyle(2, OUTLINE).strokeCircle(34, 32, 11);
-    g.fillStyle(0x6b5a48).fillRect(41, 29, 4, 6);                  // facing marker
   }
-
-  const WEAPON_DRAW = {
-    daggers(g) {
-      g.fillStyle(0x6b4a2f).fillRect(2, 20, 10, 5).fillRect(2, 39, 10, 5);
-      g.fillStyle(0xcfd6dc).fillTriangle(12, 19, 12, 26, 34, 22.5).fillTriangle(12, 38, 12, 45, 34, 41.5);
+  function head(g, fill = 0xffffff) {
+    g.fillStyle(fill).fillCircle(34, 32, 11);
+    g.lineStyle(2, OUTLINE).strokeCircle(34, 32, 11);
+    g.fillStyle(0x6b5a48).fillRect(41, 29, 4, 6);
+  }
+  const HERO_LOOKS = {
+    hero: g => { heroBase(g); g.fillStyle(0xb8b8b8).fillCircle(32, 14, 6).fillCircle(32, 50, 6); head(g); },
+    hero_warrior: g => {
+      heroBase(g);
+      g.fillStyle(0xa8a8a8).fillRect(20, 6, 22, 12).fillRect(20, 46, 22, 12);
+      g.lineStyle(2, OUTLINE).strokeRect(20, 6, 22, 12).strokeRect(20, 46, 22, 12);
+      head(g, 0xe8e8e8); g.lineStyle(3, 0x777777).lineBetween(26, 32, 45, 32);
     },
-    saber(g) {
-      g.fillStyle(0x6b4a2f).fillRect(2, 29, 10, 6);
-      g.fillStyle(0xc9a54a).fillRect(11, 25, 3, 14);
-      g.fillStyle(0xd7dee4).fillTriangle(14, 29, 14, 35, 52, 24);
+    hero_mage: g => {
+      g.fillStyle(0x000000, 0.25).fillEllipse(32, 36, 50, 44);
+      g.fillStyle(0xe2e2e2).fillTriangle(6, 32, 50, 6, 50, 58);
+      g.lineStyle(2, OUTLINE).strokeTriangle(6, 32, 50, 6, 50, 58);
+      g.fillStyle(0xffffff).fillCircle(36, 32, 10); g.lineStyle(2, OUTLINE).strokeCircle(36, 32, 10);
+      g.fillStyle(0xf0f0f0).fillTriangle(26, 32, 44, 22, 44, 42);
     },
-    swordShield(g) {
-      g.fillStyle(0x6b4a2f).fillRect(2, 40, 8, 5);
-      g.fillStyle(0xd7dee4).fillRect(10, 41, 30, 3);
-      g.fillStyle(0x7a5536).fillEllipse(18, 22, 18, 30);
-      g.lineStyle(3, 0xb38b3c).strokeEllipse(18, 22, 18, 30);
+    hero_archer: g => {
+      heroBase(g);
+      g.lineStyle(3, 0x8a6a48).lineBetween(14, 12, 24, 22).lineBetween(12, 16, 22, 26).lineBetween(16, 9, 26, 19);
+      g.fillStyle(0xcfcfcf).fillEllipse(30, 32, 26, 46); head(g);
     },
-    longsword(g) {
-      g.fillStyle(0x6b4a2f).fillRect(0, 30, 12, 5);
-      g.fillStyle(0xc9a54a).fillRect(12, 24, 4, 17);
-      g.fillStyle(0xdfe5ea).fillRect(16, 30, 42, 5).fillTriangle(58, 30, 58, 35, 63, 32.5);
+    hero_paladin: g => {
+      heroBase(g);
+      g.fillStyle(0xbdbdbd).fillCircle(32, 12, 8).fillCircle(32, 52, 8);
+      g.lineStyle(2, OUTLINE).strokeCircle(32, 12, 8).strokeCircle(32, 52, 8);
+      head(g); g.lineStyle(3, 0xd4af37).lineBetween(16, 26, 16, 38).lineBetween(11, 32, 21, 32);
     },
-    greatAxe(g) {
-      g.fillStyle(0x6b4a2f).fillRect(0, 30, 50, 5);
-      g.fillStyle(0xbfc6cc).fillTriangle(40, 32, 60, 12, 60, 52);
-      g.lineStyle(2, OUTLINE).strokeTriangle(40, 32, 60, 12, 60, 52);
-    },
-    greatHammer(g) {
-      g.fillStyle(0x6b4a2f).fillRect(0, 30, 46, 5);
-      g.fillStyle(0x8e969c).fillRect(44, 14, 18, 37);
-      g.lineStyle(2, OUTLINE).strokeRect(44, 14, 18, 37);
+    hero_rogue: g => {
+      g.fillStyle(0x000000, 0.25).fillEllipse(32, 36, 40, 36);
+      g.fillStyle(0xc4c4c4).fillEllipse(32, 32, 28, 44); g.lineStyle(2, OUTLINE).strokeEllipse(32, 32, 28, 44);
+      g.fillStyle(0x9a9a9a).fillCircle(32, 32, 13); g.lineStyle(2, OUTLINE).strokeCircle(32, 32, 13);
+      g.fillStyle(0x2a2a2a).fillRect(36, 28, 9, 7);
     },
   };
 
-  // Monsters: base color + body drawing
+  const WEAPON_DRAW = {
+    daggers(g) { g.fillStyle(0x6b4a2f).fillRect(2, 20, 10, 5).fillRect(2, 39, 10, 5); g.fillStyle(0xcfd6dc).fillTriangle(12, 19, 12, 26, 34, 22.5).fillTriangle(12, 38, 12, 45, 34, 41.5); },
+    saber(g) { g.fillStyle(0x6b4a2f).fillRect(2, 29, 10, 6); g.fillStyle(0xc9a54a).fillRect(11, 25, 3, 14); g.fillStyle(0xd7dee4).fillTriangle(14, 29, 14, 35, 52, 24); },
+    swordShield(g) { g.fillStyle(0x6b4a2f).fillRect(2, 40, 8, 5); g.fillStyle(0xd7dee4).fillRect(10, 41, 30, 3); g.fillStyle(0x7a5536).fillEllipse(18, 22, 18, 30); g.lineStyle(3, 0xb38b3c).strokeEllipse(18, 22, 18, 30); },
+    longsword(g) { g.fillStyle(0x6b4a2f).fillRect(0, 30, 12, 5); g.fillStyle(0xc9a54a).fillRect(12, 24, 4, 17); g.fillStyle(0xdfe5ea).fillRect(16, 30, 42, 5).fillTriangle(58, 30, 58, 35, 63, 32.5); },
+    greatAxe(g) { g.fillStyle(0x6b4a2f).fillRect(0, 30, 50, 5); g.fillStyle(0xbfc6cc).fillTriangle(40, 32, 60, 12, 60, 52); g.lineStyle(2, OUTLINE).strokeTriangle(40, 32, 60, 12, 60, 52); },
+    greatHammer(g) { g.fillStyle(0x6b4a2f).fillRect(0, 30, 46, 5); g.fillStyle(0x8e969c).fillRect(44, 14, 18, 37); g.lineStyle(2, OUTLINE).strokeRect(44, 14, 18, 37); },
+    mace(g) { g.fillStyle(0x6b4a2f).fillRect(0, 30, 32, 5); g.fillStyle(0xd4af37).fillCircle(40, 32, 9); g.lineStyle(2, OUTLINE).strokeCircle(40, 32, 9); g.fillStyle(0xd4af37).fillTriangle(40, 18, 37, 24, 43, 24).fillTriangle(40, 46, 37, 40, 43, 40).fillTriangle(54, 32, 48, 29, 48, 35); },
+    maceShield(g) { g.fillStyle(0x6b4a2f).fillRect(2, 40, 22, 4); g.fillStyle(0xd4af37).fillCircle(28, 42, 6); g.fillStyle(0xe8e0c8).fillEllipse(18, 20, 18, 28); g.lineStyle(3, 0xd4af37).strokeEllipse(18, 20, 18, 28).lineBetween(18, 10, 18, 30).lineBetween(11, 20, 25, 20); },
+    shortbow(g) { g.lineStyle(4, 0x8a6a48).beginPath().arc(10, 32, 20, -1.2, 1.2).strokePath(); g.lineStyle(1, 0xe8e8e8).lineBetween(17, 13, 17, 51); },
+    longbow(g) { g.lineStyle(4, 0x7a5a38).beginPath().arc(4, 32, 28, -1.25, 1.25).strokePath(); g.lineStyle(1, 0xe8e8e8).lineBetween(13, 6, 13, 58); },
+    wand(g) { g.fillStyle(0x5a3f2a).fillRect(0, 30, 34, 4); g.fillStyle(0xffb36b).fillCircle(36, 32, 5); g.fillStyle(0xffe0a8, 0.5).fillCircle(36, 32, 9); },
+    wandFocus(g) { g.fillStyle(0x5a3f2a).fillRect(0, 40, 30, 4); g.fillStyle(0xffb36b).fillCircle(32, 42, 4); g.fillStyle(0x8fd4ff, 0.8).fillCircle(20, 18, 9); g.lineStyle(2, 0xe8f6ff).strokeCircle(20, 18, 9); },
+    staff(g) { g.fillStyle(0x5a3f2a).fillRect(0, 30, 54, 5); g.fillStyle(0xa18cff).fillCircle(56, 32, 7); g.fillStyle(0xd8ccff, 0.45).fillCircle(56, 32, 12); },
+  };
+
   function blob(g, cx, cy, w, h, color, eyes = 0xffe9a8) {
     g.fillStyle(0x000000, 0.25).fillEllipse(cx + 2, cy + 4, w, h);
     g.fillStyle(color).fillEllipse(cx, cy, w, h);
@@ -101,9 +129,12 @@ window.G = window.G || {};
   const MONSTER_DRAW = {
     rat: g => { g.lineStyle(3, 0x8a6f62).lineBetween(6, 32, 20, 32); blob(g, 34, 32, 34, 22, 0x7d6b5d, 0xff5a4a); },
     slime: g => { g.fillStyle(0x5cc77a, 0.3).fillCircle(32, 32, 26); blob(g, 32, 32, 42, 42, 0x4fae63, 0x10301a); },
+    wolf: g => { g.fillStyle(0x6d6a66).fillTriangle(38, 20, 44, 12, 46, 24).fillTriangle(38, 44, 44, 52, 46, 40); g.lineStyle(3, 0x6d6a66).lineBetween(4, 32, 16, 32); blob(g, 32, 32, 40, 26, 0x8a8680, 0xffd23f); },
     skeleton: g => { blob(g, 32, 32, 32, 44, 0xe4dccb, 0x1b1410); g.lineStyle(2, 0x9c917f).lineBetween(26, 18, 26, 46).lineBetween(30, 16, 30, 48); },
     goblin: g => { g.fillStyle(0x5d8a3a).fillTriangle(30, 18, 22, 6, 36, 16).fillTriangle(30, 46, 22, 58, 36, 48); blob(g, 32, 32, 30, 36, 0x6e9e44, 0xffd23f); },
+    thief: g => { g.fillStyle(0x8a6a2a).fillCircle(16, 46, 8); g.lineStyle(2, OUTLINE).strokeCircle(16, 46, 8); blob(g, 34, 30, 30, 36, 0x3e3a48, 0xf2e28c); g.fillStyle(0x24212a).fillRect(38, 26, 9, 8); },
     orc: g => { blob(g, 32, 32, 44, 54, 0x5a7f45, 0xffb03b); g.fillStyle(0xf2ead7).fillTriangle(48, 26, 54, 24, 50, 30).fillTriangle(48, 38, 54, 40, 50, 34); },
+    golem: g => { g.fillStyle(0x000000, 0.25).fillEllipse(34, 36, 52, 52); g.fillStyle(0x8c8579).fillPoints([{ x: 10, y: 20 }, { x: 28, y: 6 }, { x: 52, y: 12 }, { x: 58, y: 34 }, { x: 46, y: 58 }, { x: 18, y: 54 }, { x: 6, y: 38 }], true); g.lineStyle(2, OUTLINE).strokePoints([{ x: 10, y: 20 }, { x: 28, y: 6 }, { x: 52, y: 12 }, { x: 58, y: 34 }, { x: 46, y: 58 }, { x: 18, y: 54 }, { x: 6, y: 38 }], true); g.fillStyle(0x7fe0ff).fillCircle(44, 26, 3).fillCircle(44, 40, 3); },
     wraith: g => { g.fillStyle(0x8e6fc9, 0.35).fillCircle(32, 32, 28); blob(g, 32, 32, 36, 40, 0x6a51a6, 0xc8f4ff); },
     troll: g => { blob(g, 32, 32, 52, 58, 0x6f7f72, 0xffe066); g.fillStyle(0x56645a).fillCircle(22, 14, 6).fillCircle(22, 50, 6); },
     ogre: g => { blob(g, 32, 32, 54, 58, 0x9a7a5a, 0xff7a3b); g.fillStyle(0x5b4636).fillRect(46, 20, 14, 24); },
@@ -117,21 +148,20 @@ window.G = window.G || {};
     g.fillStyle(0x2a231e).fillRect(0, 0, 64, 64);
     const shades = [0x2f2721, 0x2b241f, 0x332a23, 0x2d2620];
     let i = 0;
-    for (let y = 0; y < 64; y += 32) for (let x = 0; x < 64; x += 32) {
-      g.fillStyle(shades[i++ % 4]).fillRect(x + 1, y + 1, 30, 30);
-    }
+    for (let y = 0; y < 64; y += 32) for (let x = 0; x < 64; x += 32) g.fillStyle(shades[i++ % 4]).fillRect(x + 1, y + 1, 30, 30);
     g.lineStyle(2, 0x1b1612).strokeRect(0, 0, 64, 64).lineBetween(32, 0, 32, 64).lineBetween(0, 32, 64, 32);
     g.fillStyle(0x3a3029).fillRect(8, 8, 3, 2).fillRect(44, 50, 4, 2).fillRect(50, 12, 2, 2);
   }
 
   function makeTextures(scene) {
-    bake(scene, 'hero', 64, 64, drawHero);
+    for (const k in HERO_LOOKS) bake(scene, k, 64, 64, HERO_LOOKS[k]);
+    bake(scene, 'trim_ring', 64, 64, g => { g.lineStyle(4, 0xffffff).strokeCircle(32, 32, 27); });
     bake(scene, 'floor', 64, 64, drawFloor);
     for (const k in WEAPON_DRAW) bake(scene, 'weapon_' + k, 64, 64, WEAPON_DRAW[k]);
-    for (const k in MONSTER_DRAW) {
-      const big = !!G.BOSSES[k];
-      bake(scene, 'monster_' + k, big ? 96 : 64, big ? 96 : 64, MONSTER_DRAW[k]);
-    }
+    for (const k in MONSTER_DRAW) { const big = !!G.BOSSES[k]; bake(scene, 'monster_' + k, big ? 96 : 64, big ? 96 : 64, MONSTER_DRAW[k]); }
+    bake(scene, 'proj_arrow', 32, 8, g => { g.lineStyle(2, 0xe8d8b8).lineBetween(0, 4, 26, 4); g.fillStyle(0xdfe5ea).fillTriangle(24, 0, 24, 8, 32, 4); });
+    bake(scene, 'proj_bolt', 20, 20, g => { g.fillStyle(0xffffff, 0.35).fillCircle(10, 10, 10); g.fillStyle(0xffffff).fillCircle(10, 10, 5); });
+    bake(scene, 'fx_ring', 96, 96, g => { g.lineStyle(6, 0xffffff, 0.9).strokeCircle(48, 48, 40); g.fillStyle(0xffffff, 0.15).fillCircle(48, 48, 40); });
   }
 
   G.Art = { icon, makeTextures };

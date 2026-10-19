@@ -1,120 +1,277 @@
-// Combat simulation. Pure logic: takes two stat blocks, returns the whole fight as a
-// timeline of events. The arena (src/arena.js) only plays this timeline back.
-// Same seed + same stats = same fight, so a server can run it and every player sees the same result.
+// Combat simulation. Pure logic: one hero (side a) against one or more enemies (side b).
+// Returns the whole fight as a timeline of events plus position tracks; the arena only plays it back.
+// Same seed + same inputs = same fight, so a server can run it and every player sees the same thing.
 //
 // Rules (all flat numbers):
-//  hit = Damage (+ Berserker bonus). Crit: double, plus Crit Damage.
-//  Armor subtracts from every hit taken (never below 2). Shield soaks damage first.
-//  Dodge / Crit / Stun are "out of 100". Bleed = damage per second for 3 seconds.
+//  Sides start CONFIG.combat.startGap steps apart. Out of range = walk in at moveSpeed steps/second.
+//  Physical hits lose Armor (minus Pierce), magic hits lose Ward; never below minHit. Holy = extra magic.
+//  Crit: double damage plus Crit Damage. Shield soaks damage first. Mana fills per attack; at 100, cast.
 window.G = window.G || {};
 
 (function (G) {
-  function fighter(id, s, hp) {
-    return {
-      id, s, hp: hp == null ? s.maxHp : Math.min(hp, s.maxHp), shield: s.shield || 0,
-      nextAtk: 0, invis: false, invisUntil: -1, nextInvis: Infinity, stealthCrit: false,
-      incoming: 0, bleed: 0, bleedUntil: -1, nextBleed: Infinity,
-    };
+  const C = () => G.CONFIG.combat;
+
+  // side b may be a single stat block (1v1 tournament) or a list of enemy specs
+  function toSpecs(b) {
+    if (Array.isArray(b)) return b;
+    return [{ s: b.s || b, name: b.name || 'Enemy', sprite: b.sprite, tint: b.tint, hp: b.hp }];
   }
 
   function simulateFight(sa, sb, opts = {}) {
-    const C = G.CONFIG.combat;
+    const CB = C();
     const SH = G.SPECS.shadow.params, DU = G.SPECS.duelist.params, BE = G.SPECS.berserker.params;
     const rng = new G.RNG(opts.seed != null ? opts.seed : G.newSeed());
-    const roll = n => rng.int(1, 100) <= n;
-    const A = fighter('a', sa, opts.aHp), B = fighter('b', sb, opts.bHp);
-    const events = [];
-    const push = e => { e.hp = { a: Math.max(0, A.hp), b: Math.max(0, B.hp) }; e.sh = { a: A.shield, b: B.shield }; events.push(e); };
+    const roll = n => n > 0 && rng.int(1, 100) <= n;
+    const events = [], tracks = {}, fighters = [], meta = [];
+    let seq = 0, t = 0;
 
-    for (const f of [A, B]) {
-      f.nextAtk = C.engageDelay + rng.range(0, 0.4) * 10 / f.s.spd;
-      if (f.s.spec === 'shadow') f.nextInvis = C.engageDelay + 2.5;
+    function mk(side, spec, pos, extra = {}) {
+      const s = spec.s;
+      const f = {
+        id: side === 'a' ? 'a' : 'b' + (seq++), side, s, name: spec.name, pos,
+        hp: spec.hp != null ? Math.min(spec.hp, s.maxHp) : s.maxHp, maxHp: s.maxHp,
+        shield: s.shield || 0, mana: Math.min(CB.manaMax, s.startMana || 0), alive: true,
+        nextAtk: 0.3 + rng.range(0, 0.4) * 10 / s.spd, atkCount: 0, hitsLanded: 0, incoming: 0,
+        invis: false, invisUntil: -1, nextInvis: s.spec === 'shadow' ? 2.5 : Infinity, stealthCrit: false,
+        bleed: 0, bleedUntil: -1, nextBleed: Infinity,
+        firstCrits: Math.max((s.fx && s.fx.firstCrits) || 0, 0), dmgBonus: 0, hurtBonus: 0, nextHitBonus: 0,
+        swUsed: false, reviveAvail: !!spec.revive,
+        steal: spec.steal || 0, stolen: 0, escapeAfter: spec.escapeAfter || 0, split: spec.split || null,
+        range: CB.ranges[s.range || 'melee'] || 1,
+        ...extra,
+      };
+      fighters.push(f);
+      tracks[f.id] = [[t, pos]];
+      meta.push({ id: f.id, side, name: spec.name, sprite: spec.sprite, tint: spec.tint, scale: spec.scale || 1,
+        maxHp: f.maxHp, hp: f.hp, shield: f.shield, mana: f.mana, hasMana: !!(s.spell && s.manaGain > 0),
+        bornAt: t, look: spec.look || null, weapon: spec.weapon || null, range: s.range || 'melee', type: s.type || 'phys' });
+      return f;
     }
-    if (A.shield || B.shield) push({ t: 0, type: 'start' });
 
-    function strike(att, def, t, isCounter) {
-      if (def.invis) { push({ t, type: 'hidden', src: att.id, tgt: def.id }); return; }
-      if (roll(def.s.dodge)) { push({ t, type: 'dodge', src: att.id, tgt: def.id }); return; }
-      if (!isCounter && def.s.spec === 'duelist') {
+    const A = mk('a', { s: sa, name: opts.aName || 'You', hp: opts.aHp, revive: opts.aRevive }, 0);
+    toSpecs(sb).forEach(sp => mk('b', { ...sp, revive: sp.revive != null ? sp.revive : opts.bRevive }, CB.startGap));
+    const result = { revived: { a: false, b: false }, goldStolen: 0 };
+
+    const snap = (...fs) => { const h = {}; for (const f of fs) if (f) h[f.id] = [Math.max(0, f.hp), f.shield, Math.round(f.mana)]; return h; };
+    const push = (e, ...fs) => { e.t = t; e.h = snap(...fs); events.push(e); };
+    const foes = f => fighters.filter(x => x.alive && x.side !== f.side);
+    const target = f => f.side === 'b' ? (A.alive ? A : null) : (foes(f)[0] || null);
+
+    function heal(f, amount) {
+      if (!f.alive || amount <= 0 || f.s.gem === 'gaia') return 0;
+      const a = f.s.gem === 'stone' ? 1 : amount;
+      const h = Math.min(f.maxHp - f.hp, a);
+      if (h > 0) f.hp += h;
+      return h > 0 ? h : 0;
+    }
+
+    // Deal damage after reductions. Returns {dealt, absorbed}.
+    function damage(def, amt, att) {
+      if (att && att.s.gem === 'devil') amt *= 2;
+      if (def.s.gem === 'devil') amt *= 2;
+      if (def.s.gem === 'stone') amt = 1;
+      let absorbed = 0;
+      if (def.shield > 0) { absorbed = Math.min(def.shield, amt); def.shield -= absorbed; amt -= absorbed; }
+      def.hp -= amt;
+      return { dealt: amt, absorbed };
+    }
+
+    function afterDamage(def, att) {
+      if (def.hp > 0) {
+        const fx = def.s.fx || {};
+        if (fx.secondWind && !def.swUsed && def.hp < def.maxHp / 2) {
+          def.swUsed = true;
+          const h = heal(def, fx.secondWind);
+          if (h) push({ type: 'heal', src: def.id, amount: h, label: 'Second Wind' }, def);
+        }
+        return;
+      }
+      if (def.reviveAvail) {
+        def.reviveAvail = false; def.hp = def.maxHp; result.revived[def.side] = true;
+        push({ type: 'revive', src: def.id }, def);
+        return;
+      }
+      def.alive = false;
+      push({ type: 'death', tgt: def.id, src: att ? att.id : null }, def);
+      if (def.split) {
+        const sp = def.split;
+        for (let i = 0; i < sp.count; i++) {
+          const child = mk('b', { s: sp.s, name: sp.name, sprite: sp.sprite, scale: sp.scale, split: sp.next || null }, def.pos);
+          child.nextAtk = t + 0.6 + i * 0.2;
+          push({ type: 'spawn', src: child.id, parent: def.id }, child);
+        }
+      }
+    }
+
+    function applyBleed(def, amount) {
+      if (amount <= 0 || !def.alive) return;
+      if (def.bleedUntil < t) def.nextBleed = t + 1;
+      def.bleed = Math.max(def.bleed, amount);
+      def.bleedUntil = t + 3;
+    }
+
+    function cast(f) {
+      const sp = f.s.spell, fx = f.s.fx || {};
+      const tgts = sp.aoe ? foes(f) : [target(f)].filter(Boolean);
+      push({ type: 'cast', src: f.id, name: sp.name, aoe: sp.aoe, tgts: tgts.map(x => x.id) }, f);
+      for (const d of tgts) {
+        if (!d.alive) continue;
+        const r = damage(d, Math.max(CB.minHit, sp.dmg - (d.s.ward || 0)), f);
+        push({ type: 'spellhit', src: f.id, tgt: d.id, amount: r.dealt, absorbed: r.absorbed, name: sp.name }, d);
+        afterDamage(d, f);
+      }
+      f.mana = 0;
+      if (fx.spellHeal) { const h = heal(f, fx.spellHeal); if (h) push({ type: 'heal', src: f.id, amount: h }, f); }
+      if (fx.spellStack) f.dmgBonus += fx.spellStack;
+    }
+
+    function addMana(f, n) {
+      if (!f.s.spell || n <= 0 || !f.alive) return;
+      f.mana = Math.min(CB.manaMax, f.mana + n);
+      if (f.mana >= CB.manaMax) cast(f);
+    }
+
+    // One strike from att at def. counter = a Duelist riposte. Returns the damage dealt (for cleave).
+    function strike(att, def, counter) {
+      const fx = att.s.fx || {};
+      if (def.invis) { push({ type: 'hidden', src: att.id, tgt: def.id }); return 0; }
+      if (roll(def.s.dodge)) {
+        push({ type: 'dodge', src: att.id, tgt: def.id });
+        if (def.s.fx && def.s.fx.afterDodge) def.nextHitBonus = def.s.fx.afterDodge;
+        return 0;
+      }
+      if (!counter && def.s.spec === 'duelist') {
         def.incoming++;
         if (def.incoming % DU.every === 0) {
-          push({ t, type: 'parry', src: att.id, tgt: def.id });
-          strike(def, att, t, true);
-          return;
+          push({ type: 'parry', src: att.id, tgt: def.id });
+          strike(def, att, true);
+          return 0;
         }
       }
-      let crit;
-      if (att.stealthCrit) { crit = true; att.stealthCrit = false; } else crit = roll(att.s.crit);
-      let dmg = att.s.dmg;
-      if (att.s.spec === 'berserker') dmg += Math.min(C.berserkCap, Math.floor((att.s.maxHp - att.hp) / BE.per) * BE.dmg);
-      if (crit) dmg = dmg * 2 + att.s.critDmg;
-      dmg = Math.max(C.minHit, dmg - (def.s.armor || 0));
-      let absorbed = 0;
-      if (def.shield > 0) { absorbed = Math.min(def.shield, dmg); def.shield -= absorbed; dmg -= absorbed; }
-      def.hp -= dmg;
-      push({ t, type: 'hit', src: att.id, tgt: def.id, amount: dmg, absorbed, crit, counter: !!isCounter });
-      if (att.s.leech > 0 && att.hp > 0) {
-        const h = Math.min(att.s.maxHp - att.hp, att.s.leech);
-        if (h > 0) { att.hp += h; push({ t, type: 'heal', src: att.id, tgt: att.id, amount: h }); }
+      let crit = false;
+      if (att.stealthCrit) { crit = true; att.stealthCrit = false; }
+      else if (att.firstCrits > 0) { crit = true; att.firstCrits--; }
+      else crit = roll(att.s.crit);
+      let raw = att.s.dmg + att.dmgBonus + att.hurtBonus + att.nextHitBonus;
+      att.nextHitBonus = 0;
+      if (att.s.spec === 'berserker') raw += Math.min(CB.berserkCap, Math.floor((att.maxHp - att.hp) / BE.per) * BE.dmg);
+      if (crit) raw = raw * 2 + (att.s.critDmg || 0);
+      let amt = att.s.type === 'magic'
+        ? Math.max(CB.minHit, raw - (def.s.ward || 0))
+        : Math.max(CB.minHit, raw - Math.max(0, (def.s.armor || 0) - (att.s.pierce || 0)));
+      let holy = att.s.holy || 0;
+      if (fx.executeHoly && def.hp < def.maxHp / 2) holy += fx.executeHoly;
+      if (holy) amt += Math.max(0, holy - (def.s.ward || 0));
+      if (fx.everyFourthMagic && att.atkCount % 4 === 0) amt += Math.max(0, fx.everyFourthMagic - (def.s.ward || 0));
+      const r = damage(def, amt, att);
+      push({ type: 'hit', src: att.id, tgt: def.id, amount: r.dealt, absorbed: r.absorbed, crit, counter: !!counter, kind: att.s.type, ranged: att.range > 1 }, att, def);
+      att.hitsLanded++;
+      if (def.s.fx && def.s.fx.hurtStack) def.hurtBonus = Math.min(def.s.fx.hurtCap, def.hurtBonus + def.s.fx.hurtStack);
+      if (att.s.leech > 0) { const h = heal(att, att.s.leech); if (h) push({ type: 'heal', src: att.id, amount: h }, att); }
+      if (att.s.healEvery && att.hitsLanded % att.s.healEvery.n === 0) {
+        const h = heal(att, att.s.healEvery.amount);
+        if (h) push({ type: 'heal', src: att.id, amount: h }, att);
       }
-      if (def.hp <= 0) return;
-      if (att.s.bleed > 0) {
-        if (def.bleedUntil < t) def.nextBleed = t + 1;
-        def.bleed = att.s.bleed;
-        def.bleedUntil = t + 3;
+      if (crit && fx.critMana) addMana(att, fx.critMana);
+      if (att.steal && att.alive) {
+        att.stolen += att.steal;
+        push({ type: 'steal', src: att.id, amount: att.steal });
+        if (att.hitsLanded >= att.escapeAfter) {
+          att.alive = false; att.escaped = true; result.goldStolen += att.stolen;
+          push({ type: 'escape', src: att.id, amount: att.stolen }, att);
+        }
       }
-      if (att.s.stun > 0 && roll(att.s.stun)) {
-        def.nextAtk = Math.max(def.nextAtk, t + 1);
-        push({ t, type: 'stun', src: att.id, tgt: def.id });
+      afterDamage(def, att);
+      if (def.alive) {
+        applyBleed(def, Math.max(att.s.bleed || 0, crit && fx.critBleed ? fx.critBleed : 0));
+        if (roll(att.s.stun)) { def.nextAtk = Math.max(def.nextAtk, t + 1); push({ type: 'stun', src: att.id, tgt: def.id }); }
       }
+      return r.dealt;
     }
 
-    let t = 0, winner = null;
-    const checkDeath = () => {
-      if (A.hp <= 0 || B.hp <= 0) {
-        winner = A.hp <= 0 ? 'b' : 'a';
-        push({ t, type: 'death', tgt: winner === 'a' ? 'b' : 'a' });
-        return true;
-      }
-      return false;
-    };
-
-    while (t < C.maxTime && !winner) {
-      t = Math.round((t + C.dt) * 1000) / 1000;
-      for (const f of [A, B]) {
-        if (f.s.spec === 'shadow') {
-          if (!f.invis && t >= f.nextInvis) {
-            f.invis = true; f.invisUntil = t + SH.duration; f.nextInvis = t + SH.every; f.stealthCrit = true;
-            push({ t, type: 'stealth_on', src: f.id });
-          } else if (f.invis && t >= f.invisUntil) {
-            f.invis = false;
-            push({ t, type: 'stealth_off', src: f.id });
+    function attack(att) {
+      const def = target(att);
+      if (!def) return;
+      att.atkCount++;
+      const fx = att.s.fx || {};
+      const shots = fx.doubleShot && att.atkCount % fx.doubleShot === 0 ? 2 : 1;
+      if (shots === 2) push({ type: 'double', src: att.id });
+      for (let i = 0; i < shots; i++) {
+        const d = target(att);
+        if (!d || !att.alive) break;
+        const dealt = strike(att, d, false);
+        if (att.s.cleave && dealt > 0) {
+          const second = foes(att).find(x => x !== d);
+          if (second) {
+            const r = damage(second, Math.max(CB.minHit, Math.floor(dealt / 2 / 2) * 2), att);
+            push({ type: 'hit', src: att.id, tgt: second.id, amount: r.dealt, absorbed: r.absorbed, cleave: true }, second);
+            afterDamage(second, att);
           }
         }
-        if (f.bleedUntil >= t && t >= f.nextBleed) {
-          f.hp -= f.bleed; f.nextBleed = t + 1;
-          push({ t, type: 'bleed', tgt: f.id, amount: f.bleed });
+      }
+      addMana(att, att.s.manaGain || 0);
+    }
+
+    const done = () => !A.alive || !fighters.some(f => f.side === 'b' && f.alive);
+    let winner = null;
+
+    while (t < CB.maxTime && !done()) {
+      t = Math.round((t + CB.dt) * 1000) / 1000;
+      // Move into range
+      for (const f of fighters) {
+        if (!f.alive) continue;
+        const tg = target(f);
+        if (!tg) continue;
+        const d = Math.abs(tg.pos - f.pos);
+        if (d > f.range + 1e-6) {
+          const step = Math.min(CB.moveSpeed * CB.dt, d - f.range);
+          f.pos += tg.pos > f.pos ? step : -step;
+          tracks[f.id].push([t, Math.round(f.pos * 100) / 100]);
         }
       }
-      if (checkDeath()) break;
-      const order = A.nextAtk <= B.nextAtk ? [[A, B], [B, A]] : [[B, A], [A, B]];
-      for (const [att, def] of order) {
-        if (t >= att.nextAtk && att.hp > 0 && def.hp > 0) {
-          att.nextAtk = t + 10 / att.s.spd;
-          strike(att, def, t, false);
-          if (checkDeath()) break;
+      for (const f of fighters) {
+        if (!f.alive) continue;
+        if (f.s.spec === 'shadow') {
+          if (!f.invis && t >= f.nextInvis) { f.invis = true; f.invisUntil = t + SH.duration; f.nextInvis = t + SH.every; f.stealthCrit = true; push({ type: 'stealth_on', src: f.id }); }
+          else if (f.invis && t >= f.invisUntil) { f.invis = false; push({ type: 'stealth_off', src: f.id }); }
         }
+        if (f.bleedUntil >= t && t >= f.nextBleed) {
+          f.nextBleed = t + 1;
+          const r = damage(f, f.bleed, null);
+          push({ type: 'bleed', tgt: f.id, amount: r.dealt }, f);
+          afterDamage(f, null);
+        }
+      }
+      if (done()) break;
+      const ready = fighters.filter(f => f.alive && t >= f.nextAtk).sort((x, y) => x.nextAtk - y.nextAtk);
+      for (const f of ready) {
+        if (!f.alive || done()) continue;
+        const tg = target(f);
+        if (!tg || Math.abs(tg.pos - f.pos) > f.range + 1e-6) continue;
+        const fx = f.s.fx || {};
+        const spd = f.s.spd + (fx.shieldSpd && f.shield > 0 ? fx.shieldSpd : 0);
+        f.nextAtk = t + 10 / spd;
+        attack(f);
       }
     }
 
     let timeout = false;
-    if (!winner) {
+    if (!A.alive) winner = 'b';
+    else if (!fighters.some(f => f.side === 'b' && f.alive)) winner = 'a';
+    else {
       timeout = true;
-      winner = A.hp / A.s.maxHp >= B.hp / B.s.maxHp ? 'a' : 'b';
-      push({ t, type: 'timeout' });
+      const bs = fighters.filter(f => f.side === 'b' && f.alive);
+      const bf = bs.reduce((x, f) => x + f.hp, 0) / Math.max(1, bs.reduce((x, f) => x + f.maxHp, 0));
+      winner = A.hp / A.maxHp >= bf ? 'a' : 'b';
+      push({ type: 'timeout' });
     }
-    return { events, winner, timeout, aHp: Math.max(0, A.hp), bHp: Math.max(0, B.hp), duration: t };
+    const B0 = fighters.find(f => f.side === 'b');
+    return {
+      events, tracks, fighters: meta, winner, timeout, duration: t,
+      aHp: Math.max(0, A.hp), bHp: B0 ? Math.max(0, B0.hp) : 0,
+      revived: result.revived, goldStolen: result.goldStolen,
+    };
   }
 
-  G.simulateFight = (a, b, o) => { const r = simulateFight(a, b, o); (G._fightLog || []).push(r.duration); return r; };
+  G.simulateFight = (a, b, o) => { const r = simulateFight(a, b, o); if (G._fightLog) G._fightLog.push(r.duration); return r; };
 })(window.G);

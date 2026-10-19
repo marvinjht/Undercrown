@@ -1,10 +1,22 @@
-// Top-down arena that plays back a fight timeline from src/combat.js.
-// It never decides outcomes; it only animates the events it's given.
+// Top-down arena that plays back a fight from src/combat.js: positions from its tracks,
+// everything else from its events. It never decides outcomes.
 window.G = window.G || {};
 
 (function (G) {
   const W = 640, H = 360;
   const FONT = '"Spline Sans Mono", ui-monospace, monospace';
+  const X0 = 110, STEP = 70;                      // pixels: position 0 and 1 step
+  const LANES = [200, 132, 268, 166, 234, 110, 290];
+
+  function posAt(track, t) {
+    if (!track || !track.length) return 0;
+    if (t <= track[0][0]) return track[0][1];
+    let lo = 0, hi = track.length - 1;
+    if (t >= track[hi][0]) return track[hi][1];
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (track[mid][0] <= t) lo = mid; else hi = mid; }
+    const [t0, p0] = track[lo], [t1, p1] = track[hi];
+    return p0 + (p1 - p0) * ((t - t0) / Math.max(1e-6, t1 - t0));
+  }
 
   class ArenaScene extends Phaser.Scene {
     constructor() { super('arena'); }
@@ -24,49 +36,57 @@ window.G = window.G || {};
         v.fillRect(0, 0, W, 10 + i * 8).fillRect(0, H - 10 - i * 8, W, 10 + i * 8);
         v.fillRect(0, 0, 14 + i * 10, H).fillRect(W - 14 - i * 10, 0, 14 + i * 10, H);
       }
-      // torches
-      this.torches = [[60, 40], [W - 60, 40], [60, H - 40], [W - 60, H - 40]].map(([x, y]) => {
+      [[60, 40], [W - 60, 40], [60, H - 40], [W - 60, H - 40]].forEach(([x, y]) => {
         const glow = this.add.circle(x, y, 26, 0xff9a3c, 0.12);
         this.add.circle(x, y, 5, 0xffc46b);
         this.tweens.add({ targets: glow, alpha: 0.05, scale: 1.25, duration: 600 + Math.random() * 400, yoyo: true, repeat: -1 });
-        return glow;
       });
       this.objs = [];
       G.Arena._scene = this;
       if (G.Arena._pending) { const p = G.Arena._pending; G.Arena._pending = null; this.begin(p); }
     }
 
-    clear() { for (const o of this.objs) o.destroy(); this.objs = []; }
     track(o) { this.objs.push(o); return o; }
 
-    makeFighter(def, side) {
-      const startX = side === 'a' ? 90 : W - 90;
-      const y = 200;
-      const body = this.add.image(0, 0, def.texture);
-      if (def.tint) body.setTint(def.tint);
+    makeFighter(m) {
+      const vis = (this.cfg.visual && this.cfg.visual[m.id]) || {};
+      const side = m.side;
+      let texture = m.sprite || 'hero';
+      if (texture === 'hero' || side === 'a') texture = vis.look ? 'hero_' + vis.look : 'hero';
+      if (!this.textures.exists(texture)) texture = 'hero';
+      const lane = side === 'a' ? 200 : LANES[this.laneIdx++ % LANES.length];
+      const body = this.add.image(0, 0, texture);
+      const tint = vis.tint != null ? vis.tint : m.tint;
+      if (tint) body.setTint(tint);
       const parts = [body];
+      if (vis.trim && G.CLASSES[vis.trim]) parts.unshift(this.add.image(0, 0, 'trim_ring').setTint(G.CLASSES[vis.trim].tint).setAlpha(0.9));
       let weapon = null;
-      if (def.weapon) { weapon = this.add.image(10, 10, def.weapon).setOrigin(0.1, 0.5); parts.push(weapon); }
-      const cont = this.track(this.add.container(startX, y, parts));
-      const sc = def.scale || 1;
+      const wkey = vis.weapon || m.weapon;
+      if (wkey && this.textures.exists(wkey)) { weapon = this.add.image(10, 10, wkey).setOrigin(0.1, 0.5); parts.push(weapon); }
+      const cont = this.track(this.add.container(X0, lane, parts));
+      const sc = (m.scale || 1) * (side === 'b' && this.cfg.result.fighters.filter(f => f.side === 'b' && f.bornAt === 0).length > 2 ? 0.8 : 1);
       cont.setScale(side === 'a' ? sc : -sc, sc);
-      const name = this.track(this.add.text(startX, y - 54 * sc, def.name, {
-        fontFamily: FONT, fontSize: '13px', color: '#ece3d6', stroke: '#15120f', strokeThickness: 4,
-      }).setOrigin(0.5));
+      const name = this.track(this.add.text(0, 0, m.name, { fontFamily: FONT, fontSize: '12px', color: '#ece3d6', stroke: '#15120f', strokeThickness: 4 }).setOrigin(0.5));
       const bar = this.track(this.add.graphics());
-      return {
-        side, def, cont, body, weapon, name, bar, sc,
-        hp: def.hp, maxHp: def.maxHp, shield: def.shield || 0, maxShield: def.shield || 0, startX, homeX: side === 'a' ? W / 2 - 62 - 10 * sc : W / 2 + 62 + 10 * sc,
-        y, dir: side === 'a' ? 1 : -1, lunge: 0, dy: 0, dead: false,
-      };
+      const f = { id: m.id, side, m, cont, body, weapon, name, bar, sc, y: lane, dir: side === 'a' ? 1 : -1, lunge: 0, dy: 0,
+        hp: m.hp, maxHp: m.maxHp, shield: m.shield, maxShield: Math.max(1, m.shield), mana: m.mana, hasMana: m.hasMana, dead: false, gone: false, tint };
+      this.F[m.id] = f;
+      this.placeFighter(f);
+      return f;
     }
 
     begin(cfg) {
-      this.clear();
-      this.cfg = cfg;
-      this.t = 0; this.idx = 0; this.finished = false;
-      this.speed = 1;
-      this.F = { a: this.makeFighter(cfg.left, 'a'), b: this.makeFighter(cfg.right, 'b') };
+      for (const o of this.objs) o.destroy();
+      this.objs = [];
+      this.cfg = cfg; this.t = 0; this.idx = 0; this.finished = false; this.speed = 1; this.lastNow = 0;
+      this.F = {}; this.laneIdx = 0;
+      for (const m of cfg.result.fighters) if (m.bornAt === 0) this.makeFighter(m);
+    }
+
+    placeFighter(f) {
+      const p = posAt(this.cfg.result.tracks[f.id], this.t);
+      if (!f.gone) f.cont.x = X0 + p * STEP + f.lunge * f.dir;
+      f.cont.y = f.y + f.dy;
     }
 
     float(f, str, color, size = 18, dx = 0) {
@@ -78,11 +98,19 @@ window.G = window.G || {};
 
     swing(f) {
       const d = 120 / this.speed;
-      this.tweens.add({ targets: f, lunge: 22, duration: d, yoyo: true, ease: 'Quad.easeOut' });
+      this.tweens.add({ targets: f, lunge: 18, duration: d, yoyo: true, ease: 'Quad.easeOut' });
       if (f.weapon) {
         f.weapon.rotation = -0.9;
-        this.tweens.add({ targets: f.weapon, rotation: 0.5, duration: d, yoyo: true, ease: 'Quad.easeOut', onComplete: () => { f.weapon.rotation = 0; } });
+        this.tweens.add({ targets: f.weapon, rotation: 0.5, duration: d, yoyo: true, ease: 'Quad.easeOut', onComplete: () => { if (f.weapon.active) f.weapon.rotation = 0; } });
       }
+    }
+
+    shoot(att, def, kind) {
+      const tex = kind === 'magic' ? 'proj_bolt' : 'proj_arrow';
+      const p = this.track(this.add.image(att.cont.x + 20 * att.dir, att.cont.y, tex));
+      if (kind === 'magic') p.setTint(0xb39cff);
+      p.rotation = Math.atan2(def.cont.y - att.cont.y, def.cont.x - att.cont.x);
+      this.tweens.add({ targets: p, x: def.cont.x, y: def.cont.y, duration: 160 / this.speed, onComplete: () => p.destroy() });
     }
 
     flash(f) {
@@ -90,73 +118,94 @@ window.G = window.G || {};
       this.time.delayedCall(70 / this.speed, () => {
         if (!f.body.active) return;
         f.body.clearTint();
-        if (f.def.tint) f.body.setTint(f.def.tint);
-        if (f.dead) f.body.setTint(0x555555);
+        if (f.dead) f.body.setTint(0x555555); else if (f.tint) f.body.setTint(f.tint);
       });
     }
 
     apply(e) {
       const F = this.F;
-      if (e.hp) { F.a.hp = e.hp.a; F.b.hp = e.hp.b; }
-      if (e.sh) { F.a.shield = e.sh.a; F.b.shield = e.sh.b; }
+      if (e.type === 'spawn') {
+        const m = this.cfg.result.fighters.find(x => x.id === e.src);
+        if (m && !F[m.id]) {
+          const f = this.makeFighter(m);
+          f.cont.setScale(0.1);
+          this.tweens.add({ targets: f.cont, scaleX: -f.sc, scaleY: f.sc, duration: 220 / this.speed, ease: 'Back.easeOut' });
+        }
+      }
+      if (e.h) for (const id in e.h) { const f = F[id]; if (f) { [f.hp, f.shield, f.mana] = e.h[id]; } }
       const att = F[e.src], def = F[e.tgt];
       switch (e.type) {
         case 'hit':
-          if (!e.counter) this.swing(att); else { this.swing(att); this.float(att, 'COUNTER', '#9fe3ff', 13, 0); }
+          if (!att || !def) break;
+          if (!e.cleave) { if (e.ranged) this.shoot(att, def, e.kind); else this.swing(att); }
           this.flash(def);
-          if (e.amount > 0) this.float(def, e.crit ? e.amount + '!' : String(e.amount), e.crit ? '#ffd34d' : '#ff7a66', e.crit ? 26 : 18);
-          if (e.absorbed) this.float(def, 'SHIELD ' + e.absorbed, '#9fc4ff', 13, 26 * def.dir);
+          if (e.amount > 0) this.float(def, e.crit ? e.amount + '!' : String(e.amount), e.crit ? '#ffd34d' : '#ff7a66', e.crit ? 24 : 17);
+          if (e.absorbed) this.float(def, 'SHIELD ' + e.absorbed, '#9fc4ff', 12, 26 * def.dir);
+          if (e.counter) this.float(att, 'COUNTER', '#9fe3ff', 12);
           break;
-        case 'dodge':
-          this.swing(att); this.float(def, 'DODGE', '#cfe8ff', 15);
-          this.tweens.add({ targets: def, dy: -18, duration: 110 / this.speed, yoyo: true });
+        case 'cast': {
+          if (!att) break;
+          this.float(att, e.name.toUpperCase(), '#c9b8ff', 15);
+          const ring = this.track(this.add.image(att.cont.x, att.cont.y, 'fx_ring').setTint(0xa18cff).setScale(0.3).setAlpha(0.9));
+          this.tweens.add({ targets: ring, scale: 0.9, alpha: 0, duration: 400 / this.speed, onComplete: () => ring.destroy() });
           break;
-        case 'hidden': this.swing(att); this.float(def, 'MISS', '#b9a7d9', 14); break;
-        case 'parry': this.swing(att); this.float(def, 'PARRY', '#9fe3ff', 16); break;
-        case 'heal': this.float(att, '+' + e.amount, '#7be07b', 14, -20 * att.dir); break;
-        case 'bleed': this.float(def, String(e.amount), '#d0473a', 13, 18); break;
-        case 'stun': this.float(def, 'STUNNED', '#ffd34d', 14); break;
-        case 'stealth_on': this.tweens.add({ targets: att.cont, alpha: 0.22, duration: 160 / this.speed }); break;
-        case 'stealth_off': this.tweens.add({ targets: att.cont, alpha: 1, duration: 160 / this.speed }); break;
+        }
+        case 'spellhit': {
+          if (!def) break;
+          const ring = this.track(this.add.image(def.cont.x, def.cont.y, 'fx_ring').setTint(0xff8a4c).setScale(0.2));
+          this.tweens.add({ targets: ring, scale: 0.8, alpha: 0, duration: 380 / this.speed, onComplete: () => ring.destroy() });
+          this.flash(def);
+          this.float(def, String(e.amount), '#c9b8ff', 20);
+          break;
+        }
+        case 'dodge': if (att && def) { if (att.m.range === 'melee') this.swing(att); this.float(def, 'DODGE', '#cfe8ff', 14); this.tweens.add({ targets: def, dy: -16, duration: 110 / this.speed, yoyo: true }); } break;
+        case 'hidden': if (att && def) { this.swing(att); this.float(def, 'MISS', '#b9a7d9', 13); } break;
+        case 'parry': if (def) this.float(def, 'PARRY', '#9fe3ff', 15); break;
+        case 'heal': if (att) this.float(att, '+' + e.amount, '#7be07b', 14, -20 * att.dir); break;
+        case 'bleed': if (def) this.float(def, String(e.amount), '#d0473a', 12, 18); break;
+        case 'stun': if (def) this.float(def, 'STUNNED', '#ffd34d', 13); break;
+        case 'double': if (att) this.float(att, 'DOUBLE SHOT', '#8fcf78', 12); break;
+        case 'steal': if (att) this.float(att, `-${e.amount}g`, '#f2c14a', 13); break;
+        case 'escape':
+          if (att) {
+            att.gone = true; this.float(att, `ESCAPED +${e.amount}g`, '#f2c14a', 13);
+            this.tweens.add({ targets: [att.cont], x: W + 60, alpha: 0, duration: 600 / this.speed });
+          }
+          break;
+        case 'revive': if (att) { this.float(att, 'REBORN', '#ff8a4c', 20); att.cont.setAlpha(1); att.dead = false; } break;
+        case 'stealth_on': if (att) this.tweens.add({ targets: att.cont, alpha: 0.22, duration: 160 / this.speed }); break;
+        case 'stealth_off': if (att) this.tweens.add({ targets: att.cont, alpha: 1, duration: 160 / this.speed }); break;
         case 'death':
-          def.dead = true;
-          def.body.setTint(0x555555);
-          this.tweens.add({ targets: def.cont, alpha: 0.45, angle: def.dir * 80, duration: 500 / this.speed });
+          if (def) { def.dead = true; def.body.setTint(0x555555); this.tweens.add({ targets: def.cont, alpha: 0.35, angle: def.dir * 80, duration: 450 / this.speed }); }
           break;
-        case 'timeout':
-          this.float(F.a, 'TIME', '#ece3d6', 16); break;
+        case 'timeout': { const a = F.a; if (a) this.float(a, 'TIME', '#ece3d6', 16); break; }
       }
       if (this.cfg.onEvent) this.cfg.onEvent(e);
     }
 
     drawBar(f) {
-      const w = 70, h = 7, x = f.cont.x - w / 2, y = f.y - 44 * f.sc;
-      const pct = Math.max(0, f.hp / f.maxHp);
+      if (f.gone) { f.bar.clear(); f.name.setVisible(false); return; }
+      const w = 64, h = 6, x = f.cont.x - w / 2, y = f.y - 42 * f.sc;
       f.bar.clear();
+      if (f.dead) { f.name.setPosition(f.cont.x, y - 10).setAlpha(0.4); return; }
       f.bar.fillStyle(0x0d0b09, 0.85).fillRect(x - 1, y - 1, w + 2, h + 2);
-      f.bar.fillStyle(f.side === 'a' ? 0x6cc35f : 0xc4473a).fillRect(x, y, w * pct, h);
-      if (f.maxShield > 0 && f.shield > 0) f.bar.fillStyle(0x9fc4ff).fillRect(x, y + h + 1, w * (f.shield / f.maxShield), 3);
-      f.name.setPosition(f.cont.x, y - 11);
+      f.bar.fillStyle(f.side === 'a' ? 0x6cc35f : 0xc4473a).fillRect(x, y, w * Math.max(0, f.hp / f.maxHp), h);
+      let yy = y + h + 1;
+      if (f.shield > 0) { f.bar.fillStyle(0x9fc4ff).fillRect(x, yy, w * Math.min(1, f.shield / f.maxShield), 3); yy += 4; }
+      if (f.hasMana) { f.bar.fillStyle(0x0d0b09, 0.85).fillRect(x - 1, yy - 1, w + 2, 5); f.bar.fillStyle(0x6f7dff).fillRect(x, yy, w * Math.min(1, f.mana / 100), 3); }
+      f.name.setPosition(f.cont.x, y - 10);
     }
 
     update(_, delta) {
       if (!this.cfg || this.finished) return;
-      const fast = this.t >= G.CONFIG.combat.fastAfter;
-      if (fast && this.speed !== 2) { this.speed = 2; if (G.Arena.onSpeed) G.Arena.onSpeed(2); }
-      // Use the wall clock, not Phaser's smoothed delta, so slow frames don't stretch the fight
+      if (this.t >= G.CONFIG.combat.fastAfter && this.speed !== 2) { this.speed = 2; if (G.Arena.onSpeed) G.Arena.onSpeed(2); }
       const nowMs = performance.now();
       const d = this.lastNow ? Math.min(250, nowMs - this.lastNow) : delta;
       this.lastNow = nowMs;
       this.t += (d / 1000) * this.speed;
       const E = this.cfg.result.events;
-      const eng = G.CONFIG.combat.engageDelay;
-      const p = Math.min(1, this.t / eng), ease = 1 - Math.pow(1 - p, 2);
-      for (const f of [this.F.a, this.F.b]) {
-        f.cont.x = f.startX + (f.homeX - f.startX) * ease + f.lunge * f.dir;
-        f.cont.y = f.y + f.dy;
-      }
       while (this.idx < E.length && E[this.idx].t <= this.t) { this.apply(E[this.idx]); this.idx++; }
-      this.drawBar(this.F.a); this.drawBar(this.F.b);
+      for (const id in this.F) { const f = this.F[id]; this.placeFighter(f); this.drawBar(f); }
       const end = E.length ? E[E.length - 1].t : 0;
       if (this.idx >= E.length && this.t > end + 1.1) this.finish();
     }
@@ -164,14 +213,11 @@ window.G = window.G || {};
     finish() {
       if (this.finished) return;
       this.finished = true;
-      const cb = this.cfg.onDone;
-      if (cb) cb();
+      if (this.cfg.onDone) this.cfg.onDone();
     }
-
   }
 
   // A fresh Phaser game is built for every fight and thrown away after it.
-  // (Reusing one game across screens left its canvas sized 0x0 after the first fight.)
   G.Arena = {
     game: null, _scene: null, _pending: null, onSpeed: null,
     start(el, cfg) {

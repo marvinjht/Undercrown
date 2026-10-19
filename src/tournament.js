@@ -13,7 +13,11 @@ window.G = window.G || {};
   function create(heroes, rng) {
     const entrants = heroes.map(h => {
       const st = G.Stats.compute(h);
-      const entryHp = Math.min(st.maxHp, h.hp + 2 * Math.round(st.maxHp * G.CONFIG.arenaHealPct / 2));
+      let heal = 2 * Math.round(st.maxHp * G.CONFIG.arenaHealPct / 2);
+      if (h.gem === 'gaia') heal = 0;
+      else if (h.gem === 'stone') heal = 1;
+      else if (h.gem === 'vulture') heal = 2 * Math.round(heal / 4);
+      const entryHp = Math.min(st.maxHp, h.hp + heal);
       return { hero: h, before: h.hp, heal: entryHp - h.hp, entryHp, maxHp: st.maxHp, power: G.Stats.power(st), place: null };
     });
     entrants.sort((a, b) => b.entryHp - a.entryHp || b.power - a.power);
@@ -42,12 +46,18 @@ window.G = window.G || {};
   }
 
   function simulate(T, m) {
-    return G.simulateFight(G.Stats.compute(m.a.hero), G.Stats.compute(m.b.hero),
-      { seed: T.rng.int(0, 1e9), aHp: m.a.entryHp, bHp: m.b.entryHp });
+    const hb = m.b.hero;
+    return G.simulateFight(G.Stats.compute(m.a.hero),
+      [{ s: G.Stats.compute(hb), name: hb.isPlayer ? 'You' : hb.name, hp: m.b.entryHp, sprite: 'hero', tint: hb.tint,
+         revive: hb.gem === 'phoenix' && !hb.phoenixUsed }],
+      { seed: T.rng.int(0, 1e9), aHp: m.a.entryHp, aName: m.a.hero.isPlayer ? 'You' : m.a.hero.name,
+        aRevive: m.a.hero.gem === 'phoenix' && !m.a.hero.phoenixUsed });
   }
 
   function resolve(T, m, result) {
     m.result = result;
+    if (result.revived.a) m.a.hero.phoenixUsed = true;
+    if (result.revived.b) m.b.hero.phoenixUsed = true;
     m.winner = result.winner === 'a' ? m.a : m.b;
     const loser = m.winner === m.a ? m.b : m.a;
     const round = currentRound(T);
