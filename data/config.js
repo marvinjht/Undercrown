@@ -27,6 +27,7 @@ G.CONFIG = {
     turnSeconds: 20,    // each player's turn to pick
     lastCall: 10,       // after the last pick, time left for merchant purchases
     aiPickDelay: 1.4,
+    passGold: 30,       // gold for passing on the free table (also what happens if your turn runs out)
     extraTableItems: 2,                   // free table = players + this
     potionCost: 30, potionsPerShop: 1,
     gearCount: 4, restockCost: 10,

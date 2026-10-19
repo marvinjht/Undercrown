@@ -27,14 +27,13 @@ window.G = window.G || {};
     }
     const active = [];
     for (const c of G.CLASS_ORDER) {
-      if ((counts[c] || 0) >= 5) active.push({ cls: c, tier: 'five' });
-      else if ((counts[c] || 0) >= 3) active.push({ cls: c, tier: 'three' });
+      if ((counts[c] || 0) >= 4) active.push({ cls: c, tier: 'four' });
+      else if ((counts[c] || 0) >= 2) active.push({ cls: c, tier: 'two' });
     }
     let hybrid = null;
-    const three = G.CLASS_ORDER.find(c => counts[c] === 3), two = G.CLASS_ORDER.find(c => counts[c] === 2);
-    if (three && two) hybrid = G.hybridKey(three, two);
+    if (active.length === 2) hybrid = G.hybridKey(active[0].cls, active[1].cls);
     // Look: the class with 3+ pieces; trim from the hybrid partner
-    const main = active.length ? active[0].cls : null;
+    const main = active.length ? active.slice().sort((a, b) => (counts[b.cls] || 0) - (counts[a.cls] || 0))[0].cls : null;
     const trim = hybrid ? (hybrid.split('+').find(c => c !== main) || null) : null;
     return { counts, active, hybrid, main, trim, maxTier };
   }

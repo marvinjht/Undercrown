@@ -329,7 +329,8 @@ window.G = window.G || {};
   // Shop room without other players (balance tool / fast-forward after the player dies)
   function soloShop(hero, room, rng) {
     const table = G.Loot.shopTable(room, 4, rng);
-    const free = autoLoot(hero, table.slice(rng.int(0, 2)), room, false);
+    let free = autoLoot(hero, table.slice(rng.int(0, 2)), room, false);
+    if (free === 'took nothing') { hero.gold += CFG().shop.passGold; free = `passed for ${CFG().shop.passGold} gold`; }
     return `${free} at the shop, ${aiMerchant(hero, room, rng)}`;
   }
 

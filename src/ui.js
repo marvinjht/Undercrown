@@ -53,7 +53,7 @@ window.G = window.G || {};
       }
     }
     const W = item.slot === 'weapon' ? G.WEAPONS[item.weaponType] : null;
-    const set = item.set ? `<p class="tt-extra">${G.CLASSES[item.set].name} set piece. 3 pieces: ${esc(G.CLASSES[item.set].three.desc)}.</p>` : '';
+    const set = item.set ? `<p class="tt-extra">${G.CLASSES[item.set].name} set piece. 2 pieces: ${esc(G.CLASSES[item.set].two.desc)}.</p>` : '';
     return `<div class="tt-title r-${item.rarity}">${esc(item.name)}</div>
       <div class="tt-sub">${R.name} ${W ? W.name + ' · ' + RANGE_NAMES[W.range] + ' · ' + (W.type === 'magic' ? 'Magic' : 'Physical') : G.SLOT_NAMES[item.slot]} · Tier ${item.tier}</div>
       <ul class="tt-stats">${lines}</ul>
@@ -113,14 +113,14 @@ window.G = window.G || {};
       const n = st.counts[c] || 0;
       const C = G.CLASSES[c];
       const act = st.active.find(a => a.cls === c);
-      return `<li class="${act ? 'on' : n ? '' : 'off'}" ${tip(`<div class="tt-title">${C.name} set</div><p><b>3 pieces:</b> ${esc(C.three.desc)}.</p><p><b>5 pieces:</b> ${esc(C.five.desc)}.</p>`)}>
+      return `<li class="${act ? 'on' : n ? '' : 'off'}" ${tip(`<div class="tt-title">${C.name} set</div><p><b>2 pieces:</b> ${esc(C.two.desc)}.</p><p><b>4 pieces:</b> ${esc(C.four.desc)}.</p><p class="tt-extra">A single piece gives nothing.</p>`)}>
         <span class="set-name" style="--set:${C.color}">${C.name}</span>
-        <span class="pips5">${[0, 1, 2, 3, 4].map(i => `<i class="${i < n ? 'f' : ''} ${i === 2 || i === 4 ? 'mark' : ''}"></i>`).join('')}</span>
+        <span class="pips5">${[0, 1, 2, 3, 4].map(i => `<i class="${i < n ? 'f' : ''} ${i === 1 || i === 3 ? 'mark' : ''}"></i>`).join('')}</span>
         <b>${n}/5</b></li>`;
     }).join('');
     const hy = st.hybrid ? G.HYBRIDS[st.hybrid] : null;
     const hyRow = hy ? `<p class="hybrid on" ${tip(`<div class="tt-title">${hy.name}</div><p>${esc(hy.desc)}.</p>`)}>${esc(hy.name)}: ${esc(hy.desc)}</p>`
-      : `<p class="hybrid" ${tip('<div class="tt-title">Hybrid archetypes</div><p>Wear 3 pieces of one class and 2 of another to unlock a hybrid bonus, like Battle Mage (Warrior + Mage).</p>')}>3 of one class + 2 of another unlocks a hybrid.</p>`;
+      : `<p class="hybrid" ${tip('<div class="tt-title">Hybrid archetypes</div><p>Wear 2 or more pieces of two different classes to unlock a hybrid bonus, like Battle Mage (Warrior + Mage).</p>')}>2+ pieces of two classes unlocks a hybrid.</p>`;
     return `<section class="panel"><h3>Sets</h3><ul class="sets">${rows}</ul>${hyRow}</section>`;
   }
 
@@ -185,7 +185,7 @@ window.G = window.G || {};
     const s = G.Stats.compute(r);
     const st = G.Stats.sets(r);
     const gear = G.SLOTS.map(slot => r.gear[slot] ? `<li class="r-${r.gear[slot].rarity}">${esc(r.gear[slot].name)}${r.gear[slot].set ? ' (' + G.CLASSES[r.gear[slot].set].name + ')' : ''}</li>` : '').join('');
-    const sets = st.active.map(a => `${G.CLASSES[a.cls].name} ${a.tier === 'five' ? 5 : 3}`).concat(st.hybrid ? [G.HYBRIDS[st.hybrid].name] : []).join(', ');
+    const sets = st.active.map(a => `${G.CLASSES[a.cls].name} ${a.tier === 'four' ? 4 : 2}`).concat(st.hybrid ? [G.HYBRIDS[st.hybrid].name] : []).join(', ');
     return `<div class="tt-title">${esc(r.name)}</div>
       <div class="tt-sub">${r.spec ? G.SPECS[r.spec].name : 'No spec yet'}${r.gem ? ' · ' + G.GEMS[r.gem].name : ''} · Power ${Math.round(G.Stats.power(s))} · ${r.gold} gold</div>
       <ul class="tt-stats">${gear}</ul>
@@ -325,6 +325,7 @@ window.G = window.G || {};
     return `${review}<h3 class="sub">Pick order</h3>
       <ol class="pick-order">${order}</ol>
       <h3 class="sub">Free table ${myNow ? '<span class="chip">Your turn</span>' : ''}</h3>
+      ${myNow ? `<div class="pass-row"><button class="ghost" data-act="shop-pass">Pass and take ${CFG().shop.passGold} gold</button><small>If your timer runs out, you pass.</small></div>` : ''}
       <div class="cards">${table || '<p class="hint">The table is empty.</p>'}</div>`;
   }
 
@@ -353,7 +354,7 @@ window.G = window.G || {};
     const allPicked = sh.turn >= sh.order.length;
     return `<section class="screen shop">
       <h2>Shared shop</h2>
-      <p class="lede">Free picks go weakest first: lowest health picks first. Everyone gets ${S.reviewSeconds} seconds to look, then ${S.turnSeconds} seconds per turn. The merchant is open the whole round${sh.lastCall ? ' — last call!' : '.'}</p>
+      <p class="lede">Free picks go weakest first: lowest health picks first. Everyone gets ${S.reviewSeconds} seconds to look, then ${S.turnSeconds} seconds per turn. Pass to take ${S.passGold} gold instead. The merchant is open the whole round${sh.lastCall ? ' — last call!' : '.'}</p>
       ${sh.msg ? `<p class="notice">${esc(sh.msg)}</p>` : ''}
       <div id="shop-picks">${shopPicks(st)}</div>
       <h3 class="sub">Merchant</h3>
@@ -486,7 +487,7 @@ window.G = window.G || {};
         <p>Six warriors. Thirty rooms each. Your health never refills on its own. Build an archetype from armor sets, pick a heart gem, and the survivors fight for the crown.</p></header>
       <ul class="rules">
         <li><b>The Armory</b>Room 1: pick one of three random weapons. Swords, bows, wands, maces and more.</li>
-        <li><b>Class sets</b>Uncommon armor carries a class. 3 pieces for a bonus, 5 for the full set, 3 + 2 for a hybrid like Battle Mage.</li>
+        <li><b>Class sets</b>Uncommon armor carries a class. 2 pieces for a bonus, 4 for the full set, 2 + 2 or 3 + 2 for a hybrid like Battle Mage.</li>
         <li><b>Build moments</b>Specialization after room ${CFG().specRoom}, heart gem after room ${CFG().gemRoom}.</li>
         <li><b>Shared shop</b>Rooms ${CFG().shopRooms.join(', ')}: free picks weakest first, plus the merchant.</li>
         <li><b>Poison</b>Ticks every room. Only Antidotes and Purifying Springs clear it.</li>
@@ -594,6 +595,7 @@ window.G = window.G || {};
       case 'shop-pick': Gm.playerShopPick(el.dataset.id); break;
       case 'shop-buy': Gm.shopBuy(el.dataset.kind, el.dataset.id); break;
       case 'shop-ready': Gm.shopReady(); break;
+      case 'shop-pass': Gm.playerShopPass(); break;
       case 'ending': Gm.seeEnding(); break;
       case 'title': Gm.toTitle(); break;
     }

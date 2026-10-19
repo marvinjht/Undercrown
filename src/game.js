@@ -299,19 +299,18 @@ window.G = window.G || {};
     shopPick(hero, item) {
       const s = this.s, sh = s.shop;
       sh.table = sh.table.filter(x => x !== item);
-      if (item) {
-        if (item.kind === 'consumable' && G.Hero.bagFull(hero)) hero.gold += 10;
-        else G.AI.take(hero, item);
-      }
-      sh.picks[hero.id] = item ? item.name : 'nothing';
-      if (!hero.isPlayer) hero.lastText = `picked ${item ? item.name : 'nothing'}`;
+      const pass = CFG().shop.passGold;
+      if (item) G.AI.take(hero, item);
+      else hero.gold += pass;
+      sh.picks[hero.id] = item ? item.name : `passed (+${pass} gold)`;
+      if (!hero.isPlayer) hero.lastText = item ? `picked ${item.name}` : `passed for ${pass} gold`;
       sh.turn++;
       sh.turnStart = now();
     },
     autoShopPick(hero) {
       const sh = this.s.shop;
       const up = G.AI.bestUpgrade(hero, sh.table);
-      const pick = up || sh.table.find(it => it.kind === 'consumable' && !G.Hero.bagFull(hero)) || sh.table[0] || null;
+      const pick = up || sh.table.find(it => it.kind === 'consumable' && !G.Hero.bagFull(hero)) || null;
       this.shopPick(hero, pick);
     },
     shopTick() {
@@ -323,8 +322,8 @@ window.G = window.G || {};
       const waited = (now() - sh.turnStart) / 1000;
       if (!h.isPlayer && waited >= CFG().shop.aiPickDelay) { this.autoShopPick(h); this.shopAfterPick(); }
       else if (h.isPlayer && waited >= CFG().shop.turnSeconds) {
-        this.autoShopPick(h);
-        sh.msg = 'Your turn ran out, so you took your best upgrade.';
+        this.shopPick(h, null);
+        sh.msg = `Your turn ran out, so you passed and got ${CFG().shop.passGold} gold.`;
         this.shopAfterPick(true);
       }
     },
@@ -347,6 +346,13 @@ window.G = window.G || {};
       sh.msg = `You took ${it.name}.`;
       this.shopAfterPick(true);
     },
+    playerShopPass() {
+      const h = this.shopTurnHero();
+      if (!h || !h.isPlayer || Date.now() < this.s.shop.reviewUntil) return;
+      this.shopPick(h, null);
+      this.s.shop.msg = `You passed and got ${CFG().shop.passGold} gold.`;
+      this.shopAfterPick(true);
+    },
     shopReady() {
       const sh = this.s.shop;
       sh.ready = true;
@@ -355,7 +361,7 @@ window.G = window.G || {};
     shopTimeUp() {
       const s = this.s, sh = s.shop;
       if (sh.lastCall) { this.endShop(); return; }
-      while (sh.turn < sh.order.length) this.autoShopPick(this.shopTurnHero());
+      while (sh.turn < sh.order.length) { const h = this.shopTurnHero(); if (h.isPlayer) this.shopPick(h, null); else this.autoShopPick(h); }
       sh.lastCall = true;
       this.startTimer(CFG().shop.lastCall);
       render();
