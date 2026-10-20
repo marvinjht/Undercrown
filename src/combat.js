@@ -124,7 +124,11 @@ window.G = window.G || {};
         if (def.shield <= 0 && def.s.fx && def.s.fx.sentinelBurst && !def.sentinelUsed) { def.sentinelUsed = true; def.sentinelPending = true; }
       }
       // Heart of Stone: each attacker's hits to health deal 1 more than that attacker's last, up to the cap
-      if (amt > 0 && def.s.gem === 'stone') { const k = att ? att.id : '_'; def.crack[k] = Math.min(G.CONFIG.stoneCrack, (def.crack[k] || 0) + 1); amt = def.crack[k]; }
+      // (and for the first few seconds of a fight, every hit deals just 1)
+      if (amt > 0 && def.s.gem === 'stone') {
+        if (t < G.CONFIG.stoneGrace) amt = 1;
+        else { const k = att ? att.id : '_'; def.crack[k] = Math.min(G.CONFIG.stoneCrack, (def.crack[k] || 0) + 1); amt = def.crack[k]; }
+      }
       def.hp -= amt;
       // Penitent: damage you take charges your next hit
       if (amt > 0 && def.s.fx && def.s.fx.penitent) def.charge = Math.min(def.s.fx.penitent, def.charge + amt);

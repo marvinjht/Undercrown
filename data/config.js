@@ -2,7 +2,7 @@
 // All stats are flat whole numbers. Chance stats (Crit, Dodge, Stun) mean "out of 100".
 window.G = window.G || {};
 
-G.VERSION = '0.22';   // players in one room must all run the same version
+G.VERSION = '0.23';   // players in one room must all run the same version
 
 G.CONFIG = {
   // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
@@ -27,7 +27,7 @@ G.CONFIG = {
   // Leveling: going from level N to N+1 costs xpBase + N XP
   levels: { max: 20, xpBase: 9, hpPerLevel: 4, specLevel: 5, treeLevels: [10, 15, 20],
     bump: 2 },            // every even level alternates +2 Damage (2, 6, 10...) and +2 Armor (4, 8, 12...)
-  xp: { fight: 12, elite: 24, boss: 45, duelWin: 24, duelLoss: 12, trainer: 18, spoils: 18 },
+  xp: { fight: 12, elite: 24, boss: 45, duelWin: 24, duelLoss: 12, trainer: 15, spoils: 18, tome: 15 },
 
   restHeal: 30,            // campfire (does not clear poison)
   springHeal: 20,          // mystery: healing spring
@@ -38,6 +38,7 @@ G.CONFIG = {
 
   phoenix: { burst: 50, burn: 10, burnSeconds: 5, selfBurn: 1, standUp: 10 },
   stoneHp: 25,
+  stoneGrace: 5,           // Heart of Stone: for this many seconds at the start of a fight, every hit deals 1
   stoneCrack: 3,           // Heart of Stone: each hit deals 1 more than the last, up to this
   gaiaShield: 100,
   vultureHeal: 30,         // Vulture's Heart: heal this much and gain this much max health whenever a rival loses a heart

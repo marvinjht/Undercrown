@@ -730,3 +730,16 @@ table.tour { width: 100%; border-collapse: collapse; font-size: 15px; font-varia
 .seats li.open { border-style: dashed; }
 .seats li.open b { color: var(--muted); }
 .linkish { background: none; border: 0; padding: 0; min-height: 0; font: inherit; color: var(--r-gold); text-decoration: underline dotted; cursor: pointer; }
+/* v0.23: live spectating */
+.eye-btn { min-height: 0; width: 24px; height: 22px; padding: 0; display: inline-grid; place-items: center; background: transparent; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); cursor: pointer; }
+.eye-btn .ico { width: 15px; height: 15px; }
+.eye-btn:hover, .eye-btn.on { color: #9fdcff; border-color: #3b5566; background: #1a2630; }
+.watch-bar { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin: 0 auto 12px; max-width: 1180px; background: #16212b; border: 1px solid #3b5566; border-radius: 8px; color: #cfe8ff; }
+.watch-bar .ico { width: 20px; height: 20px; color: #9fdcff; flex: none; }
+.watch-bar span { flex: 1; }
+.watch-bar button { min-height: 38px; }
+.watching { pointer-events: none; }
+.watch-badge { align-self: center; display: flex; align-items: center; gap: 6px; margin: 0 auto 8px; padding: 5px 12px; border-radius: 99px; background: #16212b; border: 1px solid #3b5566; color: #cfe8ff; font-size: 13px; width: fit-content; animation: badgein .3s ease-out; }
+.watch-badge .ico { width: 16px; height: 16px; color: #9fdcff; }
+#watch-badge:empty { display: none; }
+@keyframes badgein { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }

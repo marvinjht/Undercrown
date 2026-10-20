@@ -334,7 +334,7 @@ window.G = window.G || {};
         }
         case 'trainer': {
           const lv = G.Hero.gainXp(p, CFG().xp.trainer);
-          this.completeRoom(`The trainer drills you hard. +${CFG().xp.trainer} XP${lv.length ? `. You reached level ${p.level}!` : '.'}`);
+          this.completeRoom(`You pore over old battle journals. +${CFG().xp.trainer} XP${lv.length ? `. You reached level ${p.level}!` : '.'}`);
           return;
         }
         case 'forge': s.forge = { strengthened: false, affixed: false, msg: null }; s.phase = 'forge'; break;
@@ -664,7 +664,8 @@ window.G = window.G || {};
       // weakest first: lowest health percentage picks first
       const pct = h => h.hp / G.Hero.maxHp(h);
       // fewer hearts pick first, then lower health percentage
-      const order = alive.slice().sort((a, b) => a.hearts - b.hearts || pct(a) - pct(b) || G.Hero.power(a) - G.Hero.power(b));
+      const th = h => (h.spec === 'treasureHunter' ? 0 : 1);   // Treasure Hunters always pick first
+      const order = alive.slice().sort((a, b) => th(a) - th(b) || a.hearts - b.hearts || pct(a) - pct(b) || G.Hero.power(a) - G.Hero.power(b));
       s.roundKind = 'shop';
       s.phase = 'shop';
       s.shop = {

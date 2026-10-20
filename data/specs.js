@@ -33,7 +33,7 @@ G.SPECS = {
   },
   treasureHunter: {
     name: 'Treasure Hunter', role: 'Scavenger',
-    desc: 'Loot rolls as if you were 6 rooms deeper, one extra item to choose from after fights, and +4 gold per fight.',
+    desc: 'Loot rolls as if you were 6 rooms deeper, one extra item to choose from after fights, +4 gold per fight, and you always pick first at Plunder.',
     tip: 'Weaker early, should end with the best gear.',
     affinity: [],
   },
@@ -80,7 +80,7 @@ G.SPEC_TREES = {
           { id: 'scavenger', name: 'Scavenger', fx: { spoils4: 1 }, desc: 'Spoils offer 4 choices instead of 3' }],
     t15: [{ id: 'lucky', name: 'Lucky Find', fx: { luckyGear: 1 }, desc: 'Gear from 1 in 2 normal fights instead of 1 in 3' },
           { id: 'collector', name: 'Collector', fx: { collector: 1 }, desc: 'Class-tagged drops lean toward your main class' }],
-    t20: { id: 'midas', name: 'Midas', fx: { midas: 50 }, desc: '+2 Damage and +8 Health for every 50 gold you hold' },
+    t20: { id: 'midas', name: 'Midas', fx: { midas: 50 }, desc: '+5 Damage and +8 Health for every 50 gold you hold' },
   },
   duelist: {
     t10: [{ id: 'riposte', name: 'Riposte', fx: { counterDmg: 8 }, desc: 'Counters deal +8' },

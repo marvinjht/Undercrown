@@ -25,6 +25,8 @@ window.G = window.G || {};
     wandFocus: P('M4 20l8-8M14 5l1 2 2 1-2 1-1 2-1-2-2-1 2-1zM18 14a3 3 0 1 0 0 6 3 3 0 1 0 0-6'),
     staff: P('M6 21L17 6M17 6a3 3 0 1 0 2-3 3 3 0 0 0-2 3z'),
     potion: P('M10 3h4M10 3v5l-4 7a4 4 0 0 0 4 6h4a4 4 0 0 0 4-6l-4-7V3M8 14h8'),
+    tome: P('M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM5 17a3 3 0 0 1 3-3h11M9 8h6'),
+    eye: P('M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12zM12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 1 0 0-5z'),
     door_fight: P('M4 4l12 12M20 4L8 16M3 15l6 6M21 15l-6 6'),
     door_elite: P('M6 10a6 6 0 1 1 12 0v4l-2 2v3H8v-3l-2-2zM9 11h1M14 11h1M10 19v-2M14 19v-2'),
     door_boss: P('M3 18h18l-2-10-4 4-3-7-3 7-4-4z'),
@@ -58,7 +60,8 @@ window.G = window.G || {};
     const path = G.ASSETS.icons['icon_' + key];
     if (path) return `<img class="ico ${cls}" src="${path}" alt="">`;
     let style = '', k = key;
-    if (key.startsWith('potion_')) { k = 'potion'; style = ` style="color:${POTION_COLORS[key.slice(7)] || 'inherit'}"`; }
+    if (key === 'potion_tome') { k = 'tome'; style = ' style="color:#e9c889"'; }
+    else if (key.startsWith('potion_')) { k = 'potion'; style = ` style="color:${POTION_COLORS[key.slice(7)] || 'inherit'}"`; }
     const body = SVG[k] || P('M12 4a8 8 0 1 0 0 16 8 8 0 1 0 0-16z');
     return `<svg class="ico ${cls}"${style} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
   }

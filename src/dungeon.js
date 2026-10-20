@@ -82,9 +82,9 @@ window.G = window.G || {};
 
   const DOOR_INFO = {
     armory:   { title: 'The Armory', text: () => 'Every warrior starts here. Pick one of three weapons.' },
-    fight:    { title: 'Fight',    text: d => `${monsterName(d.monster, 'fight')}. XP and gold; gear 1 fight in 3.` },
-    elite:    { title: 'Elite',    text: d => `${monsterName(d.monster, 'elite', d.trait)}. ${G.ELITE_TRAITS[d.trait].desc} Always drops gear.` },
-    boss:     { title: 'Boss',     text: d => `${d.monster.name} (${G.ELITE_TRAITS[d.monster.trait].name}). ${G.ELITE_TRAITS[d.monster.trait].desc} Guaranteed rare item.` },
+    fight:    { title: 'Fight',    text: d => `${monsterName(d.monster, 'fight')}. +${CFG().xp.fight} XP and gold; gear 1 fight in 3.` },
+    elite:    { title: 'Elite',    text: d => `${monsterName(d.monster, 'elite', d.trait)}. ${G.ELITE_TRAITS[d.trait].desc} +${CFG().xp.elite} XP. Always drops gear.` },
+    boss:     { title: 'Boss',     text: d => `${d.monster.name} (${G.ELITE_TRAITS[d.monster.trait].name}). ${G.ELITE_TRAITS[d.monster.trait].desc} +${CFG().xp.boss} XP. Guaranteed rare item.` },
     trash:    { title: 'Trash Pile', text: () => 'No fight. A little gold and some junk. Maybe something useful.' },
     vault:    { title: 'Treasure Vault', text: () => 'No fight. Pick 1 of 3 items, one of them rare.' },
     rest:     { title: 'Campfire', text: () => `Recover ${CFG().restHeal} health. Does not clear poison.` },
@@ -94,8 +94,8 @@ window.G = window.G || {};
     shop:     { title: 'Plunder', text: () => 'A shared pile of loot. Free picks for everyone, weakest first.' },
     merchant: { title: 'Merchant', text: () => 'No fight. Spend gold on gear and potions, or sell blood.' },
     forge:    { title: 'Forge',    text: () => `No fight. Strengthen an item (${CFG().forge.upgradeCost} gold) or add a random affix to one (${CFG().forge.affixCost} gold).` },
-    trainer:  { title: 'Trainer',  text: () => `No fight. Gain ${CFG().xp.trainer} XP.` },
-    wager:    { title: 'Wager',    text: d => `${monsterName(d.monster, 'fight')}, tougher than usual. No backing out: bet gold, and win to double it.` },
+    trainer:  { title: 'Study',    text: () => `No fight. Study old battle journals: +${CFG().xp.trainer} XP.` },
+    wager:    { title: 'Wager',    text: d => `${monsterName(d.monster, 'fight')}, tougher than usual. +${CFG().xp.fight} XP. No backing out: bet gold, and win to double it.` },
   };
 
   // What kind of room this is in the repeating 10-room pattern
@@ -269,6 +269,7 @@ window.G = window.G || {};
     hero.bag.splice(i, 1);
     if (c.heal) return `${c.name}: +${G.Hero.heal(hero, c.heal)} health.`;
     if (c.cure) { const n = hero.poison; hero.poison = 0; return `${c.name}: cleared ${n} poison.`; }
+    if (c.xp) { const lv = G.Hero.gainXp(hero, c.xp); return `${c.name}: +${c.xp} XP${lv.length ? `. Level ${hero.level}!` : ''}.`; }
     if (c.buff) { for (const k in c.buff) hero.buffs[k] = (hero.buffs[k] || 0) + c.buff[k]; return `${c.name}: active for your next fight.`; }
     return '';
   }
@@ -279,7 +280,7 @@ window.G = window.G || {};
     while (buffs.length < 3 && ids.length) buffs.push(ids.splice(rng.int(0, ids.length - 1), 1)[0]);
     // Every potion and elixir has its own stock of 1 to 3 per visit
     const P = CFG().shop.stock, cstock = {};
-    for (const id of ['potion', 'antidote', ...buffs]) cstock[id] = rng.int(P[0], P[1]);
+    for (const id of ['potion', 'antidote', 'tome', ...buffs]) cstock[id] = rng.int(P[0], P[1]);
     return { stock: G.Loot.offer(hero, room, 'shop', rng, CFG().shop.gearCount).filter(it => it.kind === 'gear'), buffs, cstock,
       restocks: 0, bought: [], msg: null, freeUsed: false };
   }
@@ -387,6 +388,7 @@ window.G = window.G || {};
       const c = G.CONSUMABLES[it.cid];
       if (c.heal && max - hero.hp >= c.heal * 0.8) useItem(hero, it);
       else if (c.cure && hero.poison >= 3) useItem(hero, it);
+      else if (c.xp) useItem(hero, it);
       else if (c.buff && nextDoor && (nextDoor.type === 'elite' || nextDoor.type === 'boss')) useItem(hero, it);
     }
   }
@@ -462,7 +464,7 @@ window.G = window.G || {};
       case 'trash': { hero.gold += goldFor('trash', hero, rng); return `dug through trash, ${autoLoot(hero, G.Loot.offer(hero, room, 'trash', rng), room, false)}`; }
       case 'vault': return `found a vault, ${autoLoot(hero, G.Loot.offer(hero, room, 'vault', rng), room)}`;
       case 'rest': return `rested for ${G.Hero.heal(hero, CFG().restHeal)} health`;
-      case 'trainer': G.Hero.gainXp(hero, CFG().xp.trainer); return `trained (+${CFG().xp.trainer} XP)`;
+      case 'trainer': G.Hero.gainXp(hero, CFG().xp.trainer); return `studied (+${CFG().xp.trainer} XP)`;
       case 'forge': {
         const F = CFG().forge;
         const it = ['weapon', ...G.SLOTS].map(sl => hero.gear[sl]).find(x => x && x.rarity !== 'legendary');

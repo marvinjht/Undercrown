@@ -9,7 +9,7 @@ G.GEMS = {
   },
   stone: {
     name: 'Heart of Stone', color: '#a8a39a',
-    up: 'Each enemy’s hits on your health deal 1, then 2, then 3 (never more). Every attacker counts up separately.',
+    up: 'For the first 5 seconds of a fight, every hit on your health deals 1. After that, each enemy’s hits deal 1, then 2, then 3 (never more).',
     cost: 'Max Health becomes 25 (gear Health ignored). Every heal restores exactly 1. Shields still take full hits.',
   },
   pure: {

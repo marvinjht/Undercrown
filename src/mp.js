@@ -95,6 +95,7 @@ window.G = window.G || {};
       this._beat = setInterval(() => {
         if (!this.t) return;
         this.send({ t: 'ping', cid: this.cid });
+        if (this.watchers[this.mySlot] && this.watchers[this.mySlot].size) this.sendView(true);
         const n = now();
         if (this.isHost) this.hostCheckDrops(n);
         // Background tabs send less often, so only give up on a host that's been silent a long time
@@ -116,7 +117,12 @@ window.G = window.G || {};
       const H = this.H;
       switch (m.t) {
         case 'hello': if (this.isHost) this.hostHello(m); break;
-        case 'bye': if (this.isHost) this.hostBye(m.cid); break;
+        case 'bye': {
+          const gone = this.players.find(p => p.cid === m.cid);
+          if (gone) for (const k in this.watchers) this.watchers[k].delete(gone.slot);
+          if (this.isHost) this.hostBye(m.cid);
+          break;
+        }
         case 'ping': break;
         case 'version':
           if (m.cid === this.cid && this.status === 'connecting') { this.status = 'error'; this.error = `The host is on version ${m.v} and you're on ${G.VERSION}. Both of you refresh the game page, then try again.`; update(); }
@@ -125,6 +131,8 @@ window.G = window.G || {};
         case 'duelGo': this.onDuelGo(m); break;
         case 'tourUse': if (H) this.hostTourUse(m); else if (m.hero) this.takeSnap(m.slot, m.hero); break;
         case 'fight': this.onFight(m); break;
+        case 'watch': this.onWatch(m); break;
+        case 'view': this.onView(m); break;
         case 'lobby':
           if (this.isHost && m.from !== this.cid) break;
           this.lobby = m.lobby; this.seen[m.lobby.hostCid] = now();
@@ -228,6 +236,7 @@ window.G = window.G || {};
       const H = this.H;
       if (H) { clearInterval(H.plunderTimer); clearTimeout(H.tourTimer); clearTimeout(H.duelTimer); }
       this.H = null; this.players = []; this.heroes = {}; this.mySlot = -1; this.readyInfo = null; this.duelGo = {};
+      this.watching = null; this.watchers = {}; this.views = {}; this.lastFight = {};
       this.lobby = m.lobby;
       this.status = m.lobby.slots.some(s => s && s.cid === this.cid) ? 'lobby' : 'idle';
       G.uidPrefix = '';
@@ -387,7 +396,8 @@ window.G = window.G || {};
       const H = this.H;
       const alive = this.players.map(p => this.heroes[p.slot]).filter(h => h.alive);
       const pct = h => h.hp / G.Hero.maxHp(h);
-      const order = alive.slice().sort((a, b) => a.hearts - b.hearts || pct(a) - pct(b) || G.Hero.power(a) - G.Hero.power(b)).map(h => h.slot);
+      const th = h => (h.spec === 'treasureHunter' ? 0 : 1);   // Treasure Hunters always pick first
+      const order = alive.slice().sort((a, b) => th(a) - th(b) || a.hearts - b.hearts || pct(a) - pct(b) || G.Hero.power(a) - G.Hero.power(b)).map(h => h.slot);
       const S = CFG().shop;
       H.plunder = { room: H.room, table: G.Loot.shopTable(H.room, alive.length + S.extraTableItems, H.rng), order, turn: 0, picks: {},
         reviewEnds: now() + S.reviewSeconds * 1000, turnEnds: 0, seq: 0, last: null, done: false };
@@ -486,12 +496,13 @@ window.G = window.G || {};
       G.Duel.resolve(pair, G.Duel.simulate(pair, H.rng), H.room);
     },
     // Build a duel pair from the wire, with fight-start health
-    duelPair(w) {
-      const A = this.heroes[w.a];
+    duelPair(w, heroes) {
+      heroes = heroes || this.heroes;
+      const A = heroes[w.a];
       const a = { hero: A, hp: A.hp };
       let b;
-      if (w.ghostOf != null) b = G.Tournament.ghostOf(this.heroes[w.ghostOf]);
-      else { const B = this.heroes[w.b]; b = { hero: B, hp: B.hp }; }
+      if (w.ghostOf != null) b = G.Tournament.ghostOf(heroes[w.ghostOf]);
+      else { const B = heroes[w.b]; b = { hero: B, hp: B.hp }; }
       return { a, b, ghost: w.ghostOf != null, seed: w.seed };
     },
     onDuels(m) {
@@ -593,11 +604,12 @@ window.G = window.G || {};
         champion: T.champion ? T.champion.hero.slot : null,
       };
     },
-    tourFromWire(w) {
+    tourFromWire(w, heroes) {
+      heroes = heroes || this.heroes;
       const ent = {};
-      const entrants = w.entrants.map(e => (ent[e.slot] = { hero: this.heroes[e.slot], hp: e.hp, maxHp: e.maxHp, out: e.out, place: e.place, before: e.before, heal: e.heal, power: 0 }));
+      const entrants = w.entrants.map(e => (ent[e.slot] = { hero: heroes[e.slot], hp: e.hp, maxHp: e.maxHp, out: e.out, place: e.place, before: e.before, heal: e.heal, power: 0 }));
       const rounds = w.rounds.map(r => ({ n: r.n, pairs: r.pairs.map(p => {
-        const a = ent[p.a], b = p.ghostOf != null ? G.Tournament.ghostOf(this.heroes[p.ghostOf]) : ent[p.b];
+        const a = ent[p.a], b = p.ghostOf != null ? G.Tournament.ghostOf(heroes[p.ghostOf]) : ent[p.b];
         const m = { a, b, ghost: p.ghostOf != null, seed: p.seed, result: p.result, draw: p.draw, suddenDeath: p.suddenDeath, rageHeal: p.rageHeal, snap: p.snap };
         m.winner = p.winner === 'a' ? a : p.winner === 'b' ? b : null;
         m.lostHearts = (p.lostHearts || []).map(sl => ent[sl]).filter(Boolean);
@@ -616,8 +628,59 @@ window.G = window.G || {};
         if (!h || (this.isHost && e.slot !== this.mySlot)) continue;
         h.hearts = e.hearts; if (e.hearts <= 0) h.alive = false;
       }
+      this.lastTourWire = m.state;
       G.Game.mpTour(this.tourFromWire(m.state), m.phase, m.ms || 0);
     },
+    // ---------- Live spectating ----------
+    // Click the eye next to a player: you see their game as they see it, live, without being able to touch it.
+    // The watched player's game sends its screen state (only while someone watches); fights replay from their inputs.
+    watching: null, watchers: {}, views: {},
+    startWatching(slot) {
+      if (!this.inMatch() || slot === this.mySlot) return this.stopWatching();
+      this.watching = slot;
+      const msg = { t: 'watch', slot: this.mySlot, target: slot };
+      this.isHost ? this.cast(msg) : (this.send(msg), this.onWatch({ ...msg }));
+      update();
+    },
+    stopWatching(silent) {
+      if (this.watching == null) return;
+      this.watching = null;
+      const msg = { t: 'watch', slot: this.mySlot, target: null };
+      if (this.isHost) { this.send(msg); this.onWatch({ ...msg }, silent); } else { this.send(msg); this.onWatch({ ...msg }, silent); }
+      if (!silent) update();
+    },
+    onWatch(m, silent) {
+      for (const k in this.watchers) this.watchers[k].delete(m.slot);
+      if (m.target != null) (this.watchers[m.target] = this.watchers[m.target] || new Set()).add(m.slot);
+      if (m.target === this.mySlot) this.sendView(true);
+      if (silent) return;
+      if (G.UI.watchBadge && document.getElementById('watch-badge')) G.UI.watchBadge(); else if (G.Game.s && G.Game.s.phase !== 'battle') update();
+    },
+    watchedBy() { return [...(this.watchers[this.mySlot] || [])].map(sl => this.player(sl)).filter(Boolean); },
+    // Your screen, for whoever is watching you
+    viewState() {
+      const s = G.Game.s, n = now(), st = {};
+      for (const k of ['phase', 'room', 'roundKind', 'notice', 'bagMsg', 'doors', 'door', 'offer', 'spoils', 'spoilsText', 'armory', 'merchant', 'forge',
+        'mystery', 'wagerBet', 'specOptions', 'treeLevel', 'gemOptions', 'shopMsg', 'tourPhase', 'roundTotal']) if (s[k] !== undefined) st[k] = s[k];
+      st.roundMs = s.roundEnds ? Math.max(0, s.roundEnds - n) : 0;
+      if (s.shop) st.shop = { ...s.shop, reviewMs: s.shop.reviewUntil - n, turnMs: n - s.shop.turnStart };
+      if (s.duel) st.duel = { w: s.duel.w, mirrored: s.duel.mirrored, goSent: s.duel.goSent, pairs: [] };
+      if (s.battle) st.battle = { title: s.battle.title, kind: s.battle.kind, duel: !!s.battle.duel, tour: !!s.battle.tour, done: !!s.battle.done };
+      st.player = heroWire(s.player);
+      return JSON.parse(JSON.stringify(st));
+    },
+    sendView(force) {
+      if (!this.inMatch() || !G.Game.s || !(this.watchers[this.mySlot] && this.watchers[this.mySlot].size)) return;
+      const t = now();
+      if (!force && this._viewAt && t - this._viewAt < 250) { clearTimeout(this._viewTimer); this._viewTimer = setTimeout(() => this.sendView(true), 260); return; }
+      this._viewAt = t;
+      this.send({ t: 'view', slot: this.mySlot, state: this.viewState() });
+    },
+    onView(m) {
+      this.views[m.slot] = { state: m.state, at: now() };
+      if (this.watching === m.slot) update();
+    },
+
     // ---------- Spectating ----------
     // Every fight you play is sent out as its exact inputs; anyone watching you replays it.
     watch: null, lastFight: {},
@@ -630,6 +693,7 @@ window.G = window.G || {};
     onFight(m) {
       this.lastFight[m.slot] = m;
       if (this.watch === m.slot && G.UI.playSpectate) G.UI.playSpectate(m);
+      if (this.watching === m.slot) update();
     },
     sendTourDone() { const msg = { t: 'tourDone', slot: this.mySlot }; if (this.isHost) this.hostTourDone(this.mySlot); else this.send(msg); },
   };

@@ -309,7 +309,7 @@ window.G = window.G || {};
       const rarity = i === 0 ? 'rare' : (rng.int(1, 100) <= 25 ? 'rare' : 'green');
       items.push(generate(rng, { slot, rarity, room, weaponType: slot === 'weapon' ? rng.pick(G.WEAPON_ORDER) : null }));
     }
-    for (let i = 0; i < nCons; i++) items.push(rollConsumable(Math.max(room, 15), rng, ['greater', 'antidote', ...G.BUFF_IDS]));
+    for (let i = 0; i < nCons; i++) items.push(rollConsumable(Math.max(room, 15), rng, ['greater', 'antidote', 'tome', ...G.BUFF_IDS]));
     items.unshift(rollRelic(null, rng));   // every Plunder has one relic
     return items;
   }

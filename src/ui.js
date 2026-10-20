@@ -369,6 +369,13 @@ window.G = window.G || {};
     if (!h || !h.bot) return '';
     return `<span class="bot-tag" ${tip(`<div class="tt-title">Bot</div><p>${h.botWas ? `${esc(h.botWas)} left the match, so a bot is playing their hero.` : 'An empty seat, played by the computer.'}</p>`)}>BOT</span>`;
   }
+  // The eye: watch this player's game live (multiplayer, real players only)
+  function eyeBtn(r) {
+    if (!G.Game.mp || r.bot || r.slot == null || r.slot === G.MP.mySlot || st_isWatchingView()) return '';
+    const on = G.MP.watching === r.slot;
+    return `<button class="eye-btn ${on ? 'on' : ''}" data-act="${on ? 'watch-stop' : 'watch'}" data-slot="${r.slot}" aria-label="${on ? 'Stop watching' : 'Watch'} ${esc(r.name)}" title="${on ? 'Stop watching' : 'Watch their game live'}">${G.Art.icon('eye')}</button>`;
+  }
+  function st_isWatchingView() { return !!(G.Game.s && G.Game.s.watchingView); }
   function rivalsPanel(st) {
     const rows = st.rivals.map(r => {
       const max = G.Hero.maxHp(r);
@@ -380,7 +387,7 @@ window.G = window.G || {};
       }).join('');
       return `<li class="rival ${r.alive ? '' : 'dead'}">
         <span class="dot" style="background:${col}"></span>
-        <div class="rv-main"><div class="rv-top" ${tip(rivalTip(r))}><b>${esc(r.name)}</b>${botTag(r)}<span class="lv">Lv ${r.level}</span>${heartsRow(r.hearts, 'sm')}</div>
+        <div class="rv-main"><div class="rv-top" ${tip(rivalTip(r))}><b>${esc(r.name)}</b>${botTag(r)}${eyeBtn(r)}<span class="lv">Lv ${r.level}</span>${heartsRow(r.hearts, 'sm')}</div>
           <div class="rv-spec">${esc([r.spec ? G.SPECS[r.spec].name : '', tag === 'No set bonus yet' ? '' : tag].filter(Boolean).join(' · '))}</div>
           ${r.alive ? hpBar(r.hp, max, 'thin', 'rv-' + r.id) : `<div class="fell">Out of hearts${r.diedRoom ? ` in room ${r.diedRoom}` : ''}</div>`}
           <div class="rarity-dots">${gear}</div>
@@ -595,7 +602,7 @@ window.G = window.G || {};
     if (!sh) return `<section class="screen shop"><h2>Plunder</h2><p class="lede">The host is laying out the pile. Everyone picks from it, weakest first.</p><p class="waiting">Waiting for every player to arrive…</p></section>`;
     return `<section class="screen shop">
       <h2>Plunder</h2>
-      <p class="lede">Everyone picks from one shared pile, weakest first: fewer hearts pick first, then lower health. Everyone gets ${S.reviewSeconds} seconds to look, then ${S.turnSeconds} seconds per turn. Pass to take ${S.passGold} gold instead.</p>
+      <p class="lede">Everyone picks from one shared pile, weakest first: Treasure Hunters always go first, then fewer hearts, then lower health. Everyone gets ${S.reviewSeconds} seconds to look, then ${S.turnSeconds} seconds per turn. Pass to take ${S.passGold} gold instead.</p>
       ${(sh.msg || st.shopMsg) ? `<p class="notice">${esc(sh.msg || st.shopMsg)}</p>` : ''}
       <div id="shop-picks">${shopPicks(st)}</div></section>`;
   }
@@ -626,6 +633,7 @@ window.G = window.G || {};
       <div class="shop-row">
         ${consRow('potion', S.potionCost, `${m.cstock.potion} in stock.`, m.cstock.potion <= 0)}
         ${consRow('antidote', G.CONSUMABLES.antidote.price, `${m.cstock.antidote} in stock.`, m.cstock.antidote <= 0)}
+        ${m.cstock.tome != null ? consRow('tome', G.CONSUMABLES.tome.price, `${m.cstock.tome} in stock.`, m.cstock.tome <= 0) : ''}
         ${m.buffs.map(id => consRow(id, G.CONSUMABLES[id].price, `${m.cstock[id]} in stock.`, m.cstock[id] <= 0)).join('')}
         <div class="potion card blood-card"><span class="flask blood"></span><div><b>Sell blood</b><small>${bloodNote} for a random ${S.bloodGold[0]} to ${S.bloodGold[1]} gold.</small></div>
           <button data-act="shop-buy" data-kind="blood" ${tooWeak ? 'disabled' : ''}>${tooWeak ? 'Too weak' : 'Bleed for gold'}</button>${pop ? `<span class="gold-pop ${pop.gold >= 35 ? 'big' : ''}">+${pop.gold} gold</span>` : ''}</div>
@@ -862,8 +870,7 @@ window.G = window.G || {};
 
   function deadScreen(st) {
     if (G.Game.mp) return `<section class="screen end"><h2>You're out of hearts</h2>
-      ${spectatePanel(st)}
-      <p class="lede">${esc(st.notice || 'The dungeon took your last heart.')} You can watch the players still in, and you'll see the tournament when it starts.</p>
+      <p class="lede">${esc(st.notice || 'The dungeon took your last heart.')} Click the eye next to any player on the left to watch their game live. You'll see the tournament when it starts.</p>
       <div class="row-actions"><button class="ghost" data-act="mp-leave">Leave the match</button></div></section>`;
     return `<section class="screen end"><h2>You're out of hearts</h2>
       <p class="lede">${esc(st.notice || 'The dungeon took your last heart.')} In a full game you'd be spectating now.</p>
@@ -1002,6 +1009,11 @@ window.G = window.G || {};
   // A light refresh for network updates: never restarts a fight that's playing
   function update() {
     const st = G.Game.s;
+    if (st && G.MP.watching != null && G.MP.views[G.MP.watching]) {
+      const v = G.MP.views[G.MP.watching], f = G.MP.lastFight[G.MP.watching];
+      if (v.state.phase === 'battle' && f && watchFightKey === f.at && document.querySelector('.watching #arena-slot')) return;
+      render(); return;
+    }
     if (st && (st.phase === 'battle' || (specPlaying && document.getElementById('spec-arena')))) {
       const left = document.querySelector('.cols > aside.left');
       if (left) { left.innerHTML = rivalsPanel(st) + youPanel(st); }
@@ -1017,6 +1029,9 @@ window.G = window.G || {};
     hideTip();
     for (const k in tips) delete tips[k];
     const app = $('#app'), st = G.Game.s;
+    // Your own game needs you (a new room, your fight): stop watching
+    if (st && G.MP.watching != null && !['waiting', 'dead', 'duelWait', 'mpEnded', 'tournament'].includes(st.phase)) G.MP.stopWatching(true);
+    if (st && G.Game.mp && G.MP.watching != null && G.MP.views[G.MP.watching]) { renderWatching(app, st); return; }
     if (!st || st.phase !== 'battle') G.Arena.stop();
     if (!st) { app.innerHTML = G.MP.active ? lobbyScreen() : titleScreen(); G.Preview.park(); G.RivalPreview.park(); if (!G.MP.active) window.scrollTo(0, 0); return; }
     if (st.phase === 'battle') bagOpen = -1;
@@ -1026,7 +1041,7 @@ window.G = window.G || {};
       waiting: waitingScreen, duelWait: duelWaitScreen, mpEnded: mpEndedScreen };
     const prevPhase = app.dataset.phase;
     const notice = st.notice && !['dead', 'shop', 'mpEnded'].includes(st.phase) ? `<p class="notice">${esc(st.notice)}</p>` : '';
-    app.innerHTML = `<div class="shell">${topbar(st)}<div class="cols"><aside class="left">${rivalsPanel(st)}${youPanel(st)}</aside><main class="stage">${notice}${screens[st.phase](st)}</main>
+    app.innerHTML = `<div class="shell">${topbar(st)}<div class="cols"><aside class="left">${rivalsPanel(st)}${youPanel(st)}</aside><main class="stage">${watchBadgeHTML()}${notice}${screens[st.phase](st)}</main>
       <aside class="side">${bagPanel(st)}${gearPanel(st.player)}${statsPanel(st.player)}${supplyPanel()}</aside></div></div>`;
     if (st.phase !== prevPhase) window.scrollTo(0, 0);
     app.dataset.phase = st.phase;
@@ -1042,11 +1057,78 @@ window.G = window.G || {};
     const sa = document.getElementById('spec-arena');
     if (sa && sa.dataset.tour) playTourMatch();
     else if (sa && G.MP.watch != null && G.MP.lastFight[G.MP.watch]) playSpectate(G.MP.lastFight[G.MP.watch]);
+    if (G.Game.mp) G.MP.sendView();
+  }
+
+  // ---------- Live spectating: their game, drawn with the same screens, untouchable ----------
+  let watchVst = null, watchFightKey = null;
+  function watchState() {
+    const M = G.MP, v = M.views[M.watching];
+    if (!v) return null;
+    const w = v.state, at = v.at;
+    const p = JSON.parse(JSON.stringify(w.player));
+    p.isPlayer = true;
+    const heroes = { ...M.heroes, [M.watching]: p };
+    const vst = { ...w, player: p, rivals: M.players.filter(x => x.slot !== M.watching).map(x => M.heroes[x.slot]).filter(Boolean), watchingView: true };
+    vst.roundEnds = w.roundMs ? at + w.roundMs : 0;
+    if (w.shop) vst.shop = { ...w.shop, reviewUntil: at + w.shop.reviewMs, turnStart: at - w.shop.turnMs, sent: true };
+    if (w.duel && w.duel.w) vst.duel = { ...w.duel, mine: M.duelPair(w.duel.w, heroes) };
+    if (M.lastTourWire) vst.tour = M.tourFromWire(M.lastTourWire, heroes);
+    if (w.battle) vst.battle = { ...w.battle };
+    return vst;
+  }
+  // Draw with someone else's state in place of yours, then put yours back
+  function asWatched(vst, fn) {
+    const real = G.Game.s, me = real && real.player;
+    G.Game.s = vst; if (me) me.isPlayer = false;
+    try { return fn(); } finally { G.Game.s = real; if (me) me.isPlayer = true; }
+  }
+  function renderWatching(app, st) {
+    const M = G.MP, vst = watchState(), who = M.player(M.watching);
+    watchVst = vst;
+    const screens = { doors: doorsScreen, battle: battleScreen, armory: armoryScreen, reward: rewardScreen, spoils: spoilsScreen, shop: shopScreen,
+      merchant: merchantScreen, forge: forgeScreen, wager: wagerScreen, mystery: mysteryScreen, spec: specScreen, tree: treeScreen, gem: gemScreen,
+      duelIntro: duelIntroScreen, dead: deadScreen, tournament: tournamentScreen, ending: endingScreen,
+      waiting: waitingScreen, duelWait: duelWaitScreen, mpEnded: mpEndedScreen };
+    const inner = asWatched(vst, () => {
+      const notice = vst.notice && !['dead', 'shop', 'mpEnded'].includes(vst.phase) ? `<p class="notice">${esc(vst.notice)}</p>` : '';
+      const scr = screens[vst.phase] ? screens[vst.phase](vst) : '';
+      return `<div class="shell">${topbar(vst)}<div class="cols"><aside class="left">${rivalsPanel(vst)}${youPanel(vst)}</aside><main class="stage">${notice}${scr}</main>
+        <aside class="side">${bagPanel(vst)}${gearPanel(vst.player)}${statsPanel(vst.player)}</aside></div></div>`;
+    });
+    app.innerHTML = `<div class="watch-bar">${G.Art.icon('eye')}<span>Watching <b>${esc(who ? who.name : '?')}</b>, live. You can’t change anything in their game.</span>
+      <button data-act="watch-stop">Back to my game</button></div><div class="watching" inert>${inner}</div>`;
+    app.dataset.phase = 'watching';
+    const pv = app.querySelector('#preview-slot');
+    if (pv) G.Preview.mount(pv, G.visualFor(vst.player)); else G.Preview.park();
+    G.RivalPreview.park();
+    // Their fight: replay it from the inputs their game sent
+    const f = M.lastFight[M.watching], slot = app.querySelector('#arena-slot');
+    if (vst.phase === 'battle' && f && slot) {
+      watchFightKey = f.at;
+      const res = G.simulateFight(...f.args), b = { res, names: f.names }, lines = [];
+      G.Arena.start(slot, { result: res, visual: f.visual, names: f.names, mirror: !!f.mirror,
+        onEvent: e => { const l = logLine(e, b); if (!l) return; lines.push(l); const ol = app.querySelector('#battle-log'); if (ol) ol.innerHTML = lines.slice(-6).map(x => `<li>${esc(x)}</li>`).join(''); } });
+    } else { watchFightKey = null; G.Arena.stop(); }
+  }
+  // Who is watching you: a small eye near the middle of the screen
+  function watchBadgeHTML() {
+    if (!G.Game.mp) return '';
+    const ws = G.MP.watchedBy();
+    return ws.length ? `<div id="watch-badge" class="watch-badge" title="Watching your game">${G.Art.icon('eye')}<span>${esc(ws.map(p => p.name).join(', '))} ${ws.length === 1 ? 'is' : 'are'} watching</span></div>` : '<div id="watch-badge"></div>';
+  }
+  function watchBadge() {
+    const el = document.getElementById('watch-badge');
+    if (el) el.outerHTML = watchBadgeHTML();
   }
 
   // Updates only clocks each tick, never the whole screen (a re-render would cut off a running fight)
   function tickClock() {
     G.Game.tick();
+    if (G.MP.watching != null && watchVst && document.querySelector('.watching')) { asWatched(watchVst, tickClockBody); return; }
+    tickClockBody();
+  }
+  function tickClockBody() {
     const left = G.Game.timeLeft();
     const n = document.getElementById('clock-num'); if (n) n.textContent = timerText();
     const b = document.getElementById('clock-bar'); if (b) b.style.width = timerPct() + '%';
@@ -1153,6 +1235,8 @@ window.G = window.G || {};
       case 'mp-rematch': G.MP.hostRematch(); break;
       case 'spectate': G.MP.watch = +el.dataset.slot; render(); break;
       case 'tour-watch': G.MP.tourWatch = +el.dataset.i; render(); break;
+      case 'watch': G.MP.startWatching(+el.dataset.slot); break;
+      case 'watch-stop': G.MP.stopWatching(); render(); break;
       case 'mp-leave': G.MP.leave(); Gm.s = null; render(); break;
       case 'mp-copy': { const l = el.dataset.link; try { navigator.clipboard.writeText(l); toast(el, 'Link copied'); } catch (e) { toast(el, l); } break; }
       case 'door': Gm.chooseDoor(+el.dataset.i); break;
@@ -1251,5 +1335,5 @@ window.G = window.G || {};
     setInterval(tickClock, 200);
   }
 
-  G.UI = { render, init, refreshShopPicks, update, playSpectate };
+  G.UI = { render, init, refreshShopPicks, update, playSpectate, watchBadge };
 })(window.G);
