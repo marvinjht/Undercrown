@@ -22,6 +22,17 @@ window.G = window.G || {};
 
   // One PvP fight. a and b are { hero, hp } (b may be a ghost spec instead of a hero).
   // seed: multiplayer passes the host's seed so every screen plays the exact same fight
+  // A player fight's exact inputs, frozen: both sides' stats and health. In multiplayer the host sends this one
+  // copy to everyone, so every screen plays (and settles) the very same fight.
+  function pvpSpec(a, b) {
+    const sa = G.Stats.compute(a.hero, { buffs: true });
+    const bs = b.ghost ? { s: b.s, name: b.name, hp: b.hp, sprite: 'hero', tint: b.tint }
+      : { s: G.Stats.compute(b.hero, { buffs: true }), name: b.hero.name, hp: b.hp, sprite: 'hero', tint: b.hero.tint };
+    return JSON.parse(JSON.stringify({ sa, aHp: a.hp, aName: a.hero.name, b: bs }));
+  }
+  function pvpFrom(spec, seed) {
+    return G.simulateFight(spec.sa, [spec.b], { seed, aHp: spec.aHp, aName: spec.aName, pvp: true, maxTime: CFG().arena.maxTime });
+  }
   function pvp(a, b, rng, seed) {
     // Potions and elixirs drunk before the fight count here too
     const bSpec = b.ghost ? b : { s: G.Stats.compute(b.hero, { buffs: true }), name: b.hero.isPlayer ? 'You' : b.hero.name, hp: b.hp, sprite: 'hero', tint: b.hero.tint };
@@ -220,5 +231,5 @@ window.G = window.G || {};
   }
 
   G.Duel = Duel;
-  G.Tournament = { create, nextMatch, simulate, resolve, runAll, currentRound, ghostOf, alive, pvp, strongest };
+  G.Tournament = { create, nextMatch, simulate, resolve, runAll, currentRound, ghostOf, alive, pvp, pvpSpec, pvpFrom, strongest };
 })(window.G);

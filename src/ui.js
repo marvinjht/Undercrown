@@ -336,7 +336,22 @@ window.G = window.G || {};
       <p class="hint bag-hint">New gear goes straight onto an empty slot; anything else lands here. To swap gear in, click it and hold Equip (the old piece sells automatically), or sell it for gold.</p>
       <div class="bag">${slots.join('')}</div>
       ${buffs.length ? `<p class="buffs">Next fight: ${buffs.join(', ')}</p>` : ''}
-      ${st.bagMsg ? `<p class="bag-msg">${esc(st.bagMsg)}</p>` : ''}</section>`;
+      ${st.bagMsg ? `<p class="bag-msg">${esc(st.bagMsg)}</p>` : ''}${dyePicker(st)}</section>`;
+  }
+  // Turncoat's Dye: pick a piece, then its new class
+  function dyePicker(st) {
+    const d = st.dye;
+    if (!d || st.watchingView || !st.player.bag.some(x => x.id === d.id)) return '';
+    if (!d.item) {
+      const list = G.Game.dyeTargets();
+      return `<div class="dye-pick"><b>Re-tag which piece?</b>${list.length ? list.map(it => `<button class="ghost" data-act="dye-item" data-id="${it.id}"><i class="set-dot" style="--set:${G.CLASSES[it.set].color}"></i>${esc(it.name)} <small>${G.CLASSES[it.set].name}</small></button>`).join('')
+        : '<p class="hint">None of your gear has a class tag yet.</p>'}<button class="ghost" data-act="dye-cancel">Cancel</button></div>`;
+    }
+    const it = G.Game.dyeTargets().find(x => x.id === d.item);
+    return `<div class="dye-pick"><b>${esc(it ? it.name : '')}: new class?</b>${G.CLASS_ORDER.filter(c => !it || c !== it.set).map(c => {
+      const left = G.Supply.left(c);
+      return `<button class="ghost" data-act="dye-class" data-cls="${c}" ${left > 0 ? '' : 'disabled'} style="--set:${G.CLASSES[c].color}"><i class="set-dot" style="--set:${G.CLASSES[c].color}"></i>${G.CLASSES[c].name} <small>${left} left</small></button>`;
+    }).join('')}<button class="ghost" data-act="dye-cancel">Cancel</button></div>`;
   }
 
   function specChip(hero) {
@@ -371,8 +386,7 @@ window.G = window.G || {};
   }
   // The eye: watch this player's game live (multiplayer, real players only)
   function eyeBtn(r) {
-    if (!G.Game.mp || r.bot || !r.alive || r.slot == null || r.slot === G.MP.mySlot || st_isWatchingView()) return '';
-    if (G.Game.s && G.Game.s.phase === 'battle') return '';   // your own fight first
+    if (!G.Game.mp || !G.MP.inMatch() || r.bot || !r.alive || r.slot == null || r.slot === G.MP.mySlot || st_isWatchingView()) return '';
     const on = G.MP.watching === r.slot;
     return `<button class="eye-btn ${on ? 'on' : ''}" data-act="${on ? 'watch-stop' : 'watch'}" data-slot="${r.slot}" aria-label="${on ? 'Stop watching' : 'Watch'} ${esc(r.name)}" title="${on ? 'Stop watching' : 'Watch their game live'}">${G.Art.icon('eye')}</button>`;
   }
@@ -620,7 +634,8 @@ window.G = window.G || {};
     const sh = st.shop, S = CFG().shop;
     if (!sh) return `<section class="screen shop"><h2>Plunder</h2><p class="lede">The host is laying out the pile. Everyone picks from it, weakest first.</p><p class="waiting">Waiting for every player to arrive…</p></section>`;
     return `<section class="screen shop">
-      <h2>Plunder</h2>
+      <h2>${sh.tour ? 'Tournament Plunder' : 'Plunder'}</h2>
+      ${sh.tour ? '<p class="lede">A pile between rounds for everyone still in, a chance to change your build. Your tournament health stays as it is; potions you take can be drunk in the break.</p>' : ''}
       <p class="lede">Everyone picks from one shared pile, weakest first: Treasure Hunters always go first, then fewer hearts, then lower health. Everyone gets ${S.reviewSeconds} seconds to look, then ${S.turnSeconds} seconds per turn. Pass to take ${S.passGold} gold instead.</p>
       ${(sh.msg || st.shopMsg) ? `<p class="notice">${esc(sh.msg || st.shopMsg)}</p>` : ''}
       <div id="shop-picks">${shopPicks(st)}</div></section>`;
@@ -788,9 +803,8 @@ window.G = window.G || {};
       <p class="lede">Everyone still in is paired up. ${opp.ghost ? `You're the odd one out, so you face a ghost: a half-strength copy of ${esc(opp.of.name)}. Losing to it costs no heart.` : `You face <b>${esc(opp.hero.name)}</b>. The loser loses a heart.`} You fight at your current health. The winner's health goes back to what it was; the loser comes back at full. Past one minute, both lose a heart.</p>
       ${others ? `<div class="round"><h4>Other duels</h4><ul>${others}</ul></div>` : ''}
       <p class="hint">You can drink potions and elixirs now, before the fight. Not once it starts.</p>
-      ${d.goSent ? `<p class="waiting">Waiting for ${esc(opp.hero ? opp.hero.name : 'your opponent')} to go in…</p>`
-        : `<div class="row-actions"><button class="enter" data-act="duel-go">Fight</button></div>
-      <p class="waiting">The fight starts in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p>`}</section>`;
+      ${d.goSent ? `<p class="waiting">Locked in. The fight is starting…</p>`
+        : `<p class="waiting">The fight starts for both of you in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p>`}</section>`;
   }
 
   // Your next tournament opponent (null when you're not fighting next)
@@ -825,16 +839,24 @@ window.G = window.G || {};
       const label = { out: 'Out of hearts', bot: 'Bot (plays instantly)', ready: 'Ready', playing: 'Still playing' }[state];
       return `<li class="w-${state}"><b>${esc(p.slot === G.MP.mySlot ? 'You' : p.name)}</b>${p.bot ? botTag(h) : ''}<span>${label}</span></li>`;
     }).join('');
+    // Vote to skip: when everyone but one player is done, the rest can end that player's turn
+    const humans = G.MP.players.filter(p => !p.bot && G.MP.heroes[p.slot] && G.MP.heroes[p.slot].alive);
+    const slow = humans.filter(p => !ready.has(p.slot)), votes = new Set(R && R.room === st.room ? R.votes || [] : []);
+    const needed = humans.length - 1, voted = votes.has(G.MP.mySlot);
+    const skip = G.MP.skipAllowed(st.room) && slow.length === 1 && ready.has(G.MP.mySlot) && !(R && R.skipped)
+      ? `<div class="skip-vote"><span>Waiting on <b>${esc(slow[0].name)}</b>. Everyone else can vote to skip the rest of their turn (${votes.size}/${needed}).</span>
+        <button class="${voted ? 'ghost' : ''}" data-act="skip-vote" ${voted ? 'disabled' : ''}>${voted ? 'You voted' : 'Vote to skip'}</button></div>`
+      : R && R.skipped ? '<p class="hint">Skip vote passed. Their turn is being finished for them.</p>' : '';
     return `<section class="screen"><h2>${st.room >= CFG().rooms ? 'The dungeon is behind you' : `Room ${st.room} done`}</h2>
       <p class="lede">${st.room >= CFG().rooms ? 'The tournament starts once everyone gets through room ' + CFG().rooms + '.' : `Room ${st.room + 1} starts as soon as everyone is ready. You can use bag items and look over your gear while you wait.`}</p>
-      <ul class="wait-list">${rows}</ul>
+      <ul class="wait-list">${rows}</ul>${skip}
       ${characterBlock(st.player)}</section>`;
   }
   function duelWaitScreen() {
     return `<section class="screen"><h2>Duel</h2><p class="lede">Everyone is being paired up for a duel. The loser loses a heart.</p><p class="waiting">Waiting for every player to arrive…</p></section>`;
   }
   function mpEndedScreen(st) {
-    return `<section class="screen end"><h2>Match over</h2><p class="lede">${esc(st.notice || 'The connection to the room was lost.')}</p>
+    return `<section class="screen end"><h2>${/inactivity/.test(st.notice || '') ? 'Removed for inactivity' : 'Match over'}</h2><p class="lede">${esc(st.notice || 'The connection to the room was lost.')}</p>
       <div class="row-actions"><button data-act="title">Back to the title</button></div></section>`;
   }
 
@@ -880,7 +902,7 @@ window.G = window.G || {};
     const m = ms[tourWatchIndex(ms)];
     if (!m || m.seed == null) return;   // seeds arrive when the round's fights start
     const nmA = m.a.hero.isPlayer ? 'You' : m.a.hero.name, nmB = m.ghost ? m.b.name : m.b.hero.isPlayer ? 'You' : m.b.hero.name;
-    G.Tournament.pvp(m.a, m.b, null, m.seed);
+    if (m.spec) G.Tournament.pvpFrom(m.spec, m.seed); else G.Tournament.pvp(m.a, m.b, null, m.seed);
     playSpectate({ args: G._lastArgs, names: { a: nmA, b0: nmB }, title: `${nmA} vs ${nmB}`, slot: -1,
       visual: { a: G.visualFor(m.a.hero), b0: m.ghost ? { ...G.visualFor(m.b.of), ghost: true } : G.visualFor(m.b.hero) } });
   }
@@ -959,12 +981,7 @@ window.G = window.G || {};
     const mine = m && ((m.a.hero && m.a.hero.isPlayer) || (!m.ghost && m.b.hero.isPlayer));
     const opp = tourOpponent(st);
     const meE = T.entrants.find(e => e.hero.isPlayer);
-    if (G.Game.mp && (!meE || meE.out)) {
-      return `<section class="screen"><h2>The Tournament</h2>
-        <p class="lede">You're out, so you're watching. Pick any fight of the round, or click the eye next to a player.</p>
-        ${st.tourPhase === 'fight' ? tourSpectatePanel(st) || '<p class="waiting">Fights in progress…</p>'
-          : `<div class="spectate"><p class="waiting">Next fights start in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p></div>`}</section>`;
-    }
+    if (G.Game.mp && (!meE || meE.out)) return tourWatchScreen(st, T);
     const watchTop = st.tourPhase === 'fight' && G.Game.mp;
     return `<section class="screen"><h2>The Tournament</h2>
       ${watchTop ? `<p class="waiting">Fights in progress…</p>${tourSpectatePanel(st)}` : ''}
@@ -972,6 +989,33 @@ window.G = window.G || {};
       <p class="lede">Last one with hearts wins. Each round everyone is paired up again. Winners keep the health they finish with; losers lose a heart and come back at full health. Fights go to the death; past one minute, both lose a heart.</p>
       ${roundsList(T)}
       ${watchTop ? '' : st.tourPhase === 'fight' ? '<p class="waiting">Fights in progress…</p>' : `<p class="waiting">${mine ? 'Your fight starts' : 'Next fights start'} in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p>`}</section>`;
+  }
+
+  // Out of the tournament: pick a player still in and watch their view live; the bracket sits below
+  function tourWatchScreen(st, T) {
+    const M = G.MP, live = T.entrants.filter(e => !e.out && e.hero);
+    if (M.tourView == null || !live.some(e => e.hero.slot === M.tourView)) M.tourView = (live.find(e => !e.hero.bot) || live[0] || { hero: {} }).hero.slot;
+    const sel = live.find(e => e.hero.slot === M.tourView);
+    const tabs = live.map(e => `<button class="${e === sel ? '' : 'ghost'}" data-act="tour-view" data-slot="${e.hero.slot}">${esc(e.hero.name)}${e.hero.bot ? ' <small>bot</small>' : ''}</button>`).join('');
+    let body = '';
+    if (sel && !sel.hero.bot) {
+      body = '<div id="watch-dock" class="watch-dock"></div>';
+      if (M.watching !== sel.hero.slot) setTimeout(() => { if (M.tourView === sel.hero.slot && M.watching !== sel.hero.slot) M.startWatching(sel.hero.slot); }, 0);
+    } else {
+      // Bots have no screen to show: their fight of this round, when it's on
+      const round = G.Tournament.currentRound(T);
+      const pair = round && round.pairs.find(p => !p.result && p.seed != null && ((p.a.hero && p.a.hero.slot === M.tourView) || (!p.ghost && p.b.hero && p.b.hero.slot === M.tourView)));
+      if (M.watching != null) setTimeout(() => { if (M.watching != null && document.getElementById('watch-dock') == null) M.stopWatching(); }, 0);
+      if (pair && st.tourPhase === 'fight') { M.tourWatchSeed = pair.seed; body = tourSpectatePanel(st); }
+      else body = `<div class="spectate"><p class="waiting">${sel ? esc(sel.hero.name) + ' is a bot: you’ll see their next fight here.' : 'No one left to watch.'}</p></div>`;
+    }
+    const next = st.tourPhase === 'fight' ? 'Fights in progress…' : st.tourPhase === 'plunder' ? 'Tournament Plunder in progress…' : `Next fights start in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b>`;
+    return `<section class="screen"><h2>The Tournament</h2>
+      <p class="lede">You're out, so you're watching. Pick a player to see their view live.</p>
+      <div class="spec-tabs tour-view-tabs">${tabs}</div>
+      ${body}
+      <p class="waiting">${next}</p>
+      ${roundsList(T)}</section>`;
   }
 
   function endingScreen(st) {
@@ -1062,8 +1106,6 @@ window.G = window.G || {};
     hideTip();
     for (const k in tips) delete tips[k];
     const app = $('#app'), st = G.Game.s;
-    // Your own fight is starting: close the watch window
-    if (st && G.MP.watching != null && st.phase === 'battle') G.MP.stopWatching(true);
     if (!st || st.phase !== 'battle') G.Arena.stop();
     if (!st) { app.innerHTML = G.MP.active ? lobbyScreen() : titleScreen(); G.Preview.park(); G.RivalPreview.park(); renderWatchPop(); if (!G.MP.active) window.scrollTo(0, 0); return; }
     if (st.phase === 'battle') bagOpen = -1;
@@ -1126,22 +1168,52 @@ window.G = window.G || {};
   function renderWatchPop() {
     const M = G.MP;
     let pop = document.getElementById('watch-pop');
-    if (!G.Game.mp || !G.Game.s || M.watching == null) {
+    const over = G.Game.s && G.Game.s.tour && G.Game.s.tour.champion;   // the match is decided: nothing left to watch
+    if (!G.Game.mp || !G.Game.s || M.watching == null || over) {
       if (pop) pop.remove();
       if (watchFightKey != null || G.WatchArena.game) { watchFightKey = null; G.WatchArena.stop(); }
       watchVst = null;
       return;
     }
+    // Docked into the tournament watch area when it's on screen, otherwise a floating window
+    const dock = document.getElementById('watch-dock'), parent = dock || document.body;
+    if (pop && pop.parentNode !== parent) { pop.remove(); pop = null; }
     if (!pop) {
+      watchFightKey = null; G.WatchArena.stop();
       pop = document.createElement('div');
-      pop.id = 'watch-pop'; pop.className = 'watch-pop';
+      pop.id = 'watch-pop'; pop.className = 'watch-pop' + (dock ? ' docked' : '');
       pop.innerHTML = `<div class="wp-box" role="dialog" aria-modal="false"><div class="wp-head"></div>
         <div class="wp-fight" hidden><p class="wp-ftitle"></p><div class="wp-arena arena-slot"></div><ol class="log wp-log"></ol></div>
         <div class="wp-screen" inert></div></div>`;
-      pop.addEventListener('click', e => { if (e.target === pop) { G.MP.stopWatching(); } });
-      document.body.appendChild(pop);
+      if (!dock) { placePop(pop); dragPop(pop); }
+      parent.appendChild(pop);
     }
     refreshWatchPop();
+  }
+  // The floating window remembers where you dragged it
+  let popPos = null;
+  try { popPos = JSON.parse(localStorage.getItem('uc-watch-pos') || 'null'); } catch (e) { popPos = null; }
+  function placePop(pop) {
+    if (!popPos) return;
+    const x = Math.max(0, Math.min(window.innerWidth - 160, popPos.x)), y = Math.max(0, Math.min(window.innerHeight - 60, popPos.y));
+    Object.assign(pop.style, { left: x + 'px', top: y + 'px', right: 'auto', bottom: 'auto' });
+  }
+  function dragPop(pop) {
+    let d = null;
+    pop.addEventListener('pointerdown', e => {
+      const head = e.target.closest('.wp-head');
+      if (!head || e.target.closest('button')) return;
+      const r = pop.getBoundingClientRect();
+      d = { dx: e.clientX - r.left, dy: e.clientY - r.top, id: e.pointerId };
+      head.setPointerCapture(e.pointerId); e.preventDefault();
+    });
+    pop.addEventListener('pointermove', e => {
+      if (!d || e.pointerId !== d.id) return;
+      popPos = { x: e.clientX - d.dx, y: e.clientY - d.dy };
+      placePop(pop);
+    });
+    const end = e => { if (!d || e.pointerId !== d.id) return; d = null; try { localStorage.setItem('uc-watch-pos', JSON.stringify(popPos)); } catch (er) { /* ignore */ } };
+    pop.addEventListener('pointerup', end); pop.addEventListener('pointercancel', end);
   }
   function refreshWatchPop() {
     const pop = document.getElementById('watch-pop'), M = G.MP;
@@ -1153,7 +1225,7 @@ window.G = window.G || {};
     const status = vst ? `room ${vst.room || '?'}${vst.player ? ` · ${vst.player.hp}/${G.Hero.maxHp(vst.player)} health · ${vst.player.hearts} ${vst.player.hearts === 1 ? 'heart' : 'hearts'}` : ''}` : 'connecting…';
     pop.querySelector('.wp-head').innerHTML = `${G.Art.icon('eye')}<span><b>${esc(who ? who.name : h ? h.name : '?')}</b> <small>${esc(status)}</small></span>
       ${mine != null && G.Game.s.phase !== 'battle' ? `<span class="wp-mine">Your timer <b>${Math.ceil(mine)}s</b></span>` : ''}
-      <button class="ghost" data-act="watch-stop">Close</button>`;
+      ${pop.classList.contains('docked') ? '' : '<button class="ghost" data-act="watch-stop">Close</button>'}`;
     const fightEl = pop.querySelector('.wp-fight'), scr = pop.querySelector('.wp-screen');
     const f = M.lastFight[M.watching];
     if (vst && vst.phase === 'battle' && f) {
@@ -1305,7 +1377,8 @@ window.G = window.G || {};
       case 'mp-rematch': G.MP.hostRematch(); break;
       case 'spectate': G.MP.watch = +el.dataset.slot; render(); break;
       case 'tour-watch': G.MP.tourWatchSeed = +el.dataset.seed; render(); break;
-      case 'watch': G.MP.startWatching(+el.dataset.slot); break;
+      case 'tour-view': G.MP.tourView = +el.dataset.slot; render(); break;
+      case 'watch': G.MP.tourView = +el.dataset.slot; G.MP.startWatching(+el.dataset.slot); break;
       case 'watch-stop': G.MP.stopWatching(); break;
       case 'mp-leave': G.MP.leave(); Gm.s = null; render(); break;
       case 'mp-copy': { const l = el.dataset.link; try { navigator.clipboard.writeText(l); toast(el, 'Link copied'); } catch (e) { toast(el, l); } break; }
@@ -1329,6 +1402,10 @@ window.G = window.G || {};
         bagOpen = bagOpen === +el.dataset.i ? -1 : +el.dataset.i; render(); break;
       case 'bag-use': Gm.useBag(+el.dataset.i); break;
       case 'bag-sell': Gm.sellBag(+el.dataset.i); break;
+      case 'dye-item': Gm.dyeItem(el.dataset.id); break;
+      case 'dye-class': Gm.dyeClass(el.dataset.cls); break;
+      case 'dye-cancel': Gm.dyeCancel(); break;
+      case 'skip-vote': G.MP.sendSkipVote(); break;
       case 'spec-tree': openSpecTree(); break;
       case 'shop-pick': Gm.playerShopPick(el.dataset.id); break;
       case 'shop-buy': Gm.shopBuy(el.dataset.kind, el.dataset.id); break;
@@ -1383,6 +1460,9 @@ window.G = window.G || {};
 
   function init() {
     document.addEventListener('click', onClick);
+    // Any click or key press counts as being at the keyboard (the inactivity check)
+    document.addEventListener('pointerdown', () => { if (G.Game.mp) G.Game.markActive(); }, true);
+    document.addEventListener('keydown', () => { if (G.Game.mp) G.Game.markActive(); }, true);
     // Press and hold: equipping over worn gear
     const HOLD_MS = 800;
     let hold = null;

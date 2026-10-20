@@ -59,7 +59,7 @@ window.G = window.G || {};
     relic_tortoise: P('M3 15a9 7 0 0 1 18 0zM8 15l2-5h4l2 5M3 15l-1 3M21 15l1 3'),
     relic_journal: P('M6 3h11a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6zM9 3v18M12 8h4M12 11h4M13 16a1.5 1.5 0 1 0 0.01 0'),
   };
-  const POTION_COLORS = { potion: '#d0473a', greater: '#ff6b5a', antidote: '#7fd67a', iron: '#b8b8c8', salve: '#8fb4ff', fury: '#ff9a3c', tonic: '#f2e28c', draught: '#b39cff' };
+  const POTION_COLORS = { potion: '#d0473a', greater: '#ff6b5a', antidote: '#7fd67a', iron: '#b8b8c8', salve: '#8fb4ff', fury: '#ff9a3c', tonic: '#f2e28c', draught: '#b39cff', dye: '#c76bd6' };
 
   function icon(key, cls = '') {
     const path = G.ASSETS.icons['icon_' + key];

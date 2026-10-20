@@ -62,7 +62,7 @@ window.G = window.G || {};
       const picks = {};
       for (const k in m.picks) picks['h' + k] = m.picks[k];
       s.roundKind = 'shop'; s.phase = 'shop'; s.roundEnds = 0;
-      s.shop = { table: m.table, order: m.order.map(sl => 'h' + sl), turn: m.turn, picks, mp: true,
+      s.shop = { table: m.table, order: m.order.map(sl => 'h' + sl), turn: m.turn, picks, mp: true, tour: m.tour || 0,
         reviewUntil: t + m.reviewMs, reviewDone: m.reviewMs <= 0,
         turnStart: m.turnMs ? t - (S.turnSeconds * 1000 - m.turnMs) : t, msg: s.shopMsg || null, turnSlot };
       if (m.done && !s.shopEnded) { s.shopEnded = true; this.endShop(); return; }
@@ -130,7 +130,7 @@ window.G = window.G || {};
     mpTourBattle(m) {
       const s = this.s;
       const mirrored = !m.ghost && m.b.hero === s.player;
-      const res = G.Tournament.pvp(m.a, m.b, null, m.seed);
+      const res = m.spec ? G.Tournament.pvpFrom(m.spec, m.seed) : G.Tournament.pvp(m.a, m.b, null, m.seed);   // the host's frozen fight
       const nmB0 = m.ghost ? m.b.name : m.b.hero.name;
       G.MP.sendFight({ title: `Tournament: ${m.a.hero.name} vs ${nmB0}`, names: { a: m.a.hero.name, b0: nmB0 }, visual: { a: visualFor(m.a.hero), b0: m.ghost ? { ...visualFor(m.b.of), ghost: true } : visualFor(m.b.hero) } });
       const nameB = m.ghost ? m.b.name : m.b.hero.name;
@@ -161,6 +161,8 @@ window.G = window.G || {};
     tick() {
       const s = this.s;
       if (!s) return;
+      // Voted to skip: everything left in this room is decided for you right away
+      if (this.mp && s.skipRoom === s.room && (s.roundKind === 'room' || s.roundKind === 'after') && G.MP.skipAllowed(s.room) && s.phase !== 'battle' && s.roundEnds && now() < s.roundEnds) s.roundEnds = now() - 1;
       if (this.mp && (s.roundKind === 'shop' || s.roundKind === 'tour' || ['waiting', 'duelWait', 'mpEnded', 'dead', 'shop'].includes(s.phase))) {
         if (s.phase === 'shop' && s.shop && s.shop.reviewUntil && !s.shop.reviewDone && now() >= s.shop.reviewUntil) { s.shop.reviewDone = true; s.shop.turnStart = now(); G.UI.refreshShopPicks(); }
         return;
@@ -228,8 +230,18 @@ window.G = window.G || {};
       this.endRound();
     },
 
+    // The other players voted to skip your turn
+    forceSkip(room) {
+      const s = this.s;
+      if (!s || s.room !== room || s.phase === 'waiting') return;
+      s.skipRoom = room;
+      s.notice = 'The other players voted to skip the rest of your turn, so the game chose for you.';
+      if (s.roundEnds) s.roundEnds = now() - 1;
+    },
+    markActive() { const s = this.s; if (s) s.actedRoom = s.room; },
     timeUp() {
       const s = this.s, p = s.player;
+      if (this.mp && (s.roundKind === 'room' || s.roundKind === 'after') && G.MP.skipAllowed(s.room) && s.skipRoom !== s.room) s.timedOutRoom = s.room;
       let auto = null;
       switch (s.phase) {
         case 'doors': {
@@ -254,6 +266,7 @@ window.G = window.G || {};
         case 'gem': { const id = G.AI.autoGem(p, s.gemOptions); s.notice = `Time ran out. You took the ${G.GEMS[id].name}.`; s.gemDone = true; this.nextStep(); return; }
         case 'duelIntro': this.startDuelFight(); return;
       }
+      if (auto && this.mp && s.skipRoom === s.room) auto = 'The other players voted to skip your turn. ' + auto;
       if (!p.alive) { this.playerOut(auto); return; }
       s.notice = auto;
       this.endRound();
@@ -479,7 +492,7 @@ window.G = window.G || {};
     useBag(i) {
       const s = this.s, p = s.player, it = p.bag[i];
       if (!it || s.phase === 'battle') return;
-      const tourNow = s.roundKind === 'tour' && s.tour && !s.tour.champion;
+      const tourNow = (s.roundKind === 'tour' || (s.shop && s.shop.tour && s.phase === 'shop')) && s.tour && !s.tour.champion;
       const lock = msg => { s.bagMsg = msg; render(); };
       // Player fights: use potions before the fight (duel card, tournament breaks), never during it
       if (this.mp) {
@@ -500,6 +513,11 @@ window.G = window.G || {};
           s.goldPop = { amount: g, at: Date.now() };
           s.bagMsg = `Equipped ${it.name}. Sold ${old.name} for ${g} gold.`;
         } else s.bagMsg = `Equipped ${it.name}.`;
+      } else if (G.CONSUMABLES[it.cid].dye) {
+        // Turncoat's Dye: pick a piece, then a class (see dyeItem / dyeClass)
+        s.dye = { id: it.id, item: null };
+        s.bagMsg = 'Turncoat’s Dye: pick the piece of gear to re-tag.';
+        render(); return;
       } else if (me && G.CONSUMABLES[it.cid].heal) {
         // In the tournament, healing restores your tournament health
         const c = G.CONSUMABLES[it.cid];
@@ -517,6 +535,30 @@ window.G = window.G || {};
       render();
     },
     // Selling replaces discarding: anything in the bag can be turned into gold
+    // Turncoat's Dye: change a piece's class tag
+    dyeTargets() {
+      const p = this.s.player;
+      return [...G.SLOTS.map(sl => p.gear[sl]), ...p.bag].filter(it => it && it.kind === 'gear' && it.set && it.rarity !== 'legendary');
+    },
+    dyeItem(id) { const s = this.s; if (!s.dye) return; s.dye.item = id; s.bagMsg = 'Turncoat’s Dye: pick the new class.'; render(); },
+    dyeCancel() { const s = this.s; s.dye = null; s.bagMsg = null; render(); },
+    dyeClass(cls) {
+      const s = this.s, p = s.player, d = s.dye;
+      if (!d || !d.item || !G.CLASSES[cls]) return;
+      const it = this.dyeTargets().find(x => x.id === d.item), bi = p.bag.findIndex(x => x.id === d.id);
+      if (!it || bi < 0 || it.set === cls) return;
+      if (G.Supply.left(cls) <= 0) { s.bagMsg = `No ${G.CLASSES[cls].name} pieces are left in the set supply.`; render(); return; }
+      const old = it.set;
+      p.bag.splice(bi, 1);
+      const before = G.Hero.maxHp(p);
+      it.set = cls;
+      const after = G.Hero.maxHp(p);
+      if (after !== before) p.hp = Math.max(1, Math.min(after, p.hp + Math.max(0, after - before)));
+      s.dye = null;
+      s.bagMsg = `${it.name} now counts as ${G.CLASSES[cls].name} instead of ${G.CLASSES[old].name}.`;
+      if (this.mp) G.MP.sendSnap();
+      render();
+    },
     sellBag(i) {
       const s = this.s, p = s.player, it = p.bag[i];
       if (!it || s.phase === 'battle') return;
@@ -595,8 +637,14 @@ window.G = window.G || {};
       const s = this.s, m = s.duel.mine;
       if (!m) return;
       if (this.mp) {
-        if (!s.duel.goSent) { s.duel.goSent = true; s.roundEnds = 0; G.MP.sendDuelGo(); }
-        this.mpTryDuelFight();
+        // The shared countdown ended: lock in your hero; the host sends the fight to both of you
+        if (!s.duel.goSent) {
+          s.duel.goSent = true; s.roundEnds = 0; G.MP.sendDuelLock();
+          const d = s.duel;
+          clearTimeout(d.waitTimer);
+          d.waitTimer = setTimeout(() => { if (this.s === s && s.phase === 'duelIntro' && s.duel === d) this.mpDuelFight(null, d.w); }, 15000);   // the host went quiet
+          render();
+        }
         return;
       }
       // Fight from the player's side so the player is always on the left
@@ -630,13 +678,14 @@ window.G = window.G || {};
       render();
     },
 
-    mpDuelFight() {
+    mpDuelFight(spec, w) {
       const s = this.s;
-      if (s.phase !== 'duelIntro') return;
-      // Rebuild the pairing from the latest heroes: both of you, as you went in
+      if (s.phase !== 'duelIntro' || !s.duel) return;
+      clearTimeout(s.duel.waitTimer);
       s.duel.mine = G.MP.duelPair(s.duel.w);
       const m = s.duel.mine, mirrored = s.duel.mirrored;
-      const res = G.Duel.simulate(m, s.rng);   // the host's seed: both players see the same fight
+      // The host's frozen fight: both players (and anyone watching) see and settle the same one
+      const res = spec ? G.Tournament.pvpFrom(spec, s.duel.w.seed) : G.Duel.simulate(m, s.rng);
       const nmB = m.ghost ? m.b.name : m.b.hero.name;
       G.MP.sendFight({ title: `Duel: ${m.a.hero.name} vs ${nmB}`, names: { a: m.a.hero.name, b0: nmB }, visual: { a: visualFor(m.a.hero), b0: m.ghost ? { ...visualFor(m.b.of), ghost: true } : visualFor(m.b.hero) } });
       const nameB = m.ghost ? m.b.name : m.b.hero.name, oppName = mirrored ? m.a.hero.name : nameB;
@@ -667,18 +716,21 @@ window.G = window.G || {};
     },
 
     // ---------- Shop round ----------
-    startShop() {
+    startShop(tour) {
       const s = this.s;
-      const alive = this.all().filter(h => h.alive);
+      const ents = tour ? s.tour.entrants.filter(e => !e.out) : null;
+      const alive = tour ? ents.map(e => e.hero) : this.all().filter(h => h.alive);
       // weakest first: lowest health percentage picks first
       const pct = h => h.hp / G.Hero.maxHp(h);
       // fewer hearts pick first, then lower health percentage
       const th = h => (h.spec === 'treasureHunter' ? 0 : 1);   // Treasure Hunters always pick first
-      const order = alive.slice().sort((a, b) => th(a) - th(b) || a.hearts - b.hearts || pct(a) - pct(b) || G.Hero.power(a) - G.Hero.power(b));
+      const tpct = h => { const e = ents && ents.find(x => x.hero === h); return e ? e.hp / e.maxHp : pct(h); };
+      const order = alive.slice().sort((a, b) => th(a) - th(b) || a.hearts - b.hearts || tpct(a) - tpct(b) || G.Hero.power(a) - G.Hero.power(b));
       s.roundKind = 'shop';
       s.phase = 'shop';
       s.shop = {
-        table: G.Loot.shopTable(s.room, alive.length + CFG().shop.extraTableItems, s.rng),
+        tour: !!tour,
+        table: tour ? G.Loot.shopTable(30, alive.length + 1, s.rng, { tome: true }) : G.Loot.shopTable(s.room, alive.length + CFG().shop.extraTableItems, s.rng),
         order: order.map(h => h.id), turn: 0, reviewUntil: now() + CFG().shop.reviewSeconds * 1000, reviewDone: false,
         turnStart: now() + CFG().shop.reviewSeconds * 1000, picks: {},
         totalSeconds: CFG().shop.reviewSeconds + CFG().shop.turnSeconds * order.length, msg: null,
@@ -759,6 +811,12 @@ window.G = window.G || {};
       const mine = sh.picks[s.player.id];
       if (this.mp) G.MP.sendSnap();
       s.notice = `Plunder over. You ${mine && !mine.startsWith('passed') ? 'took ' + mine : mine || 'passed'}.`;
+      // Tournament Plunder: back to the bracket for the next round
+      if (sh.tour) {
+        s.phase = 'tournament'; s.roundKind = 'tour'; s.tourPhase = 'break';
+        if (!this.mp) this.startTimer(CFG().tourBreakSeconds);
+        render(); return;
+      }
       s.roundKind = 'after';
       s.rivalsPlayedRoom = s.room;
       s.gemDone = true; s.duelDone = true;
@@ -837,6 +895,8 @@ window.G = window.G || {};
         if (mine && !this.playerOutOfTour()) { this.tourBattle(m); return; }
         G.Tournament.resolve(T, m, G.Tournament.simulate(T, m));
       }
+      // A round just finished: Plunder before the next one
+      if (T.rounds.length > startRound && !T.champion && !this.playerOutOfTour() && G.Tournament.alive(T).length >= 2) { this.startShop(true); return; }
       if (!T.champion) this.startTimer(CFG().tourBreakSeconds);
       render();
     },

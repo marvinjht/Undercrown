@@ -17,6 +17,12 @@ window.G = window.G || {};
     return [{ s: b.s || b, name: b.name || 'Enemy', sprite: b.sprite, tint: b.tint, hp: b.hp }];
   }
 
+  // A plain stat block for allies (Ghoulgrip's ghouls)
+  function allyStats(hp, dmg) {
+    return { maxHp: hp, dmg, spd: 10, atkSpd: 1, armor: 0, ward: 0, dodge: 0, crit: 0, critDmg: 0, stun: 0, leech: 0, bleed: 0, shield: 0,
+      holy: 0, pierce: 0, manaGain: 0, startMana: 0, spec: null, gem: null, spell: null, fx: {}, type: 'phys', range: 'melee' };
+  }
+
   function simulateFight(sa, sb, opts = {}) {
     const CB = C();
     const SH = G.SPECS.shadow.params, DU = G.SPECS.duelist.params, BE = G.SPECS.berserker.params;
@@ -28,7 +34,7 @@ window.G = window.G || {};
     function mk(side, spec, pos, extra = {}) {
       const s = spec.s;
       const f = {
-        id: side === 'a' ? 'a' : 'b' + (seq++), side, s, name: spec.name, pos,
+        id: side === 'a' ? (spec.ally ? 'g' + (seq++) : 'a') : 'b' + (seq++), side, s, name: spec.name, pos, owner: spec.owner || null, ally: !!spec.ally,
         hp: spec.hp != null ? Math.min(spec.hp, s.maxHp) : s.maxHp, maxHp: s.maxHp, maxHp0: s.maxHp,
         shield: s.shield || 0, mana: Math.min(CB.manaMax, s.startMana || 0), alive: true,
         nextAtk: 0.3 + rng.range(0, 0.4) * 10 / s.spd, atkCount: 0, hitsLanded: 0, incoming: 0,
@@ -52,6 +58,7 @@ window.G = window.G || {};
         nextRing: s.fx && s.fx.fireRing ? s.fx.fireRing.start : Infinity, executedBoss: false,
         // v0.25: relics, snakes, new bosses, the Phoenix egg
         isElite: !!spec.isElite, raiseSpec: spec.raiseSpec || null, raised: false, poisonGain: 0,
+        pxBurn: 0, pxBurnUntil: -1, pxNextBurn: Infinity, pxBy: null,
         chill: 0, chillReadyAt: 0, mired: 0, gauzeAt: -1, gauzeReady: 0, egg: false, eggUntil: -1,
         fadeNext: s.fx && s.fx.packFade ? s.fx.packFade.every : Infinity,
         ...extra,
@@ -60,11 +67,17 @@ window.G = window.G || {};
       tracks[f.id] = [[t, pos]];
       meta.push({ id: f.id, side, name: spec.name, sprite: spec.sprite, tint: spec.tint, scale: spec.scale || 1,
         maxHp: f.maxHp, hp: f.hp, shield: f.shield, mana: f.mana, hasMana: !!(s.spell && s.manaGain > 0),
-        bornAt: t, look: spec.look || null, weapon: spec.weapon || null, range: s.range || 'melee', type: s.type || 'phys' });
+        bornAt: t, ally: !!spec.ally, look: spec.look || null, weapon: spec.weapon || null, range: s.range || 'melee', type: s.type || 'phys' });
       return f;
     }
 
     const A = mk('a', { s: sa, name: opts.aName || 'You', hp: opts.aHp, revive: opts.aRevive }, 0);
+    // Ghoulgrip: ghouls rise beside you in monster fights
+    const GS = !opts.pvp && sa.fx && sa.fx.ghoulSummon;
+    if (GS) for (let i = 0; i < GS.count; i++) {
+      const gs = allyStats(Math.max(4, 2 * Math.round(sa.maxHp * GS.hpPct / 200)), Math.max(2, 2 * Math.round(sa.dmg * GS.dmgPct / 200)));
+      mk('a', { s: gs, name: 'Ghoul', sprite: 'monster_ghoul', ally: true, owner: A, scale: 0.8 }, 0.5);
+    }
     toSpecs(sb).forEach(sp => mk('b', { ...sp, revive: sp.revive != null ? sp.revive : opts.bRevive }, CB.startGap));
     const result = { revived: { a: false, b: false }, goldStolen: 0, bloodrage: { a: 0, b: 0 }, phoenixWin: null };
     const POISON_CAP = (G.CONFIG.poison && G.CONFIG.poison.fightCap) || 50;
@@ -100,7 +113,16 @@ window.G = window.G || {};
     const push = (e, ...fs) => { e.t = t; e.h = snap(...fs); events.push(e); };
     const foes = f => fighters.filter(x => x.alive && x.side !== f.side);
     // Heroes go for the first enemy they can see (wolves that fade out are skipped while another is visible)
-    const target = f => { if (f.side === 'b') return A.alive ? A : null; const fs = foes(f); return fs.find(x => !x.invis) || fs[0] || null; };
+    // Monsters go for the closest of you (your ghouls stand in front); you're the target when nothing else is near
+    const target = f => {
+      if (f.side === 'b') {
+        if (!A.alive) return null;
+        let best = A, bd = Math.abs(A.pos - f.pos) - 0.01;
+        for (const x of fighters) if (x.ally && x.alive && !x.invis) { const d = Math.abs(x.pos - f.pos); if (d < bd) { best = x; bd = d; } }
+        return best;
+      }
+      const fs = foes(f); return fs.find(x => !x.invis) || fs[0] || null;
+    };
 
     function heal(f, amount) {
       if (!f.alive || f.egg || amount <= 0 || f.s.gem === 'gaia') return 0;
@@ -240,13 +262,20 @@ window.G = window.G || {};
       push({ type: 'burst', src: f.id, tgts: tgts.map(x => x.id) });
       for (const d of tgts) {
         if (!d.alive) continue;
-        const r = damage(d, PX.burst, null);
-        push({ type: 'spellhit', src: f.id, tgt: d.id, amount: r.dealt, absorbed: r.absorbed, name: 'Rebirth' }, d);
+        const dealt = trueDamage(d, PX.burst);
+        push({ type: 'spellhit', src: f.id, tgt: d.id, amount: dealt, absorbed: 0, name: 'Rebirth' }, d);
         afterDamage(d, f);
-        if (d.alive && PX.burn) { d.burn = PX.burn; d.burnUntil = t + PX.burnSeconds + 0.01; d.nextBurn = t + 1; }
+        if (d.alive && PX.burn) { d.pxBurn = PX.burn; d.pxBurnUntil = t + PX.burnSeconds + 0.01; d.pxNextBurn = t + 1; d.pxBy = f; }
       }
     }
 
+    // True damage (Phoenix Heart): ignores Shields, Heart of Stone and every reduction. Player fights still quarter it.
+    function trueDamage(def, amt) {
+      if (PVP !== 1) amt = Math.max(1, 2 * Math.round(amt * PVP / 2));
+      def.hp -= amt;
+      if (def.hp <= 0 && def.undyingUntil >= t && !def.egg) def.hp = 1;
+      return amt;
+    }
     function applyBleed(def, amount, att) {
       if (amount <= 0 || !def.alive) return;
       if (def.bleedUntil < t) def.nextBleed = t + 1;
@@ -423,6 +452,8 @@ window.G = window.G || {};
       const lifeOnHit = (att.s.leech || 0) * (fx.lowLeechDouble && low ? 2 : 1) + (fx.consecrate ? holyPart : 0) + (crit && fx.critHeal ? fx.critHeal : 0)
         + (fx.capHeal && att.hurtBonus >= (fx.hurtCap || 0) ? fx.capHeal : 0);
       if (lifeOnHit > 0) { const h = heal(att, lifeOnHit); if (h) push({ type: 'heal', src: att.id, amount: h }, att); }
+      // Ghoulgrip ghouls: their hits heal you for half
+      if (att.owner && att.owner.alive && r.dealt > 0) { const h = heal(att.owner, Math.floor(r.dealt / 2)); if (h) push({ type: 'heal', src: att.owner.id, amount: h }, att.owner); }
       // Thorns and Retaliate hurt the attacker
       const back = def.egg ? 0 : (def.thorns || 0) + (dfx.retaliate || 0);
       if (back && att.alive && !counter) {
@@ -441,7 +472,7 @@ window.G = window.G || {};
         push({ type: 'steal', src: att.id, amount: att.steal });
       }
       // Snake bites: poison that stays after the fight (up to the cap per fight)
-      if (att.s.poison && def.alive && def.side === 'a' && def.poisonGain < POISON_CAP) {
+      if (att.s.poison && def.alive && def === A && def.poisonGain < POISON_CAP) {
         const add = Math.min(att.s.poison, POISON_CAP - def.poisonGain);
         def.poisonGain += add;
         push({ type: 'poison', src: att.id, tgt: def.id, amount: add, total: def.poisonGain });
@@ -661,6 +692,13 @@ window.G = window.G || {};
             afterDamage(f, m.by);
             if (!f.alive) continue;
           }
+        }
+        if (f.pxBurnUntil >= t && t >= f.pxNextBurn) {
+          f.pxNextBurn = t + 1;
+          const d = trueDamage(f, f.pxBurn);
+          push({ type: 'burn', tgt: f.id, amount: d, true: true }, f);
+          afterDamage(f, f.pxBy && f.pxBy.alive ? f.pxBy : null);
+          if (!f.alive) continue;
         }
         if (f.burnUntil >= t && t >= f.nextBurn) {
           f.nextBurn = t + 1;

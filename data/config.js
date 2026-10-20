@@ -2,7 +2,7 @@
 // All stats are flat whole numbers. Chance stats (Crit, Dodge, Stun) mean "out of 100".
 window.G = window.G || {};
 
-G.VERSION = '0.26';   // players in one room must all run the same version
+G.VERSION = '0.27';   // players in one room must all run the same version
 
 G.CONFIG = {
   // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
@@ -34,14 +34,14 @@ G.CONFIG = {
   shrineCost: 16,          // mystery: blood shrine
   arenaHealPct: 0.30,      // heal walking into the tournament (shown as a number)
 
-  poison: { venomStacks: 10, purifyHeal: 10, fightCap: 50 },   // fightCap: most poison you can pick up in one fight
+  poison: { venomStacks: 10, purifyHeal: 10, fightCap: 25 },   // fightCap: most poison you can pick up in one fight
 
   phoenix: { burst: 100, burn: 20, burnSeconds: 5, selfBurn: 1, standUp: 25, eggSeconds: 5, eggHpPct: 50 },   // explode, burn them, hide in an egg
   stoneHp: 25,
   stoneGrace: 5,           // Heart of Stone: for this many seconds at the start of a fight, every hit deals 1
   stoneCrack: 3,           // Heart of Stone: each hit deals 1 more than the last, up to this
   gaiaShield: 100,
-  vultureHeal: 30,         // Vulture's Heart: heal this much and gain this much max health whenever a rival loses a heart
+  vultureHeal: 10,         // Vulture's Heart: heal this much and gain this much max health whenever a rival loses a heart
 
   // PvP (duels and the tournament): every hit deals half damage so fights last longer
   arena: { damageMult: 0.25, maxTime: 60 },   // past 60 seconds, both players lose a heart

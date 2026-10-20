@@ -301,7 +301,8 @@ window.G = window.G || {};
   }
 
   // Shop round: the free table everyone picks from (one rare, rest uncommon+, two consumables)
-  function shopTable(room, count, rng) {
+  // opts.tome: the tournament Plunder, where the Tome of Knowledge shows up more often
+  function shopTable(room, count, rng, opts = {}) {
     const items = [];
     const nCons = Math.min(2, Math.max(0, count - 2));
     for (let i = 0; i < count - nCons; i++) {
@@ -309,7 +310,9 @@ window.G = window.G || {};
       const rarity = i === 0 ? 'rare' : (rng.int(1, 100) <= 25 ? 'rare' : 'green');
       items.push(generate(rng, { slot, rarity, room, weaponType: slot === 'weapon' ? rng.pick(G.WEAPON_ORDER) : null }));
     }
-    for (let i = 0; i < nCons; i++) items.push(rollConsumable(Math.max(room, 15), rng, ['greater', 'antidote', 'tome', ...G.BUFF_IDS]));
+    const cpool = ['greater', 'antidote', 'tome', 'dye', ...G.BUFF_IDS];
+    if (opts.tome) cpool.push('tome', 'tome');
+    for (let i = 0; i < nCons; i++) items.push(rollConsumable(Math.max(room, 15), rng, cpool));
     items.unshift(rollRelic(null, rng));   // every Plunder has one relic
     return items;
   }

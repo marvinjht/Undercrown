@@ -54,9 +54,9 @@ window.G = window.G || {};
       const vis = (this.cfg.visual && this.cfg.visual[m.id]) || {};
       const side = m.side;
       let texture = m.sprite || 'hero';
-      if (texture === 'hero' || side === 'a') texture = vis.look ? 'hero_' + vis.look : 'hero';
+      if (!m.ally && (texture === 'hero' || side === 'a')) texture = vis.look ? 'hero_' + vis.look : 'hero';
       if (!this.textures.exists(texture)) texture = 'hero';
-      const lane = side === 'a' ? 200 : LANES[this.laneIdx++ % LANES.length];
+      const lane = side === 'a' ? (m.ally ? (this.allyIdx++ % 2 ? 262 : 138) : 200) : LANES[this.laneIdx++ % LANES.length];
       const body = this.add.image(0, 0, texture);
       const tint = vis.tint != null ? vis.tint : m.tint;
       if (tint) body.setTint(tint);
@@ -91,7 +91,7 @@ window.G = window.G || {};
       this.tweens.killAll(); this.time.removeAllEvents();
       this.cameras.main.resetFX();
       this.cfg = cfg; this.t = 0; this.idx = 0; this.finished = false; this.speed = 1; this.lastNow = 0;
-      this.F = {}; this.laneIdx = 0;
+      this.F = {}; this.laneIdx = 0; this.allyIdx = 0;
       for (const m of cfg.result.fighters) if (m.bornAt === 0) this.makeFighter(m);
     }
 
@@ -237,7 +237,7 @@ window.G = window.G || {};
         } break;
         case 'poison': if (def) this.float(def, '+' + e.amount + ' POISON', '#8fdc5a', 12, -22); break;
         case 'chill': if (def) this.float(def, 'CHILL ' + e.stacks, '#a8dcff', 12); break;
-        case 'freeze': if (def) { this.float(def, 'FROZEN', '#bfe8ff', 18); const r = this.track(this.add.image(def.cont.x, def.cont.y, 'fx_ring').setTint(0x9fdcff).setScale(0.5).setAlpha(0.9)); this.tweens.add({ targets: r, scale: 1.1, alpha: 0, duration: 700 / this.speed, onComplete: () => r.destroy() }); } break;
+        case 'freeze': if (def) { this.float(def, 'FROZEN', '#bfe8ff', 18); this.iceShard(def, e.secs || 2); } break;
         case 'mire': if (def) this.float(def, 'MIRED ' + e.stacks, '#a89a5a', 12); break;
         case 'raise': if (att) { this.float(att, 'RAISE DEAD', '#9ff4ff', 18); this.cameras.main.shake(160 / this.speed, 0.004); } break;
         case 'burst': if (att) {
@@ -399,6 +399,29 @@ window.G = window.G || {};
           g.lineStyle(3, 0xffb347, 0.8).lineBetween(a === 0 ? b : a, 70, a === 0 ? b : a, H - 70);
         }
       }
+    }
+
+    // Frost Yeti: an ice shard closes around the frozen fighter, then shatters
+    iceShard(f, secs) {
+      const x = f.cont.x, y = f.cont.y, g = this.track(this.add.graphics().setDepth(f.cont.depth + 1));
+      const spikes = [[-26, 22, -14, -34, -2, 22], [-10, 24, 4, -46, 16, 24], [6, 22, 22, -30, 30, 22], [-30, 20, -34, -8, -16, 20], [18, 20, 36, -10, 32, 20]];
+      g.fillStyle(0xbfe8ff, 0.55); g.lineStyle(2, 0xeaf8ff, 0.95);
+      for (const [x1, y1, x2, y2, x3, y3] of spikes) { g.fillTriangle(x1, y1, x2, y2, x3, y3); g.strokeTriangle(x1, y1, x2, y2, x3, y3); }
+      g.fillStyle(0x9fdcff, 0.28).fillEllipse(0, 4, 70, 56);
+      g.lineStyle(1, 0xffffff, 0.8).lineBetween(-8, -20, -4, 10).lineBetween(14, -14, 10, 8);
+      g.setPosition(x, y).setScale(0.2).setAlpha(0);
+      if (f.body) f.body.setTint(0x9fdcff);
+      this.tweens.add({ targets: g, scale: 1, alpha: 1, duration: 160 / this.speed, ease: 'Back.easeOut' });
+      this.time.delayedCall(secs * 1000 / this.speed, () => {
+        if (!g.active) return;
+        if (f.body && f.body.active && !f.dead) { if (f.tint) f.body.setTint(f.tint); else f.body.clearTint(); }
+        for (let i = 0; i < 6; i++) {
+          const sh = this.track(this.add.triangle(x, y, 0, 8, 4, -8, 8, 8, 0xd8f2ff).setDepth(g.depth));
+          const ang = i / 6 * Math.PI * 2;
+          this.tweens.add({ targets: sh, x: x + Math.cos(ang) * 40, y: y + Math.sin(ang) * 30, angle: 180, alpha: 0, duration: 380 / this.speed, onComplete: () => sh.destroy() });
+        }
+        g.destroy();
+      });
     }
 
     // Stop playing (the fight screen went away)

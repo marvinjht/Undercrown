@@ -111,7 +111,7 @@ window.G = window.G || {};
       if (m.from) this.seen[m.from] = now();
       // A player the host handed to a bot is back: give them their seat again
       if (this.H && m.from && m.from !== this.cid) {
-        const back = this.players.find(p => p.cid === m.from && p.bot && p.botWas);
+        const back = this.players.find(p => p.cid === m.from && p.bot && p.botWas && !p.kicked);
         if (back) { back.bot = false; back.botWas = null; this.cast({ t: 'players', players: this.players }); }
       }
       const H = this.H;
@@ -129,6 +129,8 @@ window.G = window.G || {};
           break;
         case 'rematch': this.onRematch(m); break;
         case 'duelGo': this.onDuelGo(m); break;
+        case 'duelLock': if (this.isHost) this.onDuelLock(m); break;
+        case 'duelFight': this.onDuelFight(m); break;
         case 'tourUse': if (H) this.hostTourUse(m); else if (m.hero) this.takeSnap(m.slot, m.hero); break;
         case 'fight': this.onFight(m); break;
         case 'watch': this.onWatch(m); break;
@@ -155,6 +157,9 @@ window.G = window.G || {};
         case 'duels': this.onDuels(m); break;
         case 'tour': this.onTour(m); break;
         case 'tourDone': if (H) this.hostTourDone(m.slot); break;
+        case 'skipVote': if (H) this.hostSkipVote(m); break;
+        case 'skip': if (m.slot === this.mySlot && G.Game.s) G.Game.forceSkip(m.room); break;
+        case 'kick': if (m.slot === this.mySlot) this.end('You’ve been removed from the match for inactivity: the clock ran out on you two rounds in a row.'); break;
         case 'end': this.end(m.reason); break;
       }
     },
@@ -304,7 +309,47 @@ window.G = window.G || {};
     onSnap(m) { this.takeSnap(m.slot, m.hero); if (G.Game.s && m.slot !== this.mySlot) update(); },
     mySnapWire() { const me = this.heroes[this.mySlot]; if (G.Game.s) me.room = G.Game.s.room; return heroWire(me); },
     sendSnap() { if (!this.inMatch()) return; const msg = { t: 'snap', slot: this.mySlot, room: G.Game.s.room, hero: this.mySnapWire() }; this.isHost ? this.cast(msg) : this.send(msg); },
-    sendReady() { if (!this.inMatch()) return; const msg = { t: 'ready', slot: this.mySlot, room: G.Game.s.room, hero: this.mySnapWire() }; this.isHost ? this.cast(msg) : this.send(msg); },
+    sendReady() {
+      if (!this.inMatch()) return;
+      const s = G.Game.s, room = s.room;
+      // Away from the keyboard: the clock ran out this room and you did nothing (a skip vote doesn't count)
+      const afk = s.timedOutRoom === room && s.actedRoom !== room && s.skipRoom !== room;
+      const msg = { t: 'ready', slot: this.mySlot, room, hero: this.mySnapWire(), afk, skipped: s.skipRoom === room };
+      this.isHost ? this.cast(msg) : this.send(msg);
+    },
+    // ---------- Skip votes and inactivity ----------
+    // Regular rooms only (not Plunder, duels or the tournament)
+    skipAllowed(room) { const k = G.Dungeon.roomKind(room); return k !== 'shop' && k !== 'duel' && k !== 'tournament'; },
+    sendSkipVote() {
+      const msg = { t: 'skipVote', slot: this.mySlot, room: G.Game.s.room };
+      this.isHost ? this.hostSkipVote(msg) : this.send(msg);
+    },
+    hostSkipVote(m) {
+      const H = this.H;
+      if (!H || m.room !== H.room || !this.skipAllowed(H.room) || !H.ready[m.slot]) return;
+      H.skip = H.skip && H.skip.room === H.room ? H.skip : { room: H.room, votes: {}, done: false };
+      H.skip.votes[m.slot] = true;
+      this.hostReadyInfo();
+      this.hostSkipCheck();
+    },
+    hostSkipCheck() {
+      const H = this.H, S = H && H.skip;
+      if (!S || S.done || S.room !== H.room) return;
+      const humans = this.humansIn(), waiting = humans.filter(p => !H.ready[p.slot]);
+      const votes = humans.filter(p => S.votes[p.slot] && H.ready[p.slot]).length;
+      if (waiting.length === 1 && votes >= humans.length - 1 && votes > 0) {
+        S.done = true;
+        this.cast({ t: 'skip', room: H.room, slot: waiting[0].slot });
+        this.hostReadyInfo();
+      }
+    },
+    hostKick(slot) {
+      const p = this.player(slot);
+      if (!p || p.bot) return;
+      p.kicked = true;
+      this.cast({ t: 'kick', slot });
+      this.hostDrop(p.cid);
+    },
 
     // ---------- Rooms ----------
     onRoom(m) {
@@ -320,7 +365,7 @@ window.G = window.G || {};
 
     hostStartRoom(n) {
       const H = this.H;
-      H.room = n; H.ready = {}; H.snaps = {}; H.plunder = null; H.duels = null;
+      H.room = n; H.ready = {}; H.snaps = {}; H.plunder = null; H.duels = null; H.skip = null;
       const kind = G.Dungeon.roomKind(n);
       // Bots in shared rooms take their poison now; their room is the shared event itself
       for (const p of this.players) {
@@ -343,10 +388,18 @@ window.G = window.G || {};
       setTimeout(check, 150);
     },
     hostSnap(m) { if (this.H) this.H.snaps[m.slot] = m.room; this.hostCheckReady(); },
-    hostReady(m) { const H = this.H; if (!H || m.room !== H.room) return; H.ready[m.slot] = true; this.hostReadyInfo(); this.hostCheckReady(); },
+    hostReady(m) {
+      const H = this.H; if (!H || m.room !== H.room) return;
+      H.ready[m.slot] = true;
+      // Two rooms in a row of the clock running out with nothing done: removed for inactivity
+      H.afk = H.afk || {};
+      if (m.afk) H.afk[m.slot] = (H.afk[m.slot] || 0) + 1; else if (!m.skipped) H.afk[m.slot] = 0;
+      if (H.afk[m.slot] >= 2 && m.slot !== this.mySlot) { H.afk[m.slot] = 0; this.hostKick(m.slot); }
+      this.hostReadyInfo(); this.hostSkipCheck(); this.hostCheckReady();
+    },
     hostReadyInfo() {
-      const H = this.H;
-      this.cast({ t: 'readyInfo', room: H.room, ready: Object.keys(H.ready).map(Number) });
+      const H = this.H, S = H.skip && H.skip.room === H.room ? H.skip : null;
+      this.cast({ t: 'readyInfo', room: H.room, ready: Object.keys(H.ready).map(Number), votes: S ? Object.keys(S.votes).map(Number) : [], skipped: S && S.done });
     },
     hostCheckReady() {
       const H = this.H;
@@ -382,9 +435,9 @@ window.G = window.G || {};
       if (!h.rng) h.rng = new G.RNG((this.H.seed + p.slot * 104729) >>> 0);
       this.cast({ t: 'players', players: this.players });
       const H = this.H;
-      if (H.duels && H.duels.room === H.room && !H.duels.done[p.slot]) {
-        this.cast({ t: 'duelGo', slot: p.slot, room: H.room, hero: heroWire(h) });
-        this.hostResolveDuelsFor(p.slot);
+      if (H.duels && H.duels.room === H.room && !H.duels.done[p.slot] && H.duels.locks) {
+        H.duels.locks[p.slot] = true;
+        this.hostFireDuels(H.duels, false);
       }
       if (H.tour && H.tour.waiting) { delete H.tour.waiting[p.slot]; this.hostTourMaybeResolve(); }
       this.hostCheckReady();
@@ -407,7 +460,7 @@ window.G = window.G || {};
     },
     hostPlunderCast() {
       const P = this.H.plunder, n = now();
-      this.cast({ t: 'plunder', room: P.room, table: P.table, order: P.order, turn: P.turn, picks: P.picks, seq: P.seq, last: P.last, done: P.done,
+      this.cast({ t: 'plunder', room: P.room, tour: P.tour || 0, table: P.table, order: P.order, turn: P.turn, picks: P.picks, seq: P.seq, last: P.last, done: P.done,
         reviewMs: Math.max(0, P.reviewEnds - n), turnMs: P.turnEnds ? Math.max(0, P.turnEnds - n) : 0 });
     },
     hostPlunderTick() {
@@ -448,13 +501,14 @@ window.G = window.G || {};
       clearInterval(H.plunderTimer);
       P.done = true;
       this.hostPlunderCast();
+      if (P.tour) { setTimeout(() => this.hostTourBreak(CFG().tourBreakSeconds), 600); return; }
       this.hostCheckReady();
     },
     // Everyone: show the pile; apply your own pick when the host confirms it
     onPlunder(m) {
       const s = G.Game.s;
-      if (!s || s.room !== m.room) return;
-      const key = m.room + ':' + (m.last && m.last.seq);
+      if (!s || (m.tour ? !s.tour : s.room !== m.room)) return;
+      const key = m.room + ':' + (m.tour || 0) + ':' + (m.last && m.last.seq);
       if (m.last && m.last.slot === this.mySlot && !(s.plunderApplied || {})[key]) {
         (s.plunderApplied = s.plunderApplied || {})[key] = true;
         const p = s.player;
@@ -478,13 +532,44 @@ window.G = window.G || {};
       H.duels = { room: H.room, wire, done: {} };
       this.duelGo = {};
       this.cast({ t: 'duels', room: H.room, pairs: wire, heroes: this.allWire() });
-      // Bot-only fights are settled right away. A bot facing a player waits for that player's "go"
-      // (they may drink a potion during the duel card), so both sides fight the same hero.
+      // Bot-only fights are settled right away. Fights with a player start when the shared 5-second card ends:
+      // each player's game locks in their hero, the host freezes both sides and sends that one fight to everyone.
       for (const w of wire) if (this.isBot(w.a) && (w.b == null || this.isBot(w.b))) this.hostResolveDuel(w);
       clearTimeout(H.duelTimer);
       const D = H.duels;
-      H.duelTimer = setTimeout(() => { if (H.duels !== D) return; for (const w of wire) if (!D.done[w.a] && (this.isBot(w.a) || (w.b != null && this.isBot(w.b))) && w.a !== this.mySlot && w.b !== this.mySlot) this.hostResolveDuel(w); }, (CFG().duelIntroSeconds + 25) * 1000);
+      D.locks = {};
+      H.duelTimer = setTimeout(() => { if (H.duels === D) this.hostFireDuels(D, true); }, (CFG().duelIntroSeconds + 2.5) * 1000);
       this.hostCheckReady();
+    },
+    // Start every duel whose players have all locked in (force: whoever hasn't answered goes in as last seen)
+    hostFireDuels(D, force) {
+      for (const w of D.wire) {
+        if (D.done[w.a]) continue;
+        const humans = [w.a, w.b].filter(sl => sl != null && !this.isBot(sl));
+        if (!force && !humans.every(sl => D.locks[sl])) continue;
+        D.done[w.a] = true; if (w.b != null) D.done[w.b] = true;
+        const pair = this.duelPair(w);
+        const spec = G.Tournament.pvpSpec(pair.a, pair.b);
+        // The host settles the bots' side; each player's own game settles theirs from the same fight
+        if (w.a !== this.mySlot && w.b !== this.mySlot && (this.isBot(w.a) || (w.b != null && this.isBot(w.b)))) G.Duel.resolve(pair, G.Tournament.pvpFrom(spec, w.seed), this.H.room);
+        this.cast({ t: 'duelFight', room: D.room, w, spec });
+      }
+    },
+    sendDuelLock() {
+      const msg = { t: 'duelLock', slot: this.mySlot, room: G.Game.s.room, hero: this.mySnapWire() };
+      this.isHost ? this.onDuelLock(msg) : this.send(msg);
+    },
+    onDuelLock(m) {
+      const H = this.H;
+      if (!H || !H.duels || H.duels.room !== m.room) return;
+      if (m.slot !== this.mySlot) this.takeSnap(m.slot, m.hero);
+      H.duels.locks[m.slot] = true;
+      this.hostFireDuels(H.duels, false);
+    },
+    onDuelFight(m) {
+      const s = G.Game.s;
+      if (!s || s.room !== m.room) return;
+      if (m.w.a === this.mySlot || m.w.b === this.mySlot) G.Game.mpDuelFight(m.spec, m.w);
     },
     hostResolveDuelsFor(slot) {
       for (const w of this.H.duels.wire) if ((w.a === slot || w.b === slot) && !this.H.duels.done[w.a]) this.hostResolveDuel(w);
@@ -573,12 +658,21 @@ window.G = window.G || {};
       let longest = 0;
       for (const m of round.pairs) {
         for (const e of [m.a, m.b]) if (e && e.hero && !this.isBot(e.hero.slot) && e.hero.alive) H.tour.waiting[e.hero.slot] = true;
-        const res = G.Tournament.simulate(T, m); m._res = res;
+        this.hostFreshen(m.a); if (!m.ghost) this.hostFreshen(m.b);
+        m._spec = G.Tournament.pvpSpec(m.a, m.b);   // frozen: every screen plays exactly this
+        const res = G.Tournament.pvpFrom(m._spec, m.seed); m._res = res;
         longest = Math.max(longest, Math.min(res.duration, 10) + Math.max(0, res.duration - 10) / 2);
       }
       this.cast({ t: 'tour', state: this.tourWire(T), phase: 'fight', heroes: this.allWire() });
       clearTimeout(H.tourTimer);
       H.tourTimer = setTimeout(() => { H.tour.waiting = {}; this.hostTourMaybeResolve(); }, (longest + 12) * 1000);
+    },
+    // A player's latest gear, bag and buffs onto their tournament entry (hearts stay the host's)
+    hostFreshen(e) {
+      if (!e || !e.hero || this.isBot(e.hero.slot) || e.hero.slot === this.mySlot) return;
+      const h = this.heroes[e.hero.slot];
+      if (!h || h === e.hero) return;
+      for (const k of ['gear', 'bag', 'relics', 'buffs', 'level', 'xp', 'bonus', 'gold', 'spec', 'treePicks', 'gem']) if (h[k] !== undefined) e.hero[k] = JSON.parse(JSON.stringify(h[k]));
     },
     hostTourDone(slot) { const H = this.H; if (H && H.tour && H.tour.waiting) { delete H.tour.waiting[slot]; this.hostTourMaybeResolve(); } },
     hostTourMaybeResolve() {
@@ -588,7 +682,22 @@ window.G = window.G || {};
       clearTimeout(H.tourTimer);
       const T = H.tour.T, round = G.Tournament.currentRound(T);
       for (const m of round.pairs.slice()) if (!m.result) G.Tournament.resolve(T, m, m._res || G.Tournament.simulate(T, m));
-      this.hostTourBreak(CFG().tourBreakSeconds);
+      // A Plunder between rounds (not after the final)
+      if (T.champion || G.Tournament.alive(T).length < 2) { this.hostTourBreak(CFG().tourBreakSeconds); return; }
+      this.cast({ t: 'tour', state: this.tourWire(T), phase: 'plunder', heroes: this.allWire() });
+      this.hostStartTourPlunder(round.n);
+    },
+    hostStartTourPlunder(n) {
+      const H = this.H, T = H.tour.T;
+      const ents = T.entrants.filter(e => !e.out);
+      const th = e => (e.hero.spec === 'treasureHunter' ? 0 : 1);
+      const order = ents.slice().sort((a, b) => th(a) - th(b) || a.hero.hearts - b.hero.hearts || a.hp / a.maxHp - b.hp / b.maxHp).map(e => e.hero.slot);
+      const S = CFG().shop;
+      H.plunder = { room: H.room, tour: n, table: G.Loot.shopTable(30, ents.length + 1, H.rng, { tome: true }), order, turn: 0, picks: {},
+        reviewEnds: now() + S.reviewSeconds * 1000, turnEnds: 0, seq: 0, last: null, done: false };
+      this.hostPlunderCast();
+      clearInterval(H.plunderTimer);
+      H.plunderTimer = setInterval(() => this.hostPlunderTick(), 250);
     },
     // The tournament on the wire: slots instead of hero objects
     tourWire(T) {
@@ -599,7 +708,7 @@ window.G = window.G || {};
           a: slotOf(m.a), b: m.ghost ? null : slotOf(m.b), ghostOf: m.ghost ? m.b.of.slot : null, seed: m.seed,
           result: m.result ? { winner: m.result.winner, draw: !!m.result.draw, aHp: m.result.aHp, bHp: m.result.bHp, duration: m.result.duration } : null,
           winner: m.winner ? (m.winner === m.a ? 'a' : 'b') : null, draw: !!m.draw, suddenDeath: !!m.suddenDeath, rageHeal: m.rageHeal || 0,
-          lostHearts: (m.lostHearts || []).map(slotOf), snap: m.snap || null,
+          lostHearts: (m.lostHearts || []).map(slotOf), snap: m.snap || null, spec: !m.result && m._spec ? m._spec : null,
         })) })),
         champion: T.champion ? T.champion.hero.slot : null,
       };
@@ -610,7 +719,7 @@ window.G = window.G || {};
       const entrants = w.entrants.map(e => (ent[e.slot] = { hero: heroes[e.slot], hp: e.hp, maxHp: e.maxHp, out: e.out, place: e.place, before: e.before, heal: e.heal, power: 0 }));
       const rounds = w.rounds.map(r => ({ n: r.n, pairs: r.pairs.map(p => {
         const a = ent[p.a], b = p.ghostOf != null ? G.Tournament.ghostOf(heroes[p.ghostOf]) : ent[p.b];
-        const m = { a, b, ghost: p.ghostOf != null, seed: p.seed, result: p.result, draw: p.draw, suddenDeath: p.suddenDeath, rageHeal: p.rageHeal, snap: p.snap };
+        const m = { a, b, ghost: p.ghostOf != null, seed: p.seed, result: p.result, draw: p.draw, suddenDeath: p.suddenDeath, rageHeal: p.rageHeal, snap: p.snap, spec: p.spec || null };
         m.winner = p.winner === 'a' ? a : p.winner === 'b' ? b : null;
         m.lostHearts = (p.lostHearts || []).map(sl => ent[sl]).filter(Boolean);
         m.lostHeart = m.lostHearts[0] || null;

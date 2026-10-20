@@ -11,6 +11,7 @@ G.CONSUMABLES = {
   fury:    { name: 'Elixir of Fury',        buff: { dmg: 6 },   price: 24, weight: 9, desc: '+6 Damage next fight.' },
   tonic:   { name: 'Swift Tonic',           buff: { spd: 4 },   price: 24, weight: 9, desc: '+4 Attack Speed next fight.' },
   tome:    { name: 'Tome of Knowledge',     xp: 15, price: 30, weight: 10, desc: 'Gain 15 XP.' },
+  dye:     { name: 'Turncoat’s Dye',        dye: true, price: 40, weight: 3, minRoom: 6, desc: 'Change the class tag on one piece of your gear (not legendaries).' },
   draught: { name: 'Arcane Draught',        buff: { fullMana: 1 }, price: 24, weight: 6, desc: 'Start next fight at full mana (needs a spell).' },
 };
 G.BUFF_IDS = ['iron', 'salve', 'fury', 'tonic', 'draught'];

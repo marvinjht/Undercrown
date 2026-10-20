@@ -768,3 +768,14 @@ table.tour { width: 100%; border-collapse: collapse; font-size: 15px; font-varia
 .wp-screen { overflow: auto; padding: 10px 12px; zoom: 0.62; min-height: 0; }
 .wp-screen .waiting { font-size: 20px; }
 @media (max-width: 720px) { .watch-pop { right: 8px; left: 8px; bottom: 8px; width: auto; max-height: 70vh; } .wp-screen { zoom: 0.5; } }
+.dye-pick { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding: 10px; border: 1px solid #6a3f74; border-radius: 6px; background: #1f1622; }
+.dye-pick button { justify-content: flex-start; gap: 8px; text-align: left; }
+.dye-pick .set-dot { position: static; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--set); }
+.dye-pick small { margin-left: auto; color: var(--muted); }
+.skip-vote { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin: 12px 0; padding: 10px 12px; border: 1px solid #5a4a36; border-radius: 6px; background: #231d17; }
+.skip-vote button { flex: none; }
+.wp-head { cursor: grab; user-select: none; touch-action: none; }
+.watch-pop.docked { position: static; width: auto; max-height: none; margin: 12px 0; }
+.watch-pop.docked .wp-head { cursor: default; }
+.watch-pop.docked .wp-screen { zoom: 0.75; max-height: 560px; }
+.tour-view-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 4px; }
