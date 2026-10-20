@@ -3,12 +3,12 @@
 window.G = window.G || {};
 
 G.CONFIG = {
-  // A 10-room pattern that repeats: 5 = shop round, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
+  // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
   rooms: 29,               // dungeon rooms; the tournament is room 30. Room 1 is the Armory.
   tournamentRoom: 30,
   gemRoom: 8,              // heart gem pick is part of the first boss round
   duelRooms: [10, 20],     // everyone is paired up for a duel
-  shopRooms: [5, 15, 25],  // shop rounds (free picks, weakest first)
+  shopRooms: [5, 15, 25],  // Plunder rounds (shared pile, free picks, weakest first)
   merchantRooms: [7, 17, 27],
   bossRooms: { 8: 'boneKing', 18: 'gorehorn', 28: 'warden' },
 
@@ -51,7 +51,7 @@ G.CONFIG = {
     passGold: 30,       // gold for passing on the free table (also what happens if your turn runs out)
     extraTableItems: 2,                   // free table = players + this
     // Everything below is the merchant door
-    potionCost: 30, potionStock: [1, 3],   // a merchant has 1 to 3 potions
+    potionCost: 30, stock: [1, 3],   // a merchant has 1 to 3 of each potion and elixir
     gearCount: 4, restockCosts: [25, 50],  // two restocks per visit
     bloodGold: 10, bloodCost: [6, 20],
     itemCost: { grey: 20, green: 44, rare: 90 }, itemCostPerRoom: 2,
@@ -62,7 +62,6 @@ G.CONFIG = {
   doorMinRoom: { fight: 2, elite: 4, trash: 3, vault: 6, rest: 4, mystery: 3, venom: 5, purify: 5, forge: 5, trainer: 3, wager: 6 },
   purifyWeightPoisoned: 18,
 
-  forge: { upgradeCost: 40, rerollCost: 25 },
   wager: { bets: [20, 40], monsterMult: 1.25 },
 
   gold: { fight: [8, 12], elite: [16, 24], boss: [40, 50], trash: [8, 14], skipItemBase: 10, treasureHunterBonus: 4 },
@@ -70,6 +69,12 @@ G.CONFIG = {
   // Gear pacing: normal fights give gear 1 in 3 times (otherwise Spoils), elites and bosses always do
   gearChance: { fight: 33, lucky: 50 },
   spoils: { gold: 24, statDmg: 2, statHp: 8 },
+
+  // Out of 100, how often a relic joins the reward choices (Plunder always has one)
+  relicChance: { fight: 8, elite: 35, boss: 100, vault: 100 },
+  // Legendaries: these bosses always offer one; elites past eliteFromRoom offer one this often (out of 100)
+  legendary: { bossRooms: [18, 28], eliteFromRoom: 15, eliteChance: 10, tier: 6 },   // tier: weapon damage matches a rare of this tier
+  forge: { upgradeCost: 40, affixCost: 50 },
 
   // Out of 100 wins, how often a consumable joins the reward choices
   consumableChance: { fight: 35, elite: 60, boss: 100, vault: 50 },
@@ -94,8 +99,8 @@ G.CONFIG = {
   supplyPerClass: 12,
 
   monster: {
-    hpBase: 52, hpGrowth: 1.09,
-    hitBase: 7, hitGrowth: 1.072,
+    hpBase: 54, hpGrowth: 1.094,
+    hitBase: 7, hitGrowth: 1.076,
     elite: { hp: 1.35, hit: 1.15, packExtra: 1 },
     boss:  { hp: 1.6, hit: 1.1 },
     swarmCopy: { hp: 0.35, hit: 0.5 },
@@ -115,6 +120,7 @@ G.CONFIG = {
     berserkCap: 20,
     manaMax: 100,
     minSpd: 4,
+    firstCritCap: 6,      // "your first attacks crit" effects add up to at most this many
     critStun: 2,          // a stun from a critical hit lasts this many seconds (normal stuns last 1)
     stunImmune: 3,        // after being stunned, you can't be stunned again for this many seconds
   },

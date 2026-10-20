@@ -208,7 +208,7 @@ window.G = window.G || {};
           this.completeRoom(`The trainer drills you hard. +${CFG().xp.trainer} XP${lv.length ? `. You reached level ${p.level}!` : '.'}`);
           return;
         }
-        case 'forge': s.forge = { strengthened: false, rerolled: false, msg: null }; s.phase = 'forge'; break;
+        case 'forge': s.forge = { strengthened: false, affixed: false, msg: null }; s.phase = 'forge'; break;
         case 'mystery': s.mystery = G.Dungeon.rollMystery(s.rng); s.phase = 'mystery'; break;
         case 'merchant': s.merchant = G.Dungeon.merchantStock(p, s.room, s.rng); s.phase = 'merchant'; break;
       }
@@ -333,19 +333,20 @@ window.G = window.G || {};
       if (kind === 'strengthen' && !f.strengthened && p.gold >= F.upgradeCost) {
         p.gold -= F.upgradeCost; G.Dungeon.forgeStrengthen(it); f.strengthened = true;
         f.msg = `The smith hammers your ${it.name} stronger.`;
-      } else if (kind === 'reroll' && !f.rerolled && p.gold >= F.rerollCost && it.rarity !== 'grey') {
-        p.gold -= F.rerollCost; G.Dungeon.forgeReroll(it, s.rng); f.rerolled = true;
-        f.msg = `New bonus: ${it.name}.`;
+      } else if (kind === 'affix' && !f.affixed && !it.affixed && p.gold >= F.affixCost) {
+        p.gold -= F.affixCost; const r = G.Dungeon.forgeAffix(it, s.rng); f.affixed = true;
+        f.msg = r ? `The smith adds +${r.v} ${G.STAT_INFO[r.k].label} to your ${it.name}.` : '';
       }
       const max = G.Hero.maxHp(p); if (p.hp > max) p.hp = max;
       render();
     },
-    leaveForge() { if (this.s.phase === 'forge') this.completeRoom(this.s.forge.strengthened || this.s.forge.rerolled ? 'You leave the forge.' : 'You leave the forge empty-handed.'); },
+    leaveForge() { if (this.s.phase === 'forge') this.completeRoom(this.s.forge.strengthened || this.s.forge.affixed ? 'You leave the forge.' : 'You leave the forge empty-handed.'); },
 
     // ---------- Bag ----------
     useBag(i) {
       const s = this.s, p = s.player, it = p.bag[i];
       if (!it || s.phase === 'battle') return;
+      if (it.kind === 'gear' && !G.Hero.canEquip(p, it)) { s.bagMsg = 'You already wear a legendary. Only one at a time.'; render(); return; }
       if (it.kind === 'gear') {
         // Equipping overwrites: what you were wearing is gone for good (no swapping back)
         p.bag.splice(i, 1);
@@ -547,7 +548,7 @@ window.G = window.G || {};
       const s = this.s, sh = s.shop;
       s.roundEnds = 0;
       const mine = sh.picks[s.player.id];
-      s.notice = `Shop round over. You ${mine && !mine.startsWith('passed') ? 'took ' + mine : mine || 'passed'}.`;
+      s.notice = `Plunder over. You ${mine && !mine.startsWith('passed') ? 'took ' + mine : mine || 'passed'}.`;
       s.roundKind = 'after';
       s.rivalsPlayedRoom = s.room;
       s.gemDone = true; s.duelDone = true;
@@ -577,9 +578,9 @@ window.G = window.G || {};
         const c = G.CONSUMABLES[id];
         const price = id === 'potion' ? S.potionCost : c.price;
         if (p.gold < price || G.Hero.bagFull(p)) return;
-        if (id === 'potion' && m.potions <= 0) return;
+        if ((m.cstock[id] || 0) <= 0) return;
         p.gold -= price;
-        if (id === 'potion') m.potions--;
+        m.cstock[id]--;
         p.bag.push(G.Items.consumable(id));
         m.msg = `Bought ${c.name}. It's in your bag.`;
       } else if (kind === 'restock') {

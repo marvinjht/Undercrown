@@ -7,6 +7,7 @@ window.G = window.G || {};
   const FONT = '"Spline Sans Mono", ui-monospace, monospace';
   const X0 = 150, STEP = 60;                      // pixels: position 0 and 1 step (Kiting can step back past 0)
   const LANES = [200, 132, 268, 166, 234, 110, 290];
+  const FX_COLORS = { Heartlight: '#c9b8ff', Quakestep: '#e7c38a', Aegis: '#9fc4ff', Inferno: '#ff9a3c', Butcher: '#ff4a3a', Dawnwall: '#f0d27a', Sentinel: '#9fc4ff', Guillotine: '#ff3b2f' };
 
   function posAt(track, t) {
     if (!track || !track.length) return 0;
@@ -132,6 +133,29 @@ window.G = window.G || {};
       this.float(f, 'SMOKE BOMB', '#c9c6d2', 12);
     }
 
+    // A line flashed between two fighters (Guillotine's pull)
+    chain(a, b, color) {
+      const g = this.track(this.add.graphics());
+      g.lineStyle(3, color, 0.9).lineBetween(a.cont.x, a.cont.y, b.cont.x, b.cont.y);
+      this.tweens.add({ targets: g, alpha: 0, duration: 380 / this.speed, onComplete: () => g.destroy() });
+    }
+    // Blood burst: Guillotine executions and Butcher pops
+    blood(f, big) {
+      const n = big ? 18 : 11;
+      for (let i = 0; i < n; i++) {
+        const ang = Math.random() * Math.PI * 2, dist = (big ? 50 : 34) + Math.random() * 30;
+        const d = this.track(this.add.circle(f.cont.x, f.cont.y - 6, 3 + Math.random() * (big ? 5 : 3), i % 3 ? 0xb3241a : 0x7a1410));
+        this.tweens.add({ targets: d, x: f.cont.x + Math.cos(ang) * dist, y: f.cont.y - 6 + Math.sin(ang) * dist * 0.6 + 14, alpha: 0, duration: (big ? 700 : 500) / this.speed, ease: 'Cubic.easeOut', onComplete: () => d.destroy() });
+      }
+      if (big) {
+        const pool = this.track(this.add.ellipse(f.cont.x, f.cont.y + 26, 10, 4, 0x7a1410, 0.8));
+        this.tweens.add({ targets: pool, scaleX: 7, scaleY: 4, duration: 600 / this.speed, ease: 'Cubic.easeOut' });
+        this.float(f, 'EXECUTED', '#ff3b2f', 22);
+        this.cameras.main.shake(220 / this.speed, 0.01);
+        this.cameras.main.flash(120 / this.speed, 120, 0, 0);
+      }
+    }
+
     flash(f) {
       f.body.setTintFill(0xffffff);
       this.time.delayedCall(70 / this.speed, () => {
@@ -151,7 +175,7 @@ window.G = window.G || {};
           this.tweens.add({ targets: f.cont, scaleX: -f.sc, scaleY: f.sc, duration: 220 / this.speed, ease: 'Back.easeOut' });
         }
       }
-      if (e.h) for (const id in e.h) { const f = F[id]; if (f) { [f.hp, f.shield, f.mana] = e.h[id]; } }
+      if (e.h) for (const id in e.h) { const f = F[id]; if (f) { [f.hp, f.shield, f.mana] = e.h[id]; if (e.h[id][3]) f.maxHp = e.h[id][3]; } }
       const att = F[e.src], def = F[e.tgt];
       this.playSfx(e, att, def);
       switch (e.type) {
@@ -211,6 +235,38 @@ window.G = window.G || {};
           if (def) { def.dead = true; def.body.setTint(0x555555); this.tweens.add({ targets: def.cont, alpha: 0.35, angle: def.dir * 80, duration: 450 / this.speed }); }
           break;
         case 'timeout': { const a = F.a; if (a) this.float(a, 'TIME', '#ece3d6', 16); break; }
+        // ---------- v0.1: hybrids and legendaries ----------
+        case 'fxhit': if (def) { this.flash(def); this.float(def, String(e.amount), FX_COLORS[e.name] || '#ffb36b', 15, 14); } break;
+        case 'beam': if (att && def) { att.beamTo = def; att.beamPower = e.power; } break;
+        case 'stomp': if (att) {
+          const ring = this.track(this.add.image(att.cont.x, att.cont.y + 20, 'fx_ring').setTint(0xc9a26b).setScale(0.3, 0.12));
+          this.tweens.add({ targets: ring, scaleX: 3.4, scaleY: 1.2, alpha: 0, duration: 520 / this.speed, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
+          this.cameras.main.shake(160 / this.speed, 0.006); this.float(att, 'STOMP', '#e7c38a', 14);
+        } break;
+        case 'pulse': if (att) {
+          const ring = this.track(this.add.image(att.cont.x, att.cont.y, 'fx_ring').setTint(0x9fc4ff).setScale(0.4).setAlpha(0.8));
+          this.tweens.add({ targets: ring, scale: 2.2, alpha: 0, duration: 450 / this.speed, onComplete: () => ring.destroy() });
+        } break;
+        case 'frenzy': if (att) this.float(att, 'FRENZY', '#8fcf78', 13); break;
+        case 'firering': this.ring = { start: e.start, closed: e.closed }; break;
+        case 'shove': if (def) this.float(def, 'SHOVED', '#d9c7a6', 12); break;
+        case 'pull': if (att && def) { this.float(def, 'PULLED', '#e0645a', 14); this.chain(att, def, 0xb8b0a6); } break;
+        case 'knock': if (def) this.float(def, e.slam ? 'WALL SLAM' : 'KNOCKBACK', e.slam ? '#ffd34d' : '#cfe8ff', e.slam ? 15 : 12); if (e.slam) this.cameras.main.shake(120 / this.speed, 0.005); break;
+        case 'blink': if (att) {
+          const puff = this.track(this.add.image(att.cont.x, att.cont.y, 'fx_ring').setTint(0x8e9ab8).setScale(0.6).setAlpha(0.8));
+          this.tweens.add({ targets: puff, scale: 0.1, alpha: 0, duration: 260 / this.speed, onComplete: () => puff.destroy() });
+          this.float(att, 'BLINK', '#c8a2ff', 14);
+        } break;
+        case 'execute': if (def) this.blood(def, true); break;
+        case 'pop': if (def) { this.blood(def, false); this.float(def, 'BUTCHERED', '#ff4a3a', 16); } break;
+        case 'block': if (att) this.float(att, 'BLOCKED', '#f0d27a', 15); break;
+        case 'drain': if (def && e.amount) this.float(def, `−${e.amount} MAX`, '#9b7bff', 11, -16); break;
+        case 'penance': if (att) this.float(att, 'PENANCE', '#f0d27a', 14); break;
+        case 'sunder': if (def) this.float(def, 'SUNDERED', '#a996ff', 13); break;
+        case 'hex': if (def) this.float(def, 'HEX ' + e.stacks, '#c08cff', 12); break;
+        case 'shrug': if (att) this.float(att, 'UNBOUND +' + e.amount, '#f0d27a', 13); break;
+        case 'sentinel': if (att) { this.float(att, 'SHIELD BURST', '#9fc4ff', 14); this.cameras.main.shake(100 / this.speed, 0.004); } break;
+        case 'shieldup': if (att) this.float(att, 'SHIELD +' + e.amount, '#9fc4ff', 12); break;
       }
       if (this.cfg.onEvent) this.cfg.onEvent(e);
     }
@@ -237,6 +293,19 @@ window.G = window.G || {};
         case 'parry': S.play('parry'); break;
         case 'stun': S.play('stun'); break;
         case 'stealth_on': case 'smoke': S.play('stealth'); break;
+        case 'stomp': S.play('thud'); break;
+        case 'pulse': S.play('shield', 0.3); break;
+        case 'blink': S.play('cheap'); break;
+        case 'execute': S.play('explode'); S.play('death', 0.1); break;
+        case 'pop': S.play('chop'); break;
+        case 'block': S.play('clang'); break;
+        case 'knock': S.play(e.slam ? 'thud' : 'dodge'); break;
+        case 'pull': case 'shove': S.play('kite'); break;
+        case 'sunder': case 'hex': S.play('arcane', 0.3); break;
+        case 'frenzy': S.play('double', 0.3); break;
+        case 'sentinel': S.play('shield'); break;
+        case 'beam': S.play('zap', 0.9); break;
+        case 'fxhit': if (e.name === 'Inferno') S.play('bleed', 0.4); break;
         case 'double': S.play('double'); break;
         case 'kite': S.play('kite'); break;
         case 'burst': S.play('explode'); break;
@@ -273,8 +342,39 @@ window.G = window.G || {};
       const E = this.cfg.result.events;
       while (this.idx < E.length && E[this.idx].t <= this.t) { this.apply(E[this.idx]); this.idx++; }
       for (const id in this.F) { const f = this.F[id]; this.placeFighter(f); this.drawBar(f); }
+      this.drawEffects();
       const end = E.length ? E[E.length - 1].t : 0;
       if (this.idx >= E.length && this.t > end + 1.1) this.finish();
+    }
+
+    // Continuous effects: the Heartlight beam and the Inferno fire ring
+    drawEffects() {
+      if (!this.fxg) this.fxg = this.track(this.add.graphics().setDepth(5));
+      const g = this.fxg; g.clear();
+      for (const id in this.F) {
+        const f = this.F[id];
+        if (!f.beamTo || f.dead || f.beamTo.dead || f.gone) continue;
+        const w = 2 + (f.beamPower || 2) * 0.6, x1 = f.cont.x, y1 = f.cont.y - 8, x2 = f.beamTo.cont.x, y2 = f.beamTo.cont.y - 8;
+        const flick = 0.75 + Math.random() * 0.25;
+        g.lineStyle(w + 6, 0xa996ff, 0.18 * flick).lineBetween(x1, y1, x2, y2);
+        g.lineStyle(w, 0xd9ccff, 0.85 * flick).lineBetween(x1, y1, x2, y2);
+        g.fillStyle(0xffffff, 0.8).fillCircle(x2, y2, w * 0.9);
+      }
+      if (this.ring && this.t >= this.ring.start) {
+        const p = Math.min(1, (this.t - this.ring.start) / (this.ring.closed - this.ring.start));
+        const L = X0 + -G.CONFIG.combat.kiteEdge * STEP, R = X0 + (G.CONFIG.combat.startGap + G.CONFIG.combat.kiteEdge) * STEP, mid = (L + R) / 2;
+        const lo = L + p * (mid - L), hi = R - p * (R - mid);
+        for (const [a, b] of [[0, lo], [hi, W]]) {
+          if (b - a <= 0) continue;
+          g.fillStyle(0xff6a1a, 0.22).fillRect(a, 70, b - a, H - 140);
+          for (let i = 0; i < 7; i++) {
+            const x = (i % 2 ? b : a) + (i % 2 ? -1 : 1) * Math.random() * 10, y = 80 + i * 32 + Math.random() * 8;
+            if (x < a - 1 || x > b + 1) continue;
+            g.fillStyle(i % 3 ? 0xff9a3c : 0xffd27a, 0.7).fillTriangle(x - 7, y + 14, x + 7, y + 14, x, y - 8 - Math.random() * 10);
+          }
+          g.lineStyle(3, 0xffb347, 0.8).lineBetween(a === 0 ? b : a, 70, a === 0 ? b : a, H - 70);
+        }
+      }
     }
 
     finish() {

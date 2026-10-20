@@ -1,8 +1,11 @@
-# Thirty Doors (prototype v5)
+# Undercrown (v0.1)
+
+v0.1 adds: relics (stackable build effects, max 3 copies, data/relics.js), 17 legendaries (one worn at a time, unique per match, data/legendaries.js), hybrids with capstone-weight mechanics (data/sets.js), rares with two affixes, a forge that previews Strengthen and adds one bonus per piece, per-item merchant stock, and the new layout.
+
 
 Single-player prototype of a dungeon auto battler. You and 5 AI rivals each walk 29 rooms with 3 hearts,
 then fight a last-one-standing tournament in room 30. Rooms follow a 10-room pattern that repeats:
-5 = shop round (free picks), 7 = merchant, 8 = boss (the first one also gives your heart gem), 10 = duel.
+5 = Plunder (a shared loot pile, free picks), 7 = merchant, 8 = boss (the first one also gives your heart gem), 10 = duel.
 Every round is timed and ends as soon as everyone is ready; fights don't count against the clock.
 
 v5 adds:

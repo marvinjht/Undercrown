@@ -52,13 +52,13 @@ window.G = window.G || {};
     const base = lines.filter(l => !l.affix).map(l => `<li>${esc(l.text)}</li>`).join('');
     const bonus = lines.filter(l => l.affix);
     let extra = bonus.length ? `<li class="affix-h">Bonus</li>${bonus.map(l => `<li class="affix ${l.cost ? 'cost' : ''}">${esc(l.text)} <small>${esc(l.suffix)}</small></li>`).join('')}` : '';
-    const E = G.Items.effectText(item);
-    if (E) extra += `<li class="affix-h">Build effect</li><li class="effect"><b>${esc(E.name)}:</b> ${esc(E.desc)}</li>`;
+    if (item.rarity === 'legendary') extra += `<li class="affix-h legend-h">Legendary effect</li><li class="effect legend">${esc(G.LEGENDARIES[item.legendary].desc)}</li>`;
     return `<ul class="${cls}">${base}${extra}</ul>`;
   }
 
   function itemTip(item, hero) {
     if (item.kind === 'consumable') return consumableTip(item);
+    if (item.kind === 'relic') return relicTip(item.rid, hero ? G.Hero.relicCount(hero, item.rid) : 0);
     const R = G.RARITY[item.rarity];
     let cmp = '';
     if (hero) {
@@ -72,25 +72,37 @@ window.G = window.G || {};
     const W = item.slot === 'weapon' ? G.WEAPONS[item.weaponType] : null;
     const set = item.set ? `<p class="tt-extra">Counts toward the ${G.CLASSES[item.set].name} set.</p>` : '';
     return `<div class="tt-title r-${item.rarity}">${esc(item.name)}</div>
-      <div class="tt-sub">${R.name} ${W ? W.name + ' · ' + RANGE_NAMES[W.range] + ' · ' + (W.type === 'magic' ? 'Magic' : 'Physical') : G.SLOT_NAMES[item.slot]} · Tier ${item.tier}</div>
+      <div class="tt-sub">${R.name} ${W ? W.name + ' · ' + RANGE_NAMES[W.range] + ' · ' + (W.type === 'magic' ? 'Magic' : 'Physical') : G.SLOT_NAMES[item.slot]} ${item.rarity === 'legendary' ? '' : ' · Tier ' + item.tier}</div>
       ${statList(item, 'tt-stats')}
-      ${item.trait ? `<div class="tt-trait">${esc(item.trait)}</div>` : ''}${set}${cmp}`;
+      ${item.rarity === 'legendary' ? (item.baseTrait ? `<div class="tt-trait">${esc(item.baseTrait)}</div>` : '') : item.trait ? `<div class="tt-trait">${esc(item.trait)}</div>` : ''}${set}
+      ${item.rarity === 'legendary' ? '<p class="tt-extra">Legendary: you can wear only one. Fixed stats, one of a kind in this match.</p>' : ''}${item.affixed ? '<p class="tt-extra">Forged: already has its added bonus.</p>' : ''}${cmp}`;
   }
 
   // Only label an item when every change points the same way
   function verdict(hero, item) {
     if (item.kind === 'consumable') return { cls: 'side', text: 'Bag item' };
+    if (item.kind === 'relic') return null;
+    if (item.rarity === 'legendary') return null;
     const eq = hero.gear[item.slot];
     if (!eq) return { cls: 'up', text: 'Empty slot' };
     const diffs = G.Items.compare(item, eq);
-    const sameEffect = (item.effect || null) === (eq.effect || null) && (item.set || null) === (eq.set || null);
-    if (!diffs.length) return sameEffect ? { cls: 'side', text: 'Same stats' } : null;
-    if (diffs.every(d => d.d > 0) && (sameEffect || !eq.effect)) return { cls: 'up', text: 'Upgrade' };
-    if (diffs.every(d => d.d < 0) && (sameEffect || !item.effect)) return { cls: 'down', text: 'Downgrade' };
+    const same = (item.set || null) === (eq.set || null) && eq.rarity !== 'legendary';
+    if (!diffs.length) return same ? { cls: 'side', text: 'Same stats' } : null;
+    if (diffs.every(d => d.d > 0) && same) return { cls: 'up', text: 'Upgrade' };
+    if (diffs.every(d => d.d < 0) && same) return { cls: 'down', text: 'Downgrade' };
     return null;
   }
 
   function itemCard(item, hero, btns) {
+    if (item.kind === 'relic') {
+      const R = G.RELICS[item.rid], n = G.Hero.relicCount(hero, item.rid), max = n >= G.RELIC_MAX;
+      return `<article class="card item relic-card" style="--rel:${R.color}">
+        <div class="item-head"><span class="ico-wrap">${G.Art.icon(item.iconKey)}</span>
+          <div class="item-name"><b>${esc(R.name)}</b><small>Relic${n ? ` · you have ${n}/${G.RELIC_MAX}` : ''}</small><span class="tags"><span class="verdict relic-tag">Relic</span></span></div></div>
+        <p class="trait">${esc(R.text(Math.min(G.RELIC_MAX, n + 1)))}.</p>
+        <p class="hint">${max ? 'You have this relic maxed.' : n ? `Stacks with yours (now: ${esc(R.text(n))}).` : 'Goes to your relic row. Never uses bag space.'}</p>
+        <div class="btns">${btns}</div></article>`;
+    }
     if (item.kind === 'consumable') {
       const c = G.CONSUMABLES[item.cid];
       return `<article class="card item consumable">
@@ -110,8 +122,9 @@ window.G = window.G || {};
           <span class="tags">${setChip(item.set)}${v ? `<span class="verdict ${v.cls}">${v.text}</span>` : ''}</span></div>
       </div>
       ${statList(item, 'stat-list')}
-      ${item.trait ? `<p class="trait">${esc(item.trait)}</p>` : ''}
-      ${eq ? `<div class="cmp"><span>Compared to ${esc(eq.name)}${eq.effect && eq.effect !== item.effect ? ` (loses ${esc(G.EFFECTS[eq.effect].name)})` : ''}</span><ul>${diffs.map(d => `<li class="${d.d > 0 ? 'up' : 'down'}">${esc(d.text)}</li>`).join('')}</ul></div>` : ''}
+      ${item.trait && item.rarity !== 'legendary' ? `<p class="trait">${esc(item.trait)}</p>` : ''}
+      ${item.rarity === 'legendary' && !G.Hero.canEquip(hero, item) ? `<p class="warn">You already wear a legendary (${esc(G.Hero.wornLegendary(hero).name)}). This one can only go in your bag.</p>` : ''}
+      ${eq ? `<div class="cmp"><span>Compared to ${esc(eq.name)}${eq.rarity === 'legendary' ? ' (loses its legendary effect)' : ''}</span><ul>${diffs.map(d => `<li class="${d.d > 0 ? 'up' : 'down'}">${esc(d.text)}</li>`).join('')}</ul></div>` : ''}
       <div class="btns">${btns}</div>
     </article>`;
   }
@@ -158,10 +171,13 @@ window.G = window.G || {};
     const col = st.look ? G.CLASSES[st.look].color : '#9fdcff';
     const spec = p.spec ? G.SPECS[p.spec].name : `Spec at level ${CFG().levels.specLevel}`;
     return `<div class="charblock" style="--pv:${col}">
-      <div class="pv-left"><div id="preview-slot" class="preview-slot" aria-hidden="true"></div>
-        <div class="pv-info"><b>You</b><span>${esc(buildLabel(p))}</span><small>Level ${p.level} · ${esc(spec)}${p.gem ? ' · ' + esc(G.GEMS[p.gem].name) : ''}</small></div></div>
-      <div class="pv-right">${statCols(p)}${setBonus(p)}</div></div>`;
+      <div class="pv-left"><div class="pv-top">${levelBadge(p)}</div><div class="pv-mid"><div id="preview-slot" class="preview-slot" aria-hidden="true"></div>
+        <div class="pv-info"><b>You</b><span>${esc(buildLabel(p))}</span><small>${esc(spec)}${p.gem ? ' · ' + esc(G.GEMS[p.gem].name) : ''}</small></div></div>
+        ${vitalsRow(p, 'player-block')}</div>
+      <div class="pv-right">${statCols(p)}${setBonus(p)}</div>
+      ${relicRow(p)}</div>`;
   }
+
 
   // ---------- Side panels ----------
   function gearPanel(hero) {
@@ -169,7 +185,7 @@ window.G = window.G || {};
       const it = hero.gear[slot];
       if (!it) return `<div class="slot empty" ${tip(`<div class="tt-title">${G.SLOT_NAMES[slot]}</div><div class="tt-sub">Empty. Loot leans toward empty slots.</div>`)}>
         <span class="ico-wrap">${G.Art.icon(slot)}</span><small>${G.SLOT_NAMES[slot]}</small></div>`;
-      return `<div class="slot r-${it.rarity}" ${tip(itemTip(it))}><span class="ico-wrap r-${it.rarity}">${G.Art.icon(it.iconKey)}</span><small>${esc(it.name)}</small>${it.set ? `<i class="set-dot" style="--set:${G.CLASSES[it.set].color}"></i>` : ''}${it.effect ? '<i class="fx-dot"></i>' : ''}</div>`;
+      return `<div class="slot r-${it.rarity}" ${tip(itemTip(it))}><span class="ico-wrap r-${it.rarity}">${G.Art.icon(it.iconKey)}</span><small>${esc(it.name)}</small>${it.set ? `<i class="set-dot" style="--set:${G.CLASSES[it.set].color}"></i>` : ''}${it.rarity === 'legendary' ? '<i class="fx-dot legend"></i>' : ''}</div>`;
     }).join('')}</div></section>`;
   }
 
@@ -180,10 +196,27 @@ window.G = window.G || {};
     if (supplyOpen) {
       const heroes = G.Game.all().filter(h => h.alive);
       detail = `<table class="supply-table"><thead><tr><th>Class</th><th>Left</th>${heroes.map(h => `<th title="${esc(h.name)}">${esc(h.isPlayer ? 'You' : h.name.split(' ').pop().slice(0, 3))}</th>`).join('')}</tr></thead><tbody>${
-        G.CLASS_ORDER.map(c => `<tr><td style="color:${G.CLASSES[c].color}">${G.CLASSES[c].name}</td><td><b>${counts[c]}</b>/${per}</td>${heroes.map(h => `<td>${G.Supply.held(c, h) || ''}</td>`).join('')}</tr>`).join('')}</tbody></table>
-        <p class="hint">Every match has ${per} pieces of each class, shared by everyone. When a class runs low, its pieces stop dropping until someone lets one go.</p>`;
+        G.CLASS_ORDER.map(c => { const lg = G.Supply.legendaries(c); return `<tr><td style="color:${G.CLASSES[c].color}">${G.CLASSES[c].name}</td><td><b>${counts[c]}</b>/${per}${lg ? ` <span class="lg-plus" title="Legendaries held, on top of the supply">+${lg}</span>` : ''}</td>${heroes.map(h => { const n = G.Supply.held(c, h), l = G.Supply.legendaries(c, h); return `<td>${n || ''}${l ? `<span class="lg-plus">+${l}</span>` : ''}</td>`; }).join('')}</tr>`; }).join('')}</tbody></table>
+        <p class="hint">Every match has ${per} pieces of each class, shared by everyone. When a class runs low, its pieces stop dropping until someone lets one go. Legendaries (gold +) count toward your set but sit on top of the supply.</p>`;
     }
     return `<div class="supply"><button class="supply-row" data-act="supply" aria-expanded="${supplyOpen}"><span>Set supply</span><span class="supply-bars">${bars}</span><span class="chev">${supplyOpen ? 'Hide' : 'Show'}</span></button>${detail}</div>`;
+  }
+
+  // ---------- Relics ----------
+  function relicTip(rid, n) {
+    const R = G.RELICS[rid], max = G.RELIC_MAX;
+    return `<div class="tt-title" style="color:${R.color}">${esc(R.name)} <small>relic${n ? ` · ${n}/${max}` : ''}</small></div>
+      ${n ? `<p class="tier on">${esc(R.text(n))}.</p>` : `<p>${esc(R.text(1))}.</p>`}
+      ${n >= max ? '<p class="tt-extra">Maxed. It can’t drop for you again.</p>' : `<p class="tier off"><b>${n ? 'Next copy' : 'More copies'}:</b> ${esc(R.text(Math.min(max, (n || 1) + 1)))}.</p><p class="tt-extra">Relics stack up to ${max} copies and never use bag space.</p>`}`;
+  }
+  // Always shown under your stats (and under the arena in fights)
+  function relicRow(p) {
+    const ids = G.RELIC_ORDER.filter(r => (p.relics || {})[r]);
+    const chips = ids.map(r => {
+      const n = p.relics[r], R = G.RELICS[r], max = n >= G.RELIC_MAX;
+      return `<li class="relic ${max ? 'maxed' : ''}" style="--rel:${R.color}" ${tip(relicTip(r, n))}><span class="ico-wrap">${G.Art.icon('relic_' + r)}</span><b>${esc(R.name)}</b><small>${max ? 'MAX' : '×' + n}</small></li>`;
+    }).join('');
+    return `<div class="relic-row"><h4>Relics</h4>${ids.length ? `<ul>${chips}</ul>` : '<p class="hint">No relics yet. They drop at Plunder, from elites and bosses, and in vaults.</p>'}</div>`;
   }
 
   // ---------- Set bonuses ----------
@@ -263,6 +296,7 @@ window.G = window.G || {};
   // Equipping over a worn piece destroys it, so it takes a press and hold. An empty slot is a plain click.
   function bagUseBtn(p, it, i) {
     if (it.kind !== 'gear') return `<button data-act="bag-use" data-i="${i}">Use</button>`;
+    if (!G.Hero.canEquip(p, it)) return `<button disabled>Equip locked</button><small class="hold-note">You already wear a legendary</small>`;
     const eq = p.gear[it.slot];
     if (!eq) return `<button data-act="bag-use" data-i="${i}">Equip</button>`;
     return `<button class="hold" data-hold="bag-use" data-i="${i}" aria-label="Press and hold to equip, replacing ${esc(eq.name)}"><span class="hold-fill"></span><span class="hold-label">Hold to equip</span></button><small class="hold-note">Replaces ${esc(eq.name)}</small>`;
@@ -325,19 +359,18 @@ window.G = window.G || {};
       }).join('');
       return `<li class="rival ${r.alive ? '' : 'dead'}">
         <span class="dot" style="background:${col}"></span>
-        <div class="rv-main"><div class="rv-top" ${tip(rivalTip(r))}><b>${esc(r.name)}</b><span class="lv">Lv ${r.level}</span>${heartsRow(r.hearts, 'sm')}
-          <span class="rv-wpn">${r.gear.weapon ? G.Art.icon(r.gear.weapon.weaponType) : ''}</span></div>
+        <div class="rv-main"><div class="rv-top" ${tip(rivalTip(r))}><b>${esc(r.name)}</b><span class="lv">Lv ${r.level}</span>${heartsRow(r.hearts, 'sm')}</div>
           <div class="rv-spec">${esc([r.spec ? G.SPECS[r.spec].name : '', tag === 'No set bonus yet' ? '' : tag].filter(Boolean).join(' · '))}</div>
           ${r.alive ? hpBar(r.hp, max, 'thin', 'rv-' + r.id) : `<div class="fell">Out of hearts${r.diedRoom ? ` in room ${r.diedRoom}` : ''}</div>`}
-          <div class="rarity-dots">${gear}<span>${r.alive ? esc(r.lastAction || '') : ''}</span></div>
+          <div class="rarity-dots">${gear}</div>
         </div></li>`;
     }).join('');
     const alive = st.rivals.filter(r => r.alive).length;
     return `<section class="panel"><h3>Rivals <span class="chip muted">${alive} in</span></h3><ul class="rivals">${rows}</ul></section>`;
   }
 
+  // Top bar: the dungeon only. Name and sound on the left, the room track in the middle, the clock on the right.
   function topbar(st) {
-    const p = st.player, max = G.Hero.maxHp(p);
     const pips = [];
     for (let r = 1; r <= CFG().tournamentRoom; r++) {
       const kind = G.Dungeon.roomKind(r);
@@ -346,34 +379,46 @@ window.G = window.G || {};
       const extra = kind === 'boss' && r === CFG().gemRoom ? ' Then you choose your heart gem.' : '';
       pips.push(`<i class="pip k-${kind} ${cls}" ${tip(`<div class="tt-title">Room ${r}: ${info.name}</div><p>${info.text}${extra}</p>`)}>${info.icon ? G.Art.icon(info.icon) : ''}</i>`);
     }
-    let roomLabel = `Room ${st.room} <small>of ${CFG().tournamentRoom}${st.room === 1 ? ' · the Armory' : ''}</small>`;
+    const kindNow = G.Dungeon.roomKind(Math.min(st.room, CFG().tournamentRoom));
+    let roomLabel = `Room ${st.room} <small>of ${CFG().tournamentRoom}${kindNow !== 'doors' ? ' · ' + ROOM_INFO[kindNow].name : ''}</small>`;
     if (st.room > CFG().rooms) roomLabel = 'Tournament';
-    else if (G.Dungeon.roomKind(st.room) === 'merchant' && st.phase === 'merchant') roomLabel = `Room ${st.room} <small>· Merchant</small>`;
     else if (st.phase === 'spec' || st.phase === 'tree') roomLabel = `Level up <small>after room ${st.room}</small>`;
     else if (st.phase === 'gem') roomLabel = `Heart gem <small>after room ${st.room}</small>`;
     else if (st.phase === 'duelIntro' || (st.battle && st.battle.duel && st.phase === 'battle')) roomLabel = `Duel <small>after room ${st.room}</small>`;
-    else if (st.roundKind === 'shop') roomLabel = `Room ${st.room} <small>· Shop round</small>`;
+    return `<header class="top">
+      <div class="brand">Undercrown <button class="sound-btn" data-act="sound" aria-label="${G.Sound && G.Sound.muted ? 'Turn sound on' : 'Turn sound off'}" title="Sound">${G.Sound && G.Sound.muted ? 'Sound off' : 'Sound on'}</button></div>
+      <div class="track"><div class="pips" aria-hidden="true">${pips.join('')}</div><div class="room-label">${roomLabel}</div></div>
+      <div class="clock" id="clock" ${tip('<div class="tt-title">Round timer</div><p>Every choice is timed for everyone and ends early once everyone is ready. Fights don’t count against it. Anything you haven’t decided at zero is decided for you.</p>')}><b id="clock-num">${timerText()}</b><i><span id="clock-bar" style="width:${timerPct()}%"></span></i></div>
+    </header>`;
+  }
+
+  // Your hearts, health, poison and gold: under your character, and on your own card in the players column
+  function vitalsRow(p, key) {
+    const max = G.Hero.maxHp(p);
     const poison = p.poison ? `<span class="poison" ${tip(`<div class="tt-title">Poison ${p.poison}</div><p>You lose ${p.poison} health at the start of every room. Only an Antidote or a Purifying Spring clears it; campfires don't.</p>`)}>Poison ${p.poison}</span>` : '';
+    return `<div class="vitals">${heartsRow(p.hearts)}${hpBar(p.hp, max, '', key)}${poison}
+      <div class="gold" ${tip('<div class="tt-title">Gold</div><p>Spend it at Merchants, the Forge and Wagers. Passing at a Plunder also gives gold.</p>')}><span class="coin"></span>${p.gold}</div></div>`;
+  }
+  function levelBadge(p) {
     const L = CFG().levels;
     const need = p.level >= L.max ? 1 : G.Hero.xpToNext(p.level);
     const xpPct = p.level >= L.max ? 100 : Math.round(p.xp / need * 100);
-    return `<header class="top">
-      <div class="brand">Thirty Doors <button class="sound-btn" data-act="sound" aria-label="${G.Sound && G.Sound.muted ? 'Turn sound on' : 'Turn sound off'}" title="Sound">${G.Sound && G.Sound.muted ? 'Sound off' : 'Sound on'}</button></div>
-      <div class="track"><div class="room-label">${roomLabel}</div><div class="pips" aria-hidden="true">${pips.join('')}</div></div>
-      <div class="clock" id="clock" ${tip('<div class="tt-title">Round timer</div><p>Every choice is timed for everyone and ends early once everyone is ready. Fights don’t count against it. Anything you haven’t decided at zero is decided for you.</p>')}><b id="clock-num">${timerText()}</b><i><span id="clock-bar" style="width:${timerPct()}%"></span></i></div>
-      <div class="vitals">
-        <div class="lvl" ${tip(`<div class="tt-title">Level ${p.level}</div><p>${p.level >= L.max ? 'Max level.' : `${p.xp} of ${need} XP to level ${p.level + 1}.`} Every fight gives XP. Spec at level ${L.specLevel}; skill tree picks at ${L.treeLevels.join(', ')}. Each level gives +${L.hpPerLevel} max Health.</p>`)}><b>Lv ${p.level}</b><i><span style="width:${xpPct}%"></span></i></div>
-        ${heartsRow(p.hearts)}
-        ${hpBar(p.hp, max, '', 'player-top')}${poison}
-        <div class="gold" ${tip('<div class="tt-title">Gold</div><p>Spend it at Merchants, the Forge and Wagers. Passing at a shop round also gives gold.</p>')}><span class="coin"></span>${p.gold}</div></div>
-    </header>`;
+    return `<div class="lvl" ${tip(`<div class="tt-title">Level ${p.level}</div><p>${p.level >= L.max ? 'Max level.' : `${p.xp} of ${need} XP to level ${p.level + 1}.`} Every fight gives XP. Spec at level ${L.specLevel}; skill tree picks at ${L.treeLevels.join(', ')}. Each level gives +${L.hpPerLevel} max Health.</p>`)}><b>Lv ${p.level}</b><i><span style="width:${xpPct}%"></span></i></div>`;
+  }
+
+  // Your own card in the players column, set apart from the rivals
+  function youPanel(st) {
+    const p = st.player;
+    return `<section class="panel you-card"><div class="you-top"><span class="dot" style="background:#9fdcff"></span><b>You</b>${levelBadge(p)}</div>
+      ${vitalsRow(p, 'you-card')}
+      <div class="rv-spec">${esc([p.spec ? G.SPECS[p.spec].name : '', buildLabel(p) === 'No set bonus yet' ? '' : buildLabel(p)].filter(Boolean).join(' · '))}</div></section>`;
   }
 
   // What each kind of room is, for the room counter's tooltips
   const ROOM_INFO = {
     armory: { name: 'The Armory', icon: null, text: 'Pick one of three weapons.' },
     doors: { name: 'Two doors', icon: null, text: 'Choose between two doors: fights, treasure, campfires and more.' },
-    shop: { name: 'Shop round', icon: 'door_shop', text: 'Free picks for everyone. Fewer hearts and lower health pick first.' },
+    shop: { name: 'Plunder', icon: 'door_shop', text: 'A shared pile of loot, always with one relic. Free picks for everyone; fewer hearts and lower health pick first.' },
     merchant: { name: 'Merchant', icon: 'door_merchant', text: 'Spend gold on gear, potions and buffs, or sell blood.' },
     boss: { name: 'Boss', icon: 'door_boss', text: 'A single sealed door with a boss behind it. Guaranteed rare item.' },
     duel: { name: 'Duel', icon: 'door_fight', text: 'Everyone is paired with a rival. The loser loses a heart.' },
@@ -425,6 +470,7 @@ window.G = window.G || {};
       <div id="arena-slot" class="arena-slot"></div>
       <div class="battle-bar"><span class="speed-tag" id="speed-tag">1x speed</span><small>Fights speed up to 2x after ${CFG().combat.fastAfter} seconds. The round timer waits for the fight.${b.duel || b.tour ? '' : ` If time runs out (${CFG().combat.maxTime}s), you get half the gold and XP and no items.`}</small></div>
       <ol id="battle-log" class="log" aria-live="polite"></ol>
+      ${b.duel || b.tour ? '' : relicRow(st.player)}
     </section>`;
   }
 
@@ -438,6 +484,8 @@ window.G = window.G || {};
 
   // What a Take button says: empty slot = it goes on you; otherwise into the bag (or not at all if the bag is full)
   function takeLabel(p, it, verb = 'Take it') {
+    if (it.kind === 'relic') return G.Hero.canReceive(p, it) ? { ok: true, text: `${verb} (relic)` } : { ok: false, text: 'Maxed' };
+    if (it.kind === 'gear' && !G.Hero.canEquip(p, it)) return G.Hero.bagFull(p) ? { ok: false, text: 'Bag full' } : { ok: true, text: `${verb} (to bag)` };
     if (it.kind === 'gear' && !p.gear[it.slot]) return { ok: true, text: `${verb} and equip` };
     if (G.Hero.bagFull(p)) return { ok: false, text: 'Bag full' };
     return { ok: true, text: `${verb} (to bag)` };
@@ -488,7 +536,7 @@ window.G = window.G || {};
     const review = reviewing ? `<div class="review"><span>Look over the table. Picks start in <b id="review-num">${reviewLeft()}s</b></span><i class="turnbar"><span id="review-bar" style="width:${reviewPct()}%"></span></i></div>` : '';
     return `${review}<h3 class="sub">Pick order</h3>
       <ol class="pick-order">${order}</ol>
-      <h3 class="sub">Free table ${myNow ? '<span class="chip">Your turn</span>' : ''}</h3>
+      <h3 class="sub">The pile ${myNow ? '<span class="chip">Your turn</span>' : ''}</h3>
       ${myNow ? bagNote(full) : ''}
       <div class="cards">${table || '<p class="hint">The table is empty.</p>'}</div>
       ${myNow ? `<div class="pass-row bottom"><button data-act="shop-pass">Pass and take ${CFG().shop.passGold} gold</button><small>If your timer runs out, you pass.</small></div>` : ''}`;
@@ -504,8 +552,8 @@ window.G = window.G || {};
   function shopScreen(st) {
     const sh = st.shop, S = CFG().shop;
     return `<section class="screen shop">
-      <h2>Shop round</h2>
-      <p class="lede">Free picks go weakest first: fewer hearts pick first, then lower health. Everyone gets ${S.reviewSeconds} seconds to look, then ${S.turnSeconds} seconds per turn. Pass to take ${S.passGold} gold instead.</p>
+      <h2>Plunder</h2>
+      <p class="lede">Everyone picks from one shared pile, weakest first: fewer hearts pick first, then lower health. Everyone gets ${S.reviewSeconds} seconds to look, then ${S.turnSeconds} seconds per turn. Pass to take ${S.passGold} gold instead.</p>
       ${sh.msg ? `<p class="notice">${esc(sh.msg)}</p>` : ''}
       <div id="shop-picks">${shopPicks(st)}</div></section>`;
   }
@@ -531,9 +579,9 @@ window.G = window.G || {};
       <p class="lede">A trader with a cart full of gear. You have ${p.gold} gold. Stay as long as the room timer allows, or leave when you're done.</p>
       ${m.msg ? `<p class="notice">${esc(m.msg)}</p>` : ''}
       <div class="shop-row">
-        ${consRow('potion', S.potionCost, `${m.potions} in stock.`, m.potions <= 0)}
-        ${consRow('antidote', G.CONSUMABLES.antidote.price, '', false)}
-        ${m.buffs.map(id => consRow(id, G.CONSUMABLES[id].price, '', false)).join('')}
+        ${consRow('potion', S.potionCost, `${m.cstock.potion} in stock.`, m.cstock.potion <= 0)}
+        ${consRow('antidote', G.CONSUMABLES.antidote.price, `${m.cstock.antidote} in stock.`, m.cstock.antidote <= 0)}
+        ${m.buffs.map(id => consRow(id, G.CONSUMABLES[id].price, `${m.cstock[id]} in stock.`, m.cstock[id] <= 0)).join('')}
         <div class="potion card"><span class="flask blood"></span><div><b>Sell blood</b><small>${bloodNote}, gain ${S.bloodGold} gold.</small></div>
           <button data-act="shop-buy" data-kind="blood" ${tooWeak ? 'disabled' : ''}>${tooWeak ? 'Too weak' : `Bleed for ${S.bloodGold}`}</button></div>
       </div>
@@ -548,15 +596,20 @@ window.G = window.G || {};
     const f = st.forge, p = st.player, F = CFG().forge;
     const cards = G.SLOTS.filter(sl => p.gear[sl]).map(sl => {
       const it = p.gear[sl];
-      return itemCard(it, p, `<button data-act="forge" data-kind="strengthen" data-slot="${sl}" ${f.strengthened || p.gold < F.upgradeCost ? 'disabled' : ''}>Strengthen (${F.upgradeCost})</button>
-        <button class="ghost" data-act="forge" data-kind="reroll" data-slot="${sl}" ${f.rerolled || p.gold < F.rerollCost || it.rarity === 'grey' ? 'disabled' : ''}>${it.rarity === 'grey' ? 'No bonus to reroll' : `Reroll bonus (${F.rerollCost})`}</button>`);
+      const gains = G.Dungeon.strengthenGains(it);
+      const preview = Object.keys(gains).map(k => `<li class="up">${esc(G.STAT_INFO[k].label)}: ${it.base[k]} → ${it.base[k] + gains[k]}</li>`).join('');
+      const legend = it.rarity === 'legendary';
+      return itemCard(it, p, `<div class="forge-opt"><ul class="forge-preview">${legend ? '<li>Legendary stats are fixed.</li>' : preview}</ul>
+          <button data-act="forge" data-kind="strengthen" data-slot="${sl}" ${legend || f.strengthened || p.gold < F.upgradeCost ? 'disabled' : ''}>${legend ? 'Can’t strengthen' : `Strengthen (${F.upgradeCost})`}</button></div>
+        <button class="ghost" data-act="forge" data-kind="affix" data-slot="${sl}" ${it.affixed || f.affixed || p.gold < F.affixCost ? 'disabled' : ''}>${it.affixed ? 'Already forged' : `Add a random bonus stat (${F.affixCost})`}</button>`);
     }).join('');
     return `<section class="screen"><h2>Forge</h2>
-      <p class="lede">The smith can strengthen one item (its base stats grow by one tier) and reroll one item's bonus. You have ${p.gold} gold.</p>
+      <p class="lede">The smith can strengthen one item (its base stats grow by one tier; the card shows exactly how) and add one random bonus stat to one item. Each piece can only take one added bonus. You have ${p.gold} gold.</p>
       ${f.msg ? `<p class="notice">${esc(f.msg)}</p>` : ''}
       <div class="cards">${cards}</div>
       <div class="row-actions"><button data-act="forge-leave">Leave the forge</button></div></section>`;
   }
+
 
   function wagerScreen(st) {
     const p = st.player, d = st.door, B = CFG().wager.bets;
@@ -750,13 +803,13 @@ window.G = window.G || {};
 
   function titleScreen() {
     return `<div class="title-screen">
-      <header class="hero-head"><div class="eyebrow">Prototype v6 · single player</div><h1>Thirty Doors</h1>
+      <header class="hero-head"><div class="eyebrow">Undercrown v0.1 · single player</div><h1>Undercrown</h1>
         <p>Six warriors. Thirty rooms each. Three hearts. Health carries from room to room and healing is limited, so spend it wisely. Build an archetype, fight your rivals along the way, and be the last one standing.</p></header>
       <ul class="rules">
         <li><b>Hearts</b>Dying or losing a duel costs a heart. You come back at full health. Lose all three and you're out.</li>
         <li><b>Class sets</b>Some gear carries a class, and every match has a limited supply. 2, 4 or 6 pieces, or 4 + 2 for a hybrid.</li>
         <li><b>Levels</b>Fights give XP. Pick a spec at level ${CFG().levels.specLevel}, then skill tree choices at ${CFG().levels.treeLevels.join(', ')}.</li>
-        <li><b>Every 10 rooms</b>Room 5 is a shop round, 7 a merchant, 8 a boss, and 10 a duel against a rival. Room 30 is the tournament.</li>
+        <li><b>Every 10 rooms</b>Room 5 is a Plunder (a shared loot pile), 7 a merchant, 8 a boss, and 10 a duel against a rival. Room 30 is the tournament.</li>
         <li><b>Gear and your bag</b>New gear goes straight onto an empty slot. Anything else lands in your 6-slot bag; hold Equip to swap it in (the old piece is gone), or discard it.</li>
         <li><b>The tournament</b>After room 30, everyone with hearts fights round after round until one is left.</li>
       </ul>
@@ -777,8 +830,8 @@ window.G = window.G || {};
       duelIntro: duelIntroScreen, dead: deadScreen, tournament: tournamentScreen, ending: endingScreen };
     const prevPhase = app.dataset.phase;
     const notice = st.notice && !['dead', 'shop'].includes(st.phase) ? `<p class="notice">${esc(st.notice)}</p>` : '';
-    app.innerHTML = `<div class="shell">${topbar(st)}<div class="cols"><aside class="left">${rivalsPanel(st)}</aside><main class="stage">${notice}${screens[st.phase](st)}</main>
-      <aside class="side">${bagPanel(st)}${statsPanel(st.player)}${gearPanel(st.player)}${supplyPanel()}</aside></div></div>`;
+    app.innerHTML = `<div class="shell">${topbar(st)}<div class="cols"><aside class="left">${rivalsPanel(st)}${youPanel(st)}</aside><main class="stage">${notice}${screens[st.phase](st)}</main>
+      <aside class="side">${bagPanel(st)}${gearPanel(st.player)}${statsPanel(st.player)}${supplyPanel()}</aside></div></div>`;
     if (st.phase !== prevPhase) window.scrollTo(0, 0);
     app.dataset.phase = st.phase;
     if (st.phase === 'battle') startBattleView(st);
@@ -834,6 +887,25 @@ window.G = window.G || {};
       case 'revive': return `${subj(e.src)} ${verb(e.src, 'rise', 'rises')} from the ashes`;
       case 'death': return `${subj(e.tgt)} ${verb(e.tgt, 'fall', 'falls')}`;
       case 'timeout': return 'Time runs out';
+      case 'fxhit': return e.name === 'Heartlight' ? null : `${e.name} hits ${obj(e.tgt)} for ${e.amount}`;
+      case 'stomp': return `${subj(e.src)} ${verb(e.src, 'stomp', 'stomps')} (Quakestep)`;
+      case 'frenzy': return `${subj(e.src)} ${verb(e.src, 'fire', 'fires')} faster (Hummingbird)`;
+      case 'firering': return `Fire starts closing in (Inferno)`;
+      case 'shove': return `${subj(e.src)} ${verb(e.src, 'shove', 'shoves')} ${obj(e.tgt)} back (Ranger)`;
+      case 'pull': return `${subj(e.src)} ${verb(e.src, 'drag', 'drags')} ${obj(e.tgt)} in (Guillotine)`;
+      case 'knock': return `${subj(e.tgt)} ${verb(e.tgt, 'are', 'is')} knocked back${e.slam ? ' into the wall' : ''} (Gale)`;
+      case 'blink': return `${subj(e.src)} ${verb(e.src, 'blink', 'blinks')} behind ${obj(e.tgt)} (Blinkfang)`;
+      case 'execute': return `${subj(e.src)} ${verb(e.src, 'execute', 'executes')} ${obj(e.tgt)} (Guillotine)`;
+      case 'pop': return `${subj(e.tgt)} ${verb(e.tgt, 'burst', 'bursts')} open (Butcher)`;
+      case 'block': return `${subj(e.src)} ${verb(e.src, 'block', 'blocks')} the hit (Dawnwall)`;
+      case 'penance': return `${subj(e.src)} ${verb(e.src, 'release', 'releases')} ${e.amount} penance${e.heal ? ` and ${verb(e.src, 'heal', 'heals')} ${e.heal}` : ''}`;
+      case 'sunder': return `${subj(e.tgt)} ${verb(e.tgt, 'are', 'is')} sundered`;
+      case 'hex': return `${subj(e.tgt)} ${verb(e.tgt, 'are', 'is')} hexed (${e.stacks})`;
+      case 'shrug': return `${subj(e.src)} ${verb(e.src, 'shrug', 'shrugs')} it off: +${e.amount} Damage (Unbound)`;
+      case 'sentinel': return `${subj(e.src)} ${verb(e.src, 'break', 'breaks')} shield in a holy burst (Sentinel)`;
+      case 'shieldup': return `${subj(e.src)} ${verb(e.src, 'gain', 'gains')} Shield ${e.amount}`;
+      case 'drain': return null;
+      case 'beam': return e.power <= 2 ? `${subj(e.src)} ${verb(e.src, 'lock', 'locks')} a beam onto ${obj(e.tgt)} (Heartlight)` : null;
       default: return null;
     }
   }

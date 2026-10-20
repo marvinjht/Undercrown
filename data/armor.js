@@ -38,25 +38,15 @@ G.TRADEOFFS = {
   frenzied:   { name: 'Frenzied',   give: { spd: 4 },   cost: { ward: 4 } },
 };
 
-// Build effects (rare): reward a direction instead of raw stats. fx keys are read by stats.js and combat.js.
-// classes = the class tags (or weapon classes) this effect fits. Untagged armor only rolls the general ones.
-G.EFFECTS = {
-  warlord:  { name: 'Warlord',      classes: ['warrior'],            fx: { perWarriorDmg: 2 },  desc: '+2 Damage for each Warrior piece you wear' },
-  hawkeye:  { name: 'Hawkeye',      classes: ['archer'],             fx: { perArcherPierce: 1 }, desc: '+1 Pierce for each Archer piece you wear' },
-  rending:  { name: 'Rending',      classes: ['warrior', 'rogue'],   general: true, fx: { bleedShred: 2 }, desc: 'Your bleed also lowers the target’s Armor by 2' },
-  bloodied: { name: 'Bloodied',     classes: ['rogue', 'archer'],    general: true, fx: { critHeal: 4 },   desc: 'Crits heal you 4' },
-  primed:   { name: 'Primed',       classes: ['mage'],               fx: { openingSpell: 1 },   desc: 'Your first spell each fight goes off at the start' },
-  concuss:  { name: 'Concussive',   classes: ['warrior', 'paladin'], general: true, fx: { fourthStun: 4 }, desc: 'Every 4th hit stuns' },
-  counter:  { name: 'Counterpoise', classes: ['rogue', 'archer'],    general: true, fx: { afterDodge: 8 }, desc: 'After you dodge, your next hit deals +8' },
-  bastion:  { name: 'Bastion',      classes: ['paladin', 'warrior'], general: true, fx: { shieldSpd: 2 },  desc: 'While your Shield holds, +2 Attack Speed' },
-};
-G.EFFECT_ORDER = Object.keys(G.EFFECTS);
+// Build effects moved to relics (data/relics.js).
 
-// Common grey, Uncommon green, Rare blue. Gold Legendary is reserved for later.
+
+// Common grey, Uncommon green, Rare blue (two affixes), Legendary gold (fixed stats, see data/legendaries.js).
 G.RARITY = {
   grey:  { name: 'Common',   rank: 0, mult: 1.0, affixes: 0 },
   green: { name: 'Uncommon', rank: 1, mult: 1.3, affixes: 1 },
-  rare:  { name: 'Rare',     rank: 2, mult: 1.6, affixes: 1, effect: true },
+  rare:  { name: 'Rare',     rank: 2, mult: 1.6, affixes: 2 },
+  legendary: { name: 'Legendary', rank: 3, mult: 1.6, affixes: 0 },
 };
 G.RARITY_ORDER = ['grey', 'green', 'rare'];
 

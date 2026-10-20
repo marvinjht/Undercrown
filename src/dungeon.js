@@ -58,7 +58,7 @@ window.G = window.G || {};
         sprite: 'monster_' + mon.id, scale: (mon.scale || 1) * (kind === 'elite' ? 1.12 : 1),
         tint: kind === 'elite' ? 0xffb8a8 : null,
         steal: mon.steal || 0, escapeAfter: mon.escapeAfter || 0,
-        split: splitSpec(mon.split, mon, room, mult),
+        split: splitSpec(mon.split, mon, room, mult), boss: kind === 'boss',
       });
     }
     if (tr === 'swarm') {
@@ -91,9 +91,9 @@ window.G = window.G || {};
     mystery:  { title: 'Unknown',  text: () => 'Could be a gift, could be a fight.' },
     venom:    { title: 'Venom Cache', text: () => `Take an uncommon or better item, but gain ${CFG().poison.venomStacks} poison.` },
     purify:   { title: 'Purifying Spring', text: () => `Clears all poison and heals ${CFG().poison.purifyHeal}.` },
-    shop:     { title: 'Shop Round', text: () => 'Free picks for everyone, weakest first.' },
+    shop:     { title: 'Plunder', text: () => 'A shared pile of loot. Free picks for everyone, weakest first.' },
     merchant: { title: 'Merchant', text: () => 'No fight. Spend gold on gear and potions, or sell blood.' },
-    forge:    { title: 'Forge',    text: () => `No fight. Strengthen an item (${CFG().forge.upgradeCost} gold) or reroll its bonus (${CFG().forge.rerollCost} gold).` },
+    forge:    { title: 'Forge',    text: () => `No fight. Strengthen an item (${CFG().forge.upgradeCost} gold) or add a bonus stat to one (${CFG().forge.affixCost} gold).` },
     trainer:  { title: 'Trainer',  text: () => `No fight. Gain ${CFG().xp.trainer} XP.` },
     wager:    { title: 'Wager',    text: d => `${monsterName(d.monster, 'fight')}, tougher than usual. No backing out: bet gold, and win to double it.` },
   };
@@ -270,8 +270,10 @@ window.G = window.G || {};
   function merchantStock(hero, room, rng) {
     const ids = G.BUFF_IDS.slice(), buffs = [];
     while (buffs.length < 3 && ids.length) buffs.push(ids.splice(rng.int(0, ids.length - 1), 1)[0]);
-    const P = CFG().shop.potionStock;
-    return { stock: G.Loot.offer(hero, room, 'shop', rng, CFG().shop.gearCount), buffs, potions: rng.int(P[0], P[1]),
+    // Every potion and elixir has its own stock of 1 to 3 per visit
+    const P = CFG().shop.stock, cstock = {};
+    for (const id of ['potion', 'antidote', ...buffs]) cstock[id] = rng.int(P[0], P[1]);
+    return { stock: G.Loot.offer(hero, room, 'shop', rng, CFG().shop.gearCount).filter(it => it.kind === 'gear'), buffs, cstock,
       restocks: 0, bought: [], msg: null, freeUsed: false };
   }
   // Price for this hero at this visit (Haggler: first gear purchase is free)
@@ -281,41 +283,35 @@ window.G = window.G || {};
   }
 
   // ---------- Forge ----------
-  // Strengthen: base stats grow by one tier step. Reroll: a new bonus stat (or trade-off) for the item.
-  function forgeStrengthen(item) {
+  // Strengthen: base stats grow by one tier step (not on legendaries: their stats are fixed).
+  // Add an affix: one random bonus stat, once per piece.
+  function strengthenGains(item) {
+    const out = {};
+    if (item.rarity === 'legendary') return out;
     for (const k in item.base) {
       if (k === 'spd' && item.slot === 'weapon') continue;
       const growth = G.STAT_INFO[k].growth;
       if (growth === 'fixed') continue;
       const g = growth === 'flat' ? CFG().loot.tierGrowth : CFG().loot.chanceTierGrowth;
-      const add = Math.max(2, 2 * Math.round(item.base[k] * g / 2));
-      item.base[k] += add; item.stats[k] = (item.stats[k] || 0) + add;
+      out[k] = Math.max(2, 2 * Math.round(item.base[k] * g / 2));
     }
+    return out;
+  }
+  function forgeStrengthen(item) {
+    const add = strengthenGains(item);
+    for (const k in add) { item.base[k] += add[k]; item.stats[k] = (item.stats[k] || 0) + add[k]; }
     item.forged = (item.forged || 0) + 1;
     item.name = item.name.replace(/ \+\d+$/, '') + ' +' + item.forged;
   }
-  function forgeReroll(item, rng) {
-    if (item.rarity === 'grey') return false;
-    for (const k in item.affixStats || {}) item.stats[k] -= item.affixStats[k];
-    if (item.tradeoff) {
-      for (const k in item.tradeoff.give) item.stats[k] -= item.tradeoff.give[k];
-      for (const k in item.tradeoff.cost) item.stats[k] += item.tradeoff.cost[k];
-    }
-    const fresh = G.Items.generate(rng, { slot: item.slot, rarity: item.rarity, room: item.room, weaponType: item.weaponType });
-    item.affixStats = fresh.affixStats; item.affixes = fresh.affixes; item.tradeoff = fresh.tradeoff;
-    for (const k in item.affixStats) item.stats[k] = (item.stats[k] || 0) + item.affixStats[k];
-    if (item.tradeoff) {
-      for (const k in item.tradeoff.give) item.stats[k] = (item.stats[k] || 0) + item.tradeoff.give[k];
-      for (const k in item.tradeoff.cost) item.stats[k] = (item.stats[k] || 0) - item.tradeoff.cost[k];
-    }
-    item.name = fresh.name + (item.forged ? ' +' + item.forged : '');
-    return true;
+  function forgeAffix(item, rng) {
+    if (item.affixed) return null;
+    return G.Items.addAffix(item, rng);
   }
 
   G.Dungeon = {
     monsterFor, buildEnemies, monsterName, makeDoors, doorInfo, danger, goldFor, itemPrice, doorFoes,
     specOptions, gemOptions, rollMystery, fight, applyFight, tickPoison, useItem, fightOpts, roomKind, merchantStock, merchantPrice,
-    gearDrops, spoilsOptions, takeSpoils, forgeStrengthen, forgeReroll,
+    gearDrops, spoilsOptions, takeSpoils, forgeStrengthen, forgeAffix, strengthenGains,
   };
 
   // ---------------- AI rivals ----------------
@@ -323,7 +319,7 @@ window.G = window.G || {};
     const cur = G.Hero.power(hero);
     let best = null, bestP = cur * 1.005;
     for (const it of items) {
-      if (it.kind !== 'gear') continue;
+      if (it.kind !== 'gear' && it.kind !== 'relic') continue;
       const p = G.Hero.powerWith(hero, it);
       if (p > bestP) { best = it; bestP = p; }
     }
@@ -332,6 +328,7 @@ window.G = window.G || {};
 
   function take(hero, item) {
     if (item.kind === 'consumable') { hero.bag.push(item); return `took ${item.name}`; }
+    if (item.kind === 'relic') { G.Hero.addRelic(hero, item); return `took the ${item.name} relic`; }
     G.Hero.equip(hero, item);
     return `took ${item.name}`;
   }
@@ -461,9 +458,13 @@ window.G = window.G || {};
       case 'trainer': G.Hero.gainXp(hero, CFG().xp.trainer); return `trained (+${CFG().xp.trainer} XP)`;
       case 'forge': {
         const F = CFG().forge;
-        if (hero.gold < F.upgradeCost || !hero.gear.weapon) return 'looked at the forge';
-        hero.gold -= F.upgradeCost; forgeStrengthen(hero.gear.weapon);
-        return `strengthened ${hero.gear.weapon.name}`;
+        const it = ['weapon', ...G.SLOTS].map(sl => hero.gear[sl]).find(x => x && x.rarity !== 'legendary');
+        if (hero.gold < F.upgradeCost || !it) return 'looked at the forge';
+        hero.gold -= F.upgradeCost; forgeStrengthen(it);
+        let txt = `strengthened ${it.name}`;
+        const af = G.SLOTS.map(sl => hero.gear[sl]).find(x => x && !x.affixed);
+        if (af && hero.gold >= F.affixCost + 20) { hero.gold -= F.affixCost; forgeAffix(af, rng); txt += ` and forged a bonus onto ${af.name}`; }
+        return txt;
       }
       case 'venom': {
         hero.poison += CFG().poison.venomStacks;
@@ -513,7 +514,7 @@ window.G = window.G || {};
     const table = G.Loot.shopTable(room, 4, rng);
     let free = autoLoot(hero, table.slice(rng.int(0, 2)), room, false);
     if (free === 'took nothing') { hero.gold += CFG().shop.passGold; free = `passed for ${CFG().shop.passGold} gold`; }
-    return `${free} at the shop round`;
+    return `${free} at the Plunder`;
   }
 
   function aiRoom(hero, room) {

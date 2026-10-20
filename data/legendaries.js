@@ -1,0 +1,63 @@
+// Legendaries: one per armor slot and weapon type. Fixed stats (no tiers, no affixes, no Strengthen),
+// a class tag, and an effect that changes how you fight. You can wear only one, and each is unique per match.
+// stats = flat stats on the item. fx = effect keys read by stats.js and combat.js.
+// Weapons keep their weapon type's range, damage type and trait unless the legendary says otherwise.
+window.G = window.G || {};
+
+G.LEGENDARIES = {
+  // ---------- Armor ----------
+  heartlight: { name: 'Heartlight', slot: 'chest', cls: 'mage',
+    stats: { hp: 40, ward: 6 }, fx: { beam: { start: 2, step: 1, cap: 12 } },
+    desc: 'From the first second, a beam hits your target for 2 damage a second, +1 each second, up to 12.' },
+  truesight: { name: 'Truesight', slot: 'helmet', cls: 'archer',
+    stats: { hp: 20, dmg: 4, crit: 8 }, fx: { trueStrike: 1 },
+    desc: 'Your attacks can’t be dodged or parried, and they hit invisible enemies.' },
+  quakestep: { name: 'Quakestep', slot: 'boots', cls: 'warrior',
+    stats: { dodge: 8, spd: 2 }, fx: { stomp: { every: 5, dmg: 8, stun: 1 } },
+    desc: 'Every 5 seconds you stomp: 8 damage to every enemy and a 1-second stun that ignores the stun limit.' },
+  ghoulgrip: { name: 'Ghoulgrip', slot: 'gloves', cls: 'rogue',
+    stats: { dmg: 4, spd: 3 }, fx: { ghoul: { drain: 2, capPct: 0.3, healPct: 0.5 } },
+    desc: 'Each hit drains 2 max health from the target (up to 30% of its max) and heals you for half the damage dealt.' },
+  unbound: { name: 'Unbound', slot: 'legs', cls: 'paladin',
+    stats: { hp: 30, armor: 4 }, fx: { ccImmune: 4, stunImmune: 1 },
+    desc: 'You can’t be stunned, slowed, knocked back or pulled. Each effect you shrug off gives +4 Damage for the fight.' },
+
+  // ---------- Weapons ----------
+  butcher: { name: 'Butcher', slot: 'weapon', weaponType: 'saber', cls: 'rogue',
+    stats: { dmg: 14, spd: 14, dodge: 8 }, fx: { butcher: { perStack: 2, pop: 10 } },
+    desc: 'Each hit adds a bleed stack (2 a second each). At 10 stacks the target pops for all the bleed left at once.' },
+  blinkfang: { name: 'Blinkfang', slot: 'weapon', weaponType: 'daggers', cls: 'rogue',
+    stats: { dmg: 9, spd: 18, crit: 10 }, fx: { blink: 2, firstCrits: 4 },
+    desc: 'At the start you teleport to your target and stun it for 2 seconds. Your first 4 attacks crit.' },
+  aegis: { name: 'Aegis', slot: 'weapon', weaponType: 'swordShield', cls: 'paladin',
+    stats: { dmg: 10, spd: 10, armor: 4, shield: 100 }, fx: { aegisPulse: 10 },
+    desc: 'Start fights with Shield 100 (adds to Gaia’s Embrace). While it holds, it pulses 10 damage to every enemy each second.' },
+  spellbrand: { name: 'Spellbrand', slot: 'weapon', weaponType: 'longsword', cls: 'warrior',
+    stats: { dmg: 16, spd: 8, manaGain: 20 }, fx: { splitDamage: 1, sunder: { dmg: 30, slow: 0.3, shred: 4, secs: 4 } },
+    desc: 'Hits are half physical, half magic. Attacks add 20 mana; at full it casts Sunder: 30 magic damage, −30% Attack Speed and −4 Armor and Magic Resist for 4 seconds.' },
+  guillotine: { name: 'Guillotine', slot: 'weapon', weaponType: 'greatAxe', cls: 'warrior',
+    stats: { dmg: 16, spd: 8, bleed: 4 }, fx: { pull: 1, execute: { pct: 0.15, bossDmg: 50 } },
+    desc: 'At the start you pull your target into melee. Hits on an enemy below 15% health execute it. Bosses take 50 damage instead.' },
+  monolith: { name: 'Monolith', slot: 'weapon', weaponType: 'greatHammer', cls: 'warrior',
+    stats: { dmg: 22, spd: 6, hp: 100, stun: 20 }, fx: { hpDmg: 30 },
+    desc: '+1 Damage for every 30 max health.' },
+  penitent: { name: 'Penitent', slot: 'weapon', weaponType: 'mace', cls: 'paladin',
+    stats: { dmg: 12, spd: 10, holy: 4, hp: 20 }, fx: { penitent: 30 },
+    desc: 'Damage you take charges it, up to 30. Your next hit releases the charge as holy damage and heals you the same amount.' },
+  dawnwall: { name: 'Dawnwall', slot: 'weapon', weaponType: 'maceShield', cls: 'paladin',
+    stats: { dmg: 10, spd: 10, holy: 4, armor: 6, ward: 4 }, fx: { dawnwall: { every: 4, dmg: 16, stun: 1 } },
+    desc: 'Every 4th hit against you is fully blocked and answered with a holy flash: 16 damage and a 1-second stun.' },
+  hummingbird: { name: 'Hummingbird', slot: 'weapon', weaponType: 'shortbow', cls: 'archer',
+    stats: { dmg: 9, spd: 18, crit: 6 }, fx: { frenzy: { every: 5, secs: 1 } },
+    desc: 'Every 5 seconds, your attack speed doubles for 1 second.' },
+  gale: { name: 'Gale', slot: 'weapon', weaponType: 'longbow', cls: 'archer',
+    stats: { dmg: 20, spd: 6, pierce: 2 }, fx: { gale: { every: 3, push: 2, stun: 2, cooldown: 8 } },
+    desc: 'Every 3rd shot knocks the target back 2 steps. Slamming it into the wall stuns it for 2 seconds (at most once every 8 seconds).' },
+  hexglass: { name: 'Hexglass', slot: 'weapon', weaponType: 'wandFocus', cls: 'mage',
+    stats: { dmg: 7, spd: 10, manaGain: 20, spellDmg: 34, startMana: 40, ward: 4 }, fx: { hex: { pct: 10, secs: 4, max: 3 } },
+    desc: 'Each Firebolt curses the target: it takes 10% more damage from everything for 4 seconds, stacking 3 times.' },
+  inferno: { name: 'Inferno', slot: 'weapon', weaponType: 'staff', cls: 'mage',
+    stats: { dmg: 14, spd: 10 }, fx: { meleeStaff: 1, noSpell: 1, burnHit: { dmg: 6, secs: 3 }, fireRing: { start: 3, closed: 15, dmg: 8 } },
+    desc: 'A melee staff. Hits burn for 6 a second over 3 seconds. From 3 seconds in, fire closes in from both walls (fully closed by 15 seconds); enemies in it burn 8 a second. You’re immune.' },
+};
+G.LEGENDARY_ORDER = Object.keys(G.LEGENDARIES);

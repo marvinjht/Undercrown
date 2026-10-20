@@ -26,13 +26,32 @@ window.G = window.G || {};
       for (const h of this.heroes) {
         if (onlyHero && h !== onlyHero) continue;
         if (!h.alive) continue;
-        for (const slot of G.SLOTS) { const it = h.gear[slot]; if (it && it.set === cls) n++; }
-        for (const it of h.bag) if (it.kind === 'gear' && it.set === cls) n++;
+        // Legendaries sit on top of the supply: they never use up one of the 12 pieces
+        for (const slot of G.SLOTS) { const it = h.gear[slot]; if (it && it.set === cls && it.rarity !== 'legendary') n++; }
+        for (const it of h.bag) if (it.kind === 'gear' && it.set === cls && it.rarity !== 'legendary') n++;
       }
       return n;
     },
     left(cls) { return this.heroes.length ? Math.max(0, G.CONFIG.supplyPerClass - this.held(cls)) : G.CONFIG.supplyPerClass; },
     counts() { const o = {}; for (const c of G.CLASS_ORDER) o[c] = this.left(c); return o; },
+    // Legendaries of a class someone holds (shown on top of the supply)
+    legendaries(cls, onlyHero) {
+      let n = 0;
+      for (const h of this.heroes) {
+        if ((onlyHero && h !== onlyHero) || !h.alive) continue;
+        for (const it of [...G.SLOTS.map(sl => h.gear[sl]), ...h.bag]) if (it && it.rarity === 'legendary' && it.set === cls) n++;
+      }
+      return n;
+    },
+    // Each legendary exists once per match: held by anyone still in = gone from the pool
+    legendTaken() {
+      const out = new Set();
+      for (const h of this.heroes) {
+        if (!h.alive) continue;
+        for (const it of [...G.SLOTS.map(sl => h.gear[sl]), ...h.bag]) if (it && it.legendary) out.add(it.legendary);
+      }
+      return out;
+    },
   };
 
   // Class tag for a tagged item. Weighted by how many pieces of each class are left in the match; often leans
@@ -82,9 +101,10 @@ window.G = window.G || {};
 
     const stats = { ...base };
     const affixes = [], affixStats = {};
-    let tradeoff = null, effect = null;
+    let tradeoff = null;
+    let nAffix = R.affixes;
 
-    if (rarity === 'green' && rng.int(1, 100) <= L().tradeoffChance) {
+    if ((rarity === 'green' || rarity === 'rare') && rng.int(1, 100) <= L().tradeoffChance) {
       // Trade-off: a bigger bonus with a cost
       const id = rng.pick(Object.keys(G.TRADEOFFS));
       const T = G.TRADEOFFS[id], give = {}, cost = {};
@@ -92,31 +112,58 @@ window.G = window.G || {};
       for (const k in T.cost) { cost[k] = value(k, T.cost[k], R, tier); stats[k] = (stats[k] || 0) - cost[k]; }
       tradeoff = { id, give, cost };
       name = T.name + ' ' + name;
-    } else {
+      nAffix -= 1;   // a rare with a trade-off keeps one plain affix
+    }
+    if (nAffix > 0) {
       const pool = Object.keys(G.AFFIXES).filter(k => !(G.AFFIXES[k].rareOnly && rarity !== 'rare') && !(G.AFFIXES[k].weaponOnly && slot !== 'weapon'));
-      for (let i = 0; i < R.affixes && pool.length; i++) {
+      for (let i = 0; i < nAffix && pool.length; i++) {
         const k = pool.splice(Math.floor(rng.float() * pool.length), 1)[0];
         affixes.push(k);
         const v = value(k, G.AFFIXES[k].base, R, tier);
         affixStats[k] = v;
         stats[k] = (stats[k] || 0) + v;
       }
-      if (affixes.length) name += ' ' + G.AFFIXES[affixes[0]].suffix;
+      if (affixes.length && !tradeoff) name += ' ' + G.AFFIXES[affixes[0]].suffix;
     }
-    if (R.effect) effect = pickEffect(rng, itemSet, slot === 'weapon' ? G.WEAPONS[weaponType].classes : null);
 
     return { id: G.uid('item'), kind: 'gear', slot, rarity, room, tier, weaponType: weaponType || null, set: itemSet,
-      name, base, stats, affixStats, affixes, tradeoff, effect, trait, iconKey };
+      name, base, stats, affixStats, affixes, tradeoff, trait, iconKey };
   }
 
-  // Build effects fit the item: a tagged item rolls effects for its class, an untagged weapon for the classes
-  // it can belong to, and untagged armor only the general effects
-  function pickEffect(rng, tag, weaponClasses) {
-    let pool;
-    if (tag) pool = G.EFFECT_ORDER.filter(id => G.EFFECTS[id].classes.includes(tag));
-    else if (weaponClasses) pool = G.EFFECT_ORDER.filter(id => G.EFFECTS[id].classes.some(c => weaponClasses.includes(c)));
-    else pool = G.EFFECT_ORDER.filter(id => G.EFFECTS[id].general);
-    return rng.pick(pool.length ? pool : G.EFFECT_ORDER);
+  // A legendary: fixed stats, its own name, the class tag it was made for
+  function legendary(id) {
+    const D = G.LEGENDARIES[id];
+    const W = D.weaponType ? G.WEAPONS[D.weaponType] : null;
+    // Fixed numbers. A legendary weapon's hitting power is set to a late-dungeon rare's (same for everyone, every match).
+    const st = { ...D.stats };
+    if (W) for (const k of ['dmg', 'spellDmg', 'holy', 'bleed']) if (st[k]) st[k] = value(k, st[k], G.RARITY.rare, G.CONFIG.legendary.tier);
+    return { id: G.uid('item'), kind: 'gear', slot: D.slot, rarity: 'legendary', legendary: id, room: 0, tier: G.CONFIG.legendary.tier,
+      weaponType: D.weaponType || null, set: D.cls, name: D.name, base: { ...st }, stats: { ...st },
+      affixStats: {}, affixes: [], tradeoff: null, trait: D.desc, baseTrait: W ? W.trait : null, iconKey: D.weaponType || D.slot };
+  }
+  function rollLegendary(rng) {
+    const taken = Supply.legendTaken();
+    const pool = G.LEGENDARY_ORDER.filter(id => !taken.has(id));
+    return pool.length ? legendary(rng.pick(pool)) : null;
+  }
+
+  // Relics: collected, never equipped. A relic you already hold at the max can't roll for you.
+  function relic(rid) { const R = G.RELICS[rid]; return { id: G.uid('item'), kind: 'relic', rid, name: R.name, rarity: 'relic', iconKey: 'relic_' + rid }; }
+  function rollRelic(hero, rng) {
+    const pool = G.RELIC_ORDER.filter(r => !hero || ((hero.relics || {})[r] || 0) < G.RELIC_MAX);
+    return pool.length ? relic(rng.pick(pool)) : null;
+  }
+  // Forge: add one random affix to a piece (once per piece)
+  function addAffix(item, rng) {
+    const R = G.RARITY[item.rarity] || G.RARITY.rare;
+    const pool = Object.keys(G.AFFIXES).filter(k => !(item.affixes || []).includes(k) && !(G.AFFIXES[k].weaponOnly && item.slot !== 'weapon'));
+    const k = rng.pick(pool);
+    const v = value(k, G.AFFIXES[k].base, R, Math.max(1, item.tier || tierFor(20)));
+    item.affixes = [...(item.affixes || []), k];
+    item.affixStats = { ...(item.affixStats || {}), [k]: v };
+    item.stats[k] = (item.stats[k] || 0) + v;
+    item.affixed = true;   // the forge adds an affix once per piece
+    return { k, v };
   }
 
   function fmtStat(k, v, isWeapon) {
@@ -146,7 +193,7 @@ window.G = window.G || {};
     }
     return out;
   }
-  function effectText(item) { return item && item.effect ? G.EFFECTS[item.effect] : null; }
+  function effectText(item) { return item && item.legendary ? { name: 'Legendary', desc: G.LEGENDARIES[item.legendary].desc } : null; }
 
   function compare(item, equipped) {
     const out = [];
@@ -168,7 +215,7 @@ window.G = window.G || {};
     return consumable(rng.weighted(ids.map(k => [k, G.CONSUMABLES[k].weight])));
   }
 
-  G.Items = { generate, fmtStat, statLines, effectText, compare, tierFor, consumable, rollConsumable, rollSet };
+  G.Items = { generate, fmtStat, statLines, effectText, compare, tierFor, consumable, rollConsumable, rollSet, legendary, rollLegendary, relic, rollRelic, addAffix };
   G.Supply = Supply;
 
   // ---------- Loot ----------
@@ -242,6 +289,14 @@ window.G = window.G || {};
     }
     const chance = G.CONFIG.consumableChance[kind];
     if (chance && rng.int(1, 100) <= chance) items.push(rollConsumable(room, rng));
+    // Relics: elites sometimes, bosses often, the Vault always
+    const rc = G.CONFIG.relicChance[kind];
+    if (rc && rng.int(1, 100) <= rc) { const r = rollRelic(hero, rng); if (r) items.push(r); }
+    // Legendaries: the later bosses always offer one; elites deep in the dungeon sometimes do
+    const LG = G.CONFIG.legendary;
+    if ((kind === 'boss' && LG.bossRooms.includes(room)) || (kind === 'elite' && room > LG.eliteFromRoom && rng.int(1, 100) <= LG.eliteChance)) {
+      const lg = rollLegendary(rng); if (lg) items.push(lg);
+    }
     return items;
   }
 
@@ -255,6 +310,7 @@ window.G = window.G || {};
       items.push(generate(rng, { slot, rarity, room, weaponType: slot === 'weapon' ? rng.pick(G.WEAPON_ORDER) : null }));
     }
     for (let i = 0; i < nCons; i++) items.push(rollConsumable(Math.max(room, 15), rng, ['greater', 'antidote', ...G.BUFF_IDS]));
+    items.unshift(rollRelic(null, rng));   // every Plunder has one relic
     return items;
   }
 

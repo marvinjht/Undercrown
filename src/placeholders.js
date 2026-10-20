@@ -43,6 +43,14 @@ window.G = window.G || {};
     door_purify: P('M12 3c3 5 6 8 6 11a6 6 0 0 1-12 0c0-3 3-6 6-11zM8.5 15c1 2 2.5 2.5 4 2'),
     crown: P('M3 18h18M4 18l-1-10 5 4 4-7 4 7 5-4-1 10z'),
     gem: P('M7 4h10l4 5-9 12L3 9zM3 9h18M9 4l3 5 3-5M12 9v12'),
+    relic_warlord: P('M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7zM9 10l3 3 3-3M12 13v4'),
+    relic_hawkeye: P('M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 1 0 0-6z'),
+    relic_rending: P('M6 4l4 16M11 4l4 16M16 4l3 12'),
+    relic_bloodied: P('M12 3c3 5 6 8 6 11a6 6 0 0 1-12 0c0-3 3-6 6-11zM9.5 14.5a2.5 2.5 0 0 0 2.5 2.5'),
+    relic_primed: P('M13 2L5 14h6l-1 8 8-12h-6z'),
+    relic_concuss: P('M12 4a8 8 0 1 0 0 16 8 8 0 1 0 0-16zM8 8l8 8M16 8l-8 8'),
+    relic_counter: P('M4 12h12M12 8l4 4-4 4M20 5v14'),
+    relic_bastion: P('M5 4h14v7c0 5-3 8-7 10-4-2-7-5-7-10zM12 8v8M8 12h8'),
   };
   const POTION_COLORS = { potion: '#d0473a', greater: '#ff6b5a', antidote: '#7fd67a', iron: '#b8b8c8', salve: '#8fb4ff', fury: '#ff9a3c', tonic: '#f2e28c', draught: '#b39cff' };
 

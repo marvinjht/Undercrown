@@ -609,3 +609,67 @@ table.tour { width: 100%; border-collapse: collapse; font-size: 15px; font-varia
   .top .track { flex: 1 1 100%; order: -1; }
   .top .vitals { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; }
 }
+
+/* ---------- Undercrown v0.1 layout ---------- */
+.top { grid-template-columns: auto minmax(0, 1fr) auto; }
+.top .track { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.top .pips { justify-content: center; gap: 4px; }
+.top .pips i.pip { width: 10px; height: 10px; }
+.top .pips i.k-boss, .top .pips i.k-duel, .top .pips i.k-shop, .top .pips i.k-merchant, .top .pips i.k-tournament { width: 22px; height: 22px; }
+.top .pips i.pip .ico { width: 14px; height: 14px; }
+.top .room-label { margin: 0; font-size: 16px; padding: 2px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 0 0 8px 8px; margin-top: -2px; }
+.top .clock b { font-size: 30px; }
+.top .clock i { width: 120px; }
+@media (max-width: 640px) {
+  .top { display: flex; flex-wrap: wrap; justify-content: space-between; }
+  .top .brand { display: block; font-size: 18px; }
+  .top .track { order: 3; flex: 1 1 100%; }
+  .top .pips i.k-boss, .top .pips i.k-duel, .top .pips i.k-shop, .top .pips i.k-merchant, .top .pips i.k-tournament { width: 18px; height: 18px; }
+  .top .clock b { font-size: 22px; }
+  .top .clock i { width: 70px; }
+}
+
+.vitals .hpbar { width: auto; flex: 1; min-width: 110px; }
+.charblock .pv-left { flex-direction: column; align-items: stretch; gap: 6px; flex: 0 1 300px; }
+.charblock .pv-top { display: flex; }
+.charblock .pv-mid { display: flex; align-items: center; gap: 10px; }
+.charblock .vitals { gap: 10px; }
+.charblock .lvl { min-width: 64px; }
+.you-card { padding: 10px 12px; border-color: #3b5566; }
+.you-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.you-top .dot { margin-top: 0; }
+.you-top .lvl { margin-left: auto; }
+.you-card .vitals { gap: 8px; flex-wrap: wrap; }
+.you-card .rv-spec { margin-top: 4px; }
+@media (max-width: 880px) { .left { display: flex; flex-direction: column; gap: 12px; } .you-card { order: -1; } }
+
+/* Relics */
+.relic-row { flex: 1 1 100%; border-top: 1px solid rgba(61, 50, 42, .7); padding-top: 8px; }
+.relic-row h4 { font: 600 11px var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+.relic-row ul { list-style: none; margin: 0; padding: 0; display: flex; gap: 8px; overflow-x: auto; }
+.relic-row li { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; background: var(--bg); border: 1px solid var(--line); border-left: 3px solid var(--rel); border-radius: 6px; cursor: help; flex: none; }
+.relic-row li .ico-wrap { width: 28px; height: 28px; color: var(--rel); }
+.relic-row li .ico { width: 18px; height: 18px; }
+.relic-row li b { font-size: 13px; }
+.relic-row li small { font: 600 11px var(--f-mono); color: var(--text); }
+.relic-row li.maxed { border-color: var(--rel); box-shadow: 0 0 0 1px var(--rel) inset; }
+.relic-row li.maxed small { color: #15120f; background: var(--rel); padding: 0 4px; border-radius: 3px; }
+.relic-row .hint { margin: 0; font-size: 13px; }
+.screen.battle .relic-row { border-top: 0; padding-top: 0; }
+.card.relic-card { border-color: var(--rel); }
+.card.relic-card .ico-wrap { color: var(--rel); border-color: var(--rel); }
+.verdict.relic-tag { color: var(--rel); border-color: var(--rel); }
+
+/* Legendaries */
+.r-legendary { color: var(--r-gold); }
+.ico-wrap.r-legendary { border-color: #b48a2a; color: var(--r-gold); box-shadow: inset 0 0 14px rgba(242, 193, 74, .3); }
+.card.item.r-legendary { border-color: #b48a2a; background: linear-gradient(160deg, #3a2c14, var(--bg-3) 55%); box-shadow: 0 0 0 1px rgba(242, 193, 74, .25), 0 0 18px rgba(242, 193, 74, .12); }
+.slot.r-legendary { border-color: #b48a2a; }
+.slot .fx-dot.legend { background: var(--r-gold); }
+.rarity-dots i.r-legendary { background: var(--r-gold); }
+.affix-h.legend-h { color: var(--r-gold); }
+.effect.legend { color: #f6dc94; }
+.lg-plus { color: var(--r-gold); font: 600 11px var(--f-mono); margin-left: 3px; }
+.forge-opt { display: flex; flex-direction: column; gap: 6px; }
+.forge-preview { list-style: none; margin: 0; padding: 0; font: 13px/1.5 var(--f-mono); }
+.forge-preview li.up { color: var(--up); }

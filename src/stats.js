@@ -56,31 +56,34 @@ window.G = window.G || {};
     const st = sets(hero);
     const fx = {};
     const add = (stats) => { for (const k in stats || {}) t[k] = (t[k] || 0) + stats[k]; };
+    // These effects add up across sources instead of the last one winning
+    const ADDITIVE = ['openInvis', 'firstCrits'];
+    const merge = (src) => { for (const k in src) fx[k] = ADDITIVE.includes(k) ? (fx[k] || 0) + src[k] : src[k]; };
     for (const a of st.active) {
       for (const tier of TIERS[a.tier]) {
         const b = G.CLASSES[a.cls][tier];
         add(b.stats);
-        for (const k in b) if (!['stats', 'desc', 'name'].includes(k)) fx[k] = b[k];
+        const o = {}; for (const k in b) if (!['stats', 'desc', 'name'].includes(k)) o[k] = b[k];
+        merge(o);
         if (b.arcane) fx.arcane = even(b.arcane * (1 + ((st.maxTier[a.cls] || 1) - 1) * C().loot.tierGrowth));
       }
     }
     if (st.hybrid) {
       const h = G.HYBRIDS[st.hybrid];
       add(h.stats);
-      for (const k in h) if (!['stats', 'desc', 'name'].includes(k)) fx[k] = h[k];
+      const o = {}; for (const k in h) if (!['stats', 'desc', 'name'].includes(k)) o[k] = h[k];
+      merge(o);
     }
-    // Build effects on rare gear (numbers add up; flags just switch on)
-    for (const slot of G.SLOTS) {
-      const it = hero.gear[slot];
-      if (!it || !it.effect) continue;
-      const E = G.EFFECTS[it.effect].fx;
-      for (const k in E) fx[k] = (fx[k] || 0) + E[k];
-    }
+    // Relics: each copy strengthens the effect
+    for (const rid in hero.relics || {}) { const n = hero.relics[rid]; if (n > 0 && G.RELICS[rid]) merge(G.RELICS[rid].fx(n)); }
+    // The legendary you wear
+    const leg = G.SLOTS.map(sl => hero.gear[sl]).find(it => it && it.legendary);
+    if (leg) merge(G.LEGENDARIES[leg.legendary].fx);
     if (fx.perWarriorDmg) t.dmg += fx.perWarriorDmg * (st.counts.warrior || 0);
     if (fx.perArcherPierce) t.pierce += fx.perArcherPierce * (st.counts.archer || 0);
     // Skill tree picks
     const tree = treeFx(hero);
-    for (const k in tree.fx) fx[k] = tree.fx[k];
+    merge(tree.fx);
     add(tree.stats);
     // Permanent stats from Spoils
     add(hero.bonus);
@@ -92,6 +95,7 @@ window.G = window.G || {};
     // Midas: +2 Damage and +8 Health for every 50 gold you hold
     if (fx.midas) { const n = Math.floor((hero.gold || 0) / fx.midas); t.dmg += 2 * n; t.hp += 8 * n; }
 
+    if (fx.firstCrits) fx.firstCrits = Math.min(C().combat.firstCritCap, fx.firstCrits);
     const s = {
       maxHp: P.baseHp + t.hp,
       dmg: t.dmg || 4, spd: t.spd || 10,
@@ -101,7 +105,8 @@ window.G = window.G || {};
       holy: t.holy, pierce: t.pierce,
       manaGain: t.manaGain, startMana: t.startMana,
       spec: hero.spec || null, gem: hero.gem || null, weaponType: wt,
-      type: W ? W.type : 'phys', range: W ? W.range : 'melee',
+      type: W ? W.type : 'phys', range: W ? (fx.meleeStaff ? 'melee' : W.range) : 'melee',
+      legendary: leg ? leg.legendary : null,
       cleave: !!(W && W.cleave), healEvery: W && W.healEvery ? W.healEvery : null,
       spell: null, fx, sets: st,
     };
@@ -109,7 +114,8 @@ window.G = window.G || {};
 
     // Spell: the stronger of the weapon's spell and Arcane Blast
     const cands = [];
-    if (W && W.spell) cands.push({ name: W.spell.name, aoe: W.spell.aoe, dmg: t.spellDmg });
+    if (W && W.spell && !fx.noSpell) cands.push({ name: W.spell.name, aoe: W.spell.aoe, dmg: t.spellDmg });
+    if (fx.sunder) cands.push({ name: 'Sunder', aoe: false, dmg: fx.sunder.dmg, sunder: true });
     if (fx.arcane) cands.push({ name: 'Arcane Blast', aoe: true, dmg: fx.arcane });
     if (cands.length) {
       s.spell = cands.sort((a, b) => b.dmg - a.dmg || (b.aoe ? 1 : 0) - (a.aoe ? 1 : 0))[0];
@@ -138,6 +144,8 @@ window.G = window.G || {};
     s.dmg = Math.max(2, s.dmg);
     s.spd = Math.max(CB.minSpd, s.spd);
     if (fx.armorShield) s.shield += fx.armorShield * s.armor;
+    // Monolith: damage from max health
+    if (fx.hpDmg) s.dmg += Math.floor(s.maxHp / fx.hpDmg);
     if (fx.openingSpell && s.spell) s.startMana = CB.manaMax;
     s.dodge = Math.min(CB.dodgeCap, s.dodge);
     s.crit = Math.min(CB.critCap, s.crit);
@@ -199,6 +207,8 @@ window.G = window.G || {};
     if (s.fx.critHeal) def *= 1 + s.crit / 400;
     if (s.fx.fourthStun) off *= 1.06;
     if (s.fx.bleedShred && s.bleed) off *= 1.08;
+    if (s.legendary) { off *= 1.2; def *= 1.1; }
+    if (s.fx.empower || s.fx.spellShield || s.fx.dodgeHaste || s.fx.shove || s.fx.sentinelBurst || s.fx.healCut || s.fx.sureHits || s.fx.capHeal || s.fx.spellCrit || s.fx.manaOnFourth) off *= 1.12;
     return Math.sqrt(off * def);
   }
 
@@ -218,8 +228,23 @@ window.G = window.G || {};
         id: G.uid('hero'), name: opts.name, isPlayer: !!opts.isPlayer, tint: opts.tint,
         gear: {}, spec: null, gem: null, gold: 0, hp: C().player.baseHp, alive: true, diedRoom: null,
         pity: { rare: 0, green: 0 }, rng, lastAction: '', bag: [], buffs: {}, poison: 0,
-        hearts: C().hearts, level: 1, xp: 0, treePicks: {}, opponents: [],
+        hearts: C().hearts, level: 1, xp: 0, treePicks: {}, opponents: [], relics: {},
       };
+    },
+    // You can wear only one legendary: a second one only goes on in place of the first
+    wornLegendary(hero) { return G.SLOTS.map(sl => hero.gear[sl]).find(it => it && it.rarity === 'legendary') || null; },
+    canEquip(hero, item) {
+      if (item.kind !== 'gear' || item.rarity !== 'legendary') return true;
+      const worn = this.wornLegendary(hero);
+      return !worn || worn.slot === item.slot;
+    },
+    // Relics stack up to the max; a maxed relic can't be taken again
+    relicCount(hero, rid) { return (hero.relics || {})[rid] || 0; },
+    addRelic(hero, item) {
+      hero.relics = hero.relics || {};
+      if (this.relicCount(hero, item.rid) >= G.RELIC_MAX) return false;
+      withMaxChange(hero, () => { hero.relics[item.rid] = this.relicCount(hero, item.rid) + 1; });
+      return true;
     },
     equip(hero, item) {
       return withMaxChange(hero, () => {
@@ -258,6 +283,16 @@ window.G = window.G || {};
     maxHp(hero) { return compute(hero).maxHp; },
     power(hero) { return power(compute(hero)); },
     powerWith(hero, item) {
+      if (item.kind === 'relic') {
+        if (this.relicCount(hero, item.rid) >= G.RELIC_MAX) return 0;
+        hero.relics = hero.relics || {};
+        const n = this.relicCount(hero, item.rid);
+        hero.relics[item.rid] = n + 1;
+        const p = power(compute(hero)) * 1.1;   // relics are worth a little more than their raw numbers show
+        if (n) hero.relics[item.rid] = n; else delete hero.relics[item.rid];
+        return p;
+      }
+      if (!this.canEquip(hero, item)) return 0;
       const saved = hero.gear[item.slot];
       hero.gear[item.slot] = item;
       const p = power(compute(hero));
@@ -267,13 +302,18 @@ window.G = window.G || {};
     bagFull(hero) { return hero.bag.length >= C().bagSize; },
     // New loot: gear goes straight onto an empty slot; otherwise (or for consumables) into the bag.
     // Returns 'equipped', 'bag', or null when the bag is full.
-    canReceive(hero, item) { return (item.kind === 'gear' && !hero.gear[item.slot]) || !this.bagFull(hero); },
+    canReceive(hero, item) {
+      if (item.kind === 'relic') return this.relicCount(hero, item.rid) < G.RELIC_MAX;
+      return (item.kind === 'gear' && !hero.gear[item.slot] && this.canEquip(hero, item)) || !this.bagFull(hero);
+    },
     receive(hero, item) {
-      if (item.kind === 'gear' && !hero.gear[item.slot]) { this.equip(hero, item); return 'equipped'; }
+      if (item.kind === 'relic') return this.addRelic(hero, item) ? 'relic' : null;
+      if (item.kind === 'gear' && !hero.gear[item.slot] && this.canEquip(hero, item)) { this.equip(hero, item); return 'equipped'; }
       if (this.bagFull(hero)) return null;
       hero.bag.push(item); return 'bag';
     },
     receivedText(item, where) {
+      if (where === 'relic') return `Relic: ${item.name}.`;
       return where === 'equipped' ? `You equipped the ${item.name}.` : `${item.name} went into your bag.${item.kind === 'gear' ? ' Click it in your bag and hold Equip to swap it in.' : ''}`;
     },
 
