@@ -210,7 +210,7 @@ window.G = window.G || {};
         const r = damage(d, PX.burst, null);
         push({ type: 'spellhit', src: f.id, tgt: d.id, amount: r.dealt, absorbed: r.absorbed, name: 'Rebirth' }, d);
         afterDamage(d, f);
-        if (d.alive) { d.burn = PX.burn; d.burnUntil = t + PX.burnSeconds + 0.01; d.nextBurn = t + 1; }
+        if (d.alive && PX.burn) { d.burn = PX.burn; d.burnUntil = t + PX.burnSeconds + 0.01; d.nextBurn = t + 1; }
       }
     }
 

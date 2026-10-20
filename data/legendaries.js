@@ -7,8 +7,8 @@ window.G = window.G || {};
 G.LEGENDARIES = {
   // ---------- Armor ----------
   heartlight: { name: 'Heartlight', slot: 'chest', cls: 'mage',
-    stats: { hp: 40, ward: 6 }, fx: { beam: { start: 2, step: 1, cap: 12 } },
-    desc: 'From the first second, a beam hits your target for 2 damage a second, +1 each second, up to 12.' },
+    stats: { hp: 40, ward: 6 }, fx: { beam: { start: 4, step: 4, cap: 50 } },
+    desc: 'From the first second, a beam hits your target for 4 damage a second, +4 more every second, up to 50 a second. Built to win long fights.' },
   truesight: { name: 'Truesight', slot: 'helmet', cls: 'archer',
     stats: { hp: 20, dmg: 4, crit: 8 }, fx: { trueStrike: 1 },
     desc: 'Your attacks can’t be dodged or parried, and they hit invisible enemies.' },

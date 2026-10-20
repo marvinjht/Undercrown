@@ -359,7 +359,7 @@ window.G = window.G || {};
       for (const id in this.F) {
         const f = this.F[id];
         if (!f.beamTo || f.dead || f.beamTo.dead || f.gone) continue;
-        const w = 2 + (f.beamPower || 2) * 0.6, x1 = f.cont.x, y1 = f.cont.y - 8, x2 = f.beamTo.cont.x, y2 = f.beamTo.cont.y - 8;
+        const w = 2 + Math.min(f.beamPower || 2, 24) * 0.5, x1 = f.cont.x, y1 = f.cont.y - 8, x2 = f.beamTo.cont.x, y2 = f.beamTo.cont.y - 8;
         const flick = 0.75 + Math.random() * 0.25;
         g.lineStyle(w + 6, 0xa996ff, 0.18 * flick).lineBetween(x1, y1, x2, y2);
         g.lineStyle(w, 0xd9ccff, 0.85 * flick).lineBetween(x1, y1, x2, y2);

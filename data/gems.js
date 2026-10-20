@@ -4,7 +4,7 @@ window.G = window.G || {};
 G.GEMS = {
   phoenix: {
     name: 'Phoenix Heart', color: '#ff8a4c',
-    up: 'Every time you die, you explode: every enemy takes 50 damage and burns for 10 a second for 5 seconds. If that kills the last enemy, you win, keep your heart and stand back up at 10 health.',
+    up: 'Every time you die, you explode for 100 damage to every enemy. If that kills the last enemy, you win, keep your heart and stand back up at 10 health.',
     cost: 'In every fight you take 1 burn damage a second.',
   },
   stone: {

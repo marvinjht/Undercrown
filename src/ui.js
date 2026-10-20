@@ -371,9 +371,17 @@ window.G = window.G || {};
   }
   // The eye: watch this player's game live (multiplayer, real players only)
   function eyeBtn(r) {
-    if (!G.Game.mp || r.bot || r.slot == null || r.slot === G.MP.mySlot || st_isWatchingView()) return '';
+    if (!G.Game.mp || r.bot || !r.alive || r.slot == null || r.slot === G.MP.mySlot || st_isWatchingView() || !iAmOut()) return '';
     const on = G.MP.watching === r.slot;
     return `<button class="eye-btn ${on ? 'on' : ''}" data-act="${on ? 'watch-stop' : 'watch'}" data-slot="${r.slot}" aria-label="${on ? 'Stop watching' : 'Watch'} ${esc(r.name)}" title="${on ? 'Stop watching' : 'Watch their game live'}">${G.Art.icon('eye')}</button>`;
+  }
+  // Watching live is for players who are out of the match (or out of the tournament)
+  function iAmOut() {
+    const s = G.Game.s;
+    if (!s) return false;
+    if (!s.player.alive) return true;
+    const e = s.tour && s.tour.entrants && s.tour.entrants.find(x => x.hero === s.player);
+    return !!(e && e.out);
   }
   function st_isWatchingView() { return !!(G.Game.s && G.Game.s.watchingView); }
   function rivalsPanel(st) {
@@ -927,6 +935,13 @@ window.G = window.G || {};
     const m = G.Tournament.nextMatch(T);
     const mine = m && ((m.a.hero && m.a.hero.isPlayer) || (!m.ghost && m.b.hero.isPlayer));
     const opp = tourOpponent(st);
+    const meE = T.entrants.find(e => e.hero.isPlayer);
+    if (G.Game.mp && (!meE || meE.out)) {
+      return `<section class="screen"><h2>The Tournament</h2>
+        <p class="lede">You're out, so you're watching. Pick any fight of the round, or click the eye next to a player.</p>
+        ${st.tourPhase === 'fight' ? tourSpectatePanel(st) || '<p class="waiting">Fights in progress…</p>'
+          : `<div class="spectate"><p class="waiting">Next fights start in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p></div>`}</section>`;
+    }
     const watchTop = st.tourPhase === 'fight' && G.Game.mp;
     return `<section class="screen"><h2>The Tournament</h2>
       ${watchTop ? `<p class="waiting">Fights in progress…</p>${tourSpectatePanel(st)}` : ''}

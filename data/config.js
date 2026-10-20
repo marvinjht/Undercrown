@@ -2,7 +2,7 @@
 // All stats are flat whole numbers. Chance stats (Crit, Dodge, Stun) mean "out of 100".
 window.G = window.G || {};
 
-G.VERSION = '0.23';   // players in one room must all run the same version
+G.VERSION = '0.24';   // players in one room must all run the same version
 
 G.CONFIG = {
   // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
@@ -36,7 +36,7 @@ G.CONFIG = {
 
   poison: { venomStacks: 10, purifyHeal: 10 },
 
-  phoenix: { burst: 50, burn: 10, burnSeconds: 5, selfBurn: 1, standUp: 10 },
+  phoenix: { burst: 100, burn: 0, burnSeconds: 0, selfBurn: 1, standUp: 10 },   // explodes for 100 on death
   stoneHp: 25,
   stoneGrace: 5,           // Heart of Stone: for this many seconds at the start of a fight, every hit deals 1
   stoneCrack: 3,           // Heart of Stone: each hit deals 1 more than the last, up to this
