@@ -348,6 +348,11 @@ window.G = window.G || {};
       ${r.lastText ? `<p>Last room: ${esc(r.lastText)}.</p>` : ''}<p class="tt-extra">Hover their gear squares to see each item.</p>`;
   }
 
+  // Bots carry a label everywhere; a bot that took over a player who left says so
+  function botTag(h) {
+    if (!h || !h.bot) return '';
+    return `<span class="bot-tag" ${tip(`<div class="tt-title">Bot</div><p>${h.botWas ? `${esc(h.botWas)} left the match, so a bot is playing their hero.` : 'An empty seat, played by the computer.'}</p>`)}>BOT</span>`;
+  }
   function rivalsPanel(st) {
     const rows = st.rivals.map(r => {
       const max = G.Hero.maxHp(r);
@@ -359,14 +364,14 @@ window.G = window.G || {};
       }).join('');
       return `<li class="rival ${r.alive ? '' : 'dead'}">
         <span class="dot" style="background:${col}"></span>
-        <div class="rv-main"><div class="rv-top" ${tip(rivalTip(r))}><b>${esc(r.name)}</b><span class="lv">Lv ${r.level}</span>${heartsRow(r.hearts, 'sm')}</div>
+        <div class="rv-main"><div class="rv-top" ${tip(rivalTip(r))}><b>${esc(r.name)}</b>${botTag(r)}<span class="lv">Lv ${r.level}</span>${heartsRow(r.hearts, 'sm')}</div>
           <div class="rv-spec">${esc([r.spec ? G.SPECS[r.spec].name : '', tag === 'No set bonus yet' ? '' : tag].filter(Boolean).join(' · '))}</div>
           ${r.alive ? hpBar(r.hp, max, 'thin', 'rv-' + r.id) : `<div class="fell">Out of hearts${r.diedRoom ? ` in room ${r.diedRoom}` : ''}</div>`}
           <div class="rarity-dots">${gear}</div>
         </div></li>`;
     }).join('');
     const alive = st.rivals.filter(r => r.alive).length;
-    return `<section class="panel"><h3>Rivals <span class="chip muted">${alive} in</span></h3><ul class="rivals">${rows}</ul></section>`;
+    return `<section class="panel"><h3>${G.Game.mp ? 'Players' : 'Rivals'} <span class="chip muted">${alive} in</span></h3><ul class="rivals">${rows}</ul></section>`;
   }
 
   // Top bar: the dungeon only. Name and sound on the left, the room track in the middle, the clock on the right.
@@ -539,7 +544,7 @@ window.G = window.G || {};
       const now = i === sh.turn && !reviewing;
       const state = sh.picks[id] ? `took ${esc(sh.picks[id])}` : now ? `<b id="turn-num">${turnLeft()}s</b> ${h.isPlayer ? 'to pick' : 'picking…'}` : 'waiting';
       const bar = now ? `<i class="turnbar ${h.isPlayer ? 'mine' : ''}"><span id="turn-bar" style="width:${turnPct()}%"></span></i>` : '';
-      return `<li class="${now ? 'now' : ''} ${h.isPlayer ? 'me' : ''}"><span>${i + 1}</span><b>${esc(h.name)}</b><small>${heartsRow(h.hearts, 'sm')} ${Math.round(h.hp / G.Hero.maxHp(h) * 100)}%</small><em>${state}</em>${bar}</li>`;
+      return `<li class="${now ? 'now' : ''} ${h.isPlayer ? 'me' : ''}"><span>${i + 1}</span><b>${esc(h.isPlayer ? 'You' : h.name)}${botTag(h)}</b><small>${heartsRow(h.hearts, 'sm')} ${Math.round(h.hp / G.Hero.maxHp(h) * 100)}%</small><em>${state}</em>${bar}</li>`;
     }).join('');
     const myNow = myTurn && !reviewing;
     const table = sh.table.map(it => { const L = takeLabel(p, it, 'Take this'); return itemCard(it, p, myNow
@@ -563,10 +568,11 @@ window.G = window.G || {};
 
   function shopScreen(st) {
     const sh = st.shop, S = CFG().shop;
+    if (!sh) return `<section class="screen shop"><h2>Plunder</h2><p class="lede">The host is laying out the pile. Everyone picks from it, weakest first.</p><p class="waiting">Waiting for every player to arrive…</p></section>`;
     return `<section class="screen shop">
       <h2>Plunder</h2>
       <p class="lede">Everyone picks from one shared pile, weakest first: fewer hearts pick first, then lower health. Everyone gets ${S.reviewSeconds} seconds to look, then ${S.turnSeconds} seconds per turn. Pass to take ${S.passGold} gold instead.</p>
-      ${sh.msg ? `<p class="notice">${esc(sh.msg)}</p>` : ''}
+      ${(sh.msg || st.shopMsg) ? `<p class="notice">${esc(sh.msg || st.shopMsg)}</p>` : ''}
       <div id="shop-picks">${shopPicks(st)}</div></section>`;
   }
 
@@ -750,11 +756,36 @@ window.G = window.G || {};
     const ov = opp.ghost ? { s: opp.s, hp: opp.hp } : opp.hp != null ? { s: G.Stats.compute(h), hp: opp.hp } : null;
     return `<div class="charblock rival-block ${opp.ghost ? 'ghosted' : ''}" style="--pv:${col}">
       <div class="pv-left"><div class="vs-tag">Your opponent</div><div id="rival-slot" class="preview-slot" aria-hidden="true"></div>
-        <div class="pv-info"><b>${esc(name)}</b>${opp.ghost ? '' : heartsRow(h.hearts, 'sm')}<span>${esc(buildLabel(h))}</span><small>Level ${h.level} · ${esc(spec)}${h.gem && !opp.ghost ? ' · ' + esc(G.GEMS[h.gem].name) : ''}</small></div></div>
+        <div class="pv-info"><b>${esc(name)}</b>${opp.ghost ? '' : botTag(h)}${opp.ghost ? '' : heartsRow(h.hearts, 'sm')}<span>${esc(buildLabel(h))}</span><small>Level ${h.level} · ${esc(spec)}${h.gem && !opp.ghost ? ' · ' + esc(G.GEMS[h.gem].name) : ''}</small></div></div>
       <div class="pv-right">${statCols(h, false, ov)}${setBonus(h, false)}</div></div>`;
   }
 
+  // Multiplayer: done with your room, waiting for the others
+  function waitingScreen(st) {
+    const R = G.MP.readyInfo, ready = new Set(R && R.room === st.room ? R.ready : []);
+    const rows = G.MP.players.map(p => {
+      const h = G.MP.heroes[p.slot];
+      const state = !h || !h.alive ? 'out' : p.bot ? 'bot' : ready.has(p.slot) ? 'ready' : 'playing';
+      const label = { out: 'Out of hearts', bot: 'Bot (plays instantly)', ready: 'Ready', playing: 'Still playing' }[state];
+      return `<li class="w-${state}"><b>${esc(p.slot === G.MP.mySlot ? 'You' : p.name)}</b>${p.bot ? botTag(h) : ''}<span>${label}</span></li>`;
+    }).join('');
+    return `<section class="screen"><h2>${st.room >= CFG().rooms ? 'The dungeon is behind you' : `Room ${st.room} done`}</h2>
+      <p class="lede">${st.room >= CFG().rooms ? 'The tournament starts once everyone gets through room ' + CFG().rooms + '.' : `Room ${st.room + 1} starts as soon as everyone is ready. You can use bag items and look over your gear while you wait.`}</p>
+      <ul class="wait-list">${rows}</ul>
+      ${characterBlock(st.player)}</section>`;
+  }
+  function duelWaitScreen() {
+    return `<section class="screen"><h2>Duel</h2><p class="lede">Everyone is being paired up for a duel. The loser loses a heart.</p><p class="waiting">Waiting for every player to arrive…</p></section>`;
+  }
+  function mpEndedScreen(st) {
+    return `<section class="screen end"><h2>Match over</h2><p class="lede">${esc(st.notice || 'The connection to the room was lost.')}</p>
+      <div class="row-actions"><button data-act="title">Back to the title</button></div></section>`;
+  }
+
   function deadScreen(st) {
+    if (G.Game.mp) return `<section class="screen end"><h2>You're out of hearts</h2>
+      <p class="lede">${esc(st.notice || 'The dungeon took your last heart.')} You're spectating now: the players column keeps updating, and you'll see the tournament when it starts.</p>
+      <div class="row-actions"><button class="ghost" data-act="mp-leave">Leave the match</button></div></section>`;
     return `<section class="screen end"><h2>You're out of hearts</h2>
       <p class="lede">${esc(st.notice || 'The dungeon took your last heart.')} In a full game you'd be spectating now.</p>
       <div class="row-actions"><button data-act="ending">See how the match ended</button><button class="ghost" data-act="title">Try again</button></div></section>`;
@@ -771,7 +802,7 @@ window.G = window.G || {};
       const snap = p.snap && p.snap[i];
       const hearts = snap ? snap.hearts : e.hero.hearts;
       const hp = p.result ? (won ? `${snap ? snap.hp : e.hp} hp left` : p.draw ? 'out of time' : snap && snap.out ? 'out' : 'lost') : `${e.hp} hp`;
-      return `<div class="b-row ${e.hero.isPlayer ? 'me' : ''} ${won === true ? 'won' : won === false ? 'lost' : ''}"><b>${esc(nameOf(e))}</b>
+      return `<div class="b-row ${e.hero.isPlayer ? 'me' : ''} ${won === true ? 'won' : won === false ? 'lost' : ''}"><b>${esc(nameOf(e))}${e.hero ? botTag(e.hero) : ''}</b>
         <span class="b-meta">${heartsRow(hearts, 'sm')}<small>${hp}</small></span></div>`;
     };
     const cols = T.rounds.map((r, ri) => `<div class="b-col ${ri ? 'linked' : ''}"><h4>Round ${r.n}</h4><div class="b-list">${r.pairs.map(p => {
@@ -813,7 +844,7 @@ window.G = window.G || {};
       ${opp ? rivalBlock(opp.ghost ? opp : { hero: opp.hero, hp: opp.hp }) : ''}
       <p class="lede">Last one with hearts wins. Each round everyone is paired up again. Winners keep the health they finish with; losers lose a heart and come back at full health. Fights go to the death; past one minute, both lose a heart.</p>
       ${roundsList(T)}
-      <p class="waiting">${mine ? 'Your fight starts' : 'Next fights start'} in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p></section>`;
+      ${st.tourPhase === 'fight' ? '<p class="waiting">Fights in progress…</p>' : `<p class="waiting">${mine ? 'Your fight starts' : 'Next fights start'} in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p>`}</section>`;
   }
 
   function endingScreen(st) {
@@ -826,9 +857,37 @@ window.G = window.G || {};
       <div class="row-actions"><button data-act="title">Play again</button></div></section>`;
   }
 
+  // ---------- Multiplayer lobby ----------
+  function savedName() { try { return localStorage.getItem('uc-name') || ''; } catch (e) { return ''; } }
+  function lobbyScreen() {
+    const M = G.MP;
+    if (M.status === 'connecting') return `<div class="title-screen lobby"><h2>Connecting…</h2><p class="lede">${M.isHost ? 'Opening your room.' : `Looking for room ${esc(M.code)}.`}</p>
+      <div class="row-actions"><button class="ghost" data-act="mp-leave">Cancel</button></div></div>`;
+    if (M.status === 'error') return `<div class="title-screen lobby"><h2>Couldn’t join</h2><p class="warn">${esc(M.error || 'Something went wrong.')}</p>
+      <div class="row-actions"><button data-act="mp-leave">Back</button></div></div>`;
+    const L = M.lobby || { slots: [] };
+    const isHost = M.isHost;
+    const slots = [];
+    for (let i = 0; i < 6; i++) {
+      const s = L.slots[i];
+      slots.push(s ? `<li class="${s.cid === M.cid ? 'me' : ''}"><span class="seat">${i + 1}</span><b>${esc(s.name)}</b>${i === 0 ? '<span class="chip">Host</span>' : ''}${s.cid === M.cid ? '<small>you</small>' : ''}</li>`
+        : `<li class="empty"><span class="seat">${i + 1}</span><b>Bot</b><span class="bot-tag">BOT</span><small>fills this seat if nobody joins</small></li>`);
+    }
+    const link = location.origin && location.origin !== 'null' ? `${location.href.split('#')[0].split('?')[0]}?room=${M.code}${G.Net.mode() === 'local' ? '&net=local' : ''}` : '';
+    return `<div class="title-screen lobby">
+      <header class="hero-head"><div class="eyebrow">Room code</div><h1 class="room-code">${esc(M.code)}</h1>
+        <p>Share this code with your friends. Up to 6 players; bots fill the empty seats.</p></header>
+      ${link ? `<div class="row-actions"><button class="ghost" data-act="mp-copy" data-link="${esc(link)}">Copy invite link</button></div>` : ''}
+      <ul class="seats">${slots.join('')}</ul>
+      <div class="row-actions">${isHost ? '<button class="enter" data-act="mp-start">Start the match</button>' : '<p class="waiting">Waiting for the host to start…</p>'}
+        <button class="ghost" data-act="mp-leave">Leave</button></div>
+      ${G.Net.mode() === 'local' ? '<p class="hint">Test mode: players are other tabs in this browser.</p>' : ''}
+    </div>`;
+  }
+
   function titleScreen() {
     return `<div class="title-screen">
-      <header class="hero-head"><div class="eyebrow">Undercrown v0.11 · single player</div><h1>Undercrown</h1>
+      <header class="hero-head"><div class="eyebrow">Undercrown v0.2</div><h1>Undercrown</h1>
         <p>Six warriors. Thirty rooms each. Three hearts. Health carries from room to room and healing is limited, so spend it wisely. Build an archetype, fight your rivals along the way, and be the last one standing.</p></header>
       <ul class="rules">
         <li><b>Hearts</b>Dying or losing a duel costs a heart. You come back at full health. Lose all three and you're out.</li>
@@ -838,8 +897,34 @@ window.G = window.G || {};
         <li><b>Gear and your bag</b>New gear goes straight onto an empty slot. Anything else lands in your 6-slot bag; hold Equip to swap it in (the old piece is gone), or discard it.</li>
         <li><b>The tournament</b>After room 30, everyone with hearts fights round after round until one is left.</li>
       </ul>
-      <div class="row-actions"><button class="enter" data-act="start">Enter the dungeon</button></div>
+      <div class="row-actions"><button class="enter" data-act="start">Play solo</button></div>
+      <section class="mp-box">
+        <h3>Play with friends</h3>
+        <label class="field"><span>Your name</span><input id="mp-name" maxlength="14" value="${esc(savedName())}" placeholder="Your name" autocomplete="nickname"></label>
+        <div class="mp-actions">
+          <button data-act="mp-create">Create a room</button>
+          <span class="or">or</span>
+          <label class="field code"><span>Room code</span><input id="mp-code" maxlength="5" value="${esc(roomFromUrl())}" placeholder="ABCDE" autocapitalize="characters" autocomplete="off"></label>
+          <button data-act="mp-join">Join</button>
+        </div>
+        <p class="hint">Up to 6 players. Bots fill the empty seats and are labeled BOT.</p>
+      </section>
     </div>`;
+  }
+
+  function roomFromUrl() { try { return (new URLSearchParams(location.search).get('room') || '').toUpperCase(); } catch (e) { return ''; } }
+
+  // A light refresh for network updates: never restarts a fight that's playing
+  function update() {
+    const st = G.Game.s;
+    if (st && st.phase === 'battle') {
+      const left = document.querySelector('.cols > aside.left');
+      if (left) { left.innerHTML = rivalsPanel(st) + youPanel(st); }
+      return;
+    }
+    const a = document.activeElement;
+    if (!st && a && a.tagName === 'INPUT') return;   // don't wipe what someone is typing
+    render();
   }
 
   // ---------- Render ----------
@@ -848,13 +933,14 @@ window.G = window.G || {};
     for (const k in tips) delete tips[k];
     const app = $('#app'), st = G.Game.s;
     if (!st || st.phase !== 'battle') G.Arena.stop();
-    if (!st) { app.innerHTML = titleScreen(); G.Preview.park(); window.scrollTo(0, 0); return; }
+    if (!st) { app.innerHTML = G.MP.active ? lobbyScreen() : titleScreen(); G.Preview.park(); G.RivalPreview.park(); if (!G.MP.active) window.scrollTo(0, 0); return; }
     if (st.phase === 'battle') bagOpen = -1;
     const screens = { doors: doorsScreen, battle: battleScreen, armory: armoryScreen, reward: rewardScreen, spoils: spoilsScreen, shop: shopScreen,
       merchant: merchantScreen, forge: forgeScreen, wager: wagerScreen, mystery: mysteryScreen, spec: specScreen, tree: treeScreen, gem: gemScreen,
-      duelIntro: duelIntroScreen, dead: deadScreen, tournament: tournamentScreen, ending: endingScreen };
+      duelIntro: duelIntroScreen, dead: deadScreen, tournament: tournamentScreen, ending: endingScreen,
+      waiting: waitingScreen, duelWait: duelWaitScreen, mpEnded: mpEndedScreen };
     const prevPhase = app.dataset.phase;
-    const notice = st.notice && !['dead', 'shop'].includes(st.phase) ? `<p class="notice">${esc(st.notice)}</p>` : '';
+    const notice = st.notice && !['dead', 'shop', 'mpEnded'].includes(st.phase) ? `<p class="notice">${esc(st.notice)}</p>` : '';
     app.innerHTML = `<div class="shell">${topbar(st)}<div class="cols"><aside class="left">${rivalsPanel(st)}${youPanel(st)}</aside><main class="stage">${notice}${screens[st.phase](st)}</main>
       <aside class="side">${bagPanel(st)}${gearPanel(st.player)}${statsPanel(st.player)}${supplyPanel()}</aside></div></div>`;
     if (st.phase !== prevPhase) window.scrollTo(0, 0);
@@ -885,7 +971,7 @@ window.G = window.G || {};
 
   function logLine(e, b) {
     const metas = b.res.fighters;
-    const nm = id => { const m = metas.find(x => x.id === id); return m ? m.name : '?'; };
+    const nm = id => { if (b.names && b.names[id]) return b.names[id]; const m = metas.find(x => x.id === id); return m ? m.name : '?'; };
     const subj = id => nm(id);
     const obj = id => { const n = nm(id); return n === 'You' ? 'you' : n; };
     const verb = (id, v, vs) => (nm(id) === 'You' ? v : vs);
@@ -939,7 +1025,7 @@ window.G = window.G || {};
     const lines = [];
     G.Arena.onSpeed = n => { const t = document.getElementById('speed-tag'); if (t) { t.textContent = n + 'x speed'; t.classList.add('fast'); } };
     G.Arena.start(slot, {
-      result: b.res, visual: b.visual,
+      result: b.res, visual: b.visual, mirror: !!b.mirror, names: b.names || null,
       onEvent: e => {
         const l = logLine(e, b);
         if (!l) return;
@@ -971,6 +1057,11 @@ window.G = window.G || {};
     if (a !== 'bag-menu') bagOpen = -1;
     switch (a) {
       case 'start': Gm.newRun(); break;
+      case 'mp-create': { const n = ($('#mp-name') || {}).value || ''; if (!n.trim()) { toast(el, 'Enter your name first'); break; } G.MP.create(n); break; }
+      case 'mp-join': { const n = ($('#mp-name') || {}).value || '', c = ($('#mp-code') || {}).value || ''; if (!n.trim()) { toast(el, 'Enter your name first'); break; } if (!c.trim()) { toast(el, 'Enter the room code'); break; } G.MP.join(c, n); break; }
+      case 'mp-start': G.MP.hostStart(); break;
+      case 'mp-leave': G.MP.leave(); Gm.s = null; render(); break;
+      case 'mp-copy': { const l = el.dataset.link; try { navigator.clipboard.writeText(l); toast(el, 'Link copied'); } catch (e) { toast(el, l); } break; }
       case 'door': Gm.chooseDoor(+el.dataset.i); break;
       case 'weapon': Gm.pickWeapon(el.dataset.id); break;
       case 'take': Gm.takeItem(el.dataset.id); break;
@@ -1066,5 +1157,5 @@ window.G = window.G || {};
     setInterval(tickClock, 200);
   }
 
-  G.UI = { render, init, refreshShopPicks };
+  G.UI = { render, init, refreshShopPicks, update };
 })(window.G);

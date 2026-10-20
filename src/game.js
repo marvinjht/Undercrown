@@ -34,7 +34,102 @@ window.G = window.G || {};
       G.Supply.reset([player, ...rivals]);
       this.startRoom();
     },
-    toTitle() { this.s = null; render(); },
+    toTitle() { if (this.mp || (G.MP && G.MP.active)) G.MP.leave(true); this.mp = false; this.s = null; render(); },
+
+    // ---------- Multiplayer (see src/mp.js) ----------
+    mp: false,
+    startMatch({ seed, player, rivals }) {
+      this.mp = true;
+      this.s = { seed, rng: new G.RNG(seed), player, rivals, room: 1, phase: 'waiting', roundKind: 'room', roundEnds: 0, notice: null, bagMsg: null, log: [] };
+      G.Supply.reset([player, ...rivals]);
+      render();
+    },
+    // The host says room n starts now
+    mpRoom(n) {
+      const s = this.s;
+      s.room = n; s.bagMsg = null; s.specOptions = null;
+      if (n > CFG().gemRoom) s.gemOptions = null;
+      this.startRoom();
+    },
+    // Plunder state from the host
+    mpPlunder(m) {
+      const s = this.s;
+      if (!s.player.alive || s.phase === 'battle') return;
+      const S = CFG().shop, t = now();
+      const turnSlot = m.order[m.turn];
+      const picks = {};
+      for (const k in m.picks) picks['h' + k] = m.picks[k];
+      s.roundKind = 'shop'; s.phase = 'shop'; s.roundEnds = 0;
+      s.shop = { table: m.table, order: m.order.map(sl => 'h' + sl), turn: m.turn, picks, mp: true,
+        reviewUntil: t + m.reviewMs, reviewDone: m.reviewMs <= 0,
+        turnStart: m.turnMs ? t - (S.turnSeconds * 1000 - m.turnMs) : t, msg: s.shopMsg || null, turnSlot };
+      if (m.done && !s.shopEnded) { s.shopEnded = true; this.endShop(); return; }
+      if (!m.done) s.shopEnded = false;
+      render();
+    },
+    // Your duel pairing from the host (canonical sides; mirrored = you're side b)
+    mpDuel(pair, mirrored) {
+      const s = this.s;
+      s.duel = { pairs: [], mine: pair, mirrored };
+      if (!pair) { s.roundKind = 'after'; this.nextStep(); return; }
+      s.phase = 'duelIntro'; s.roundKind = 'duel';
+      this.startTimer(8);
+      render();
+    },
+    // Tournament state from the host
+    mpTour(T, phase, ms) {
+      const s = this.s;
+      if (s.phase === 'battle' && s.battle && s.battle.tour && !s.battle.done) { s.pendingTour = { T, phase, ms }; return; }
+      s.tour = T; s.roundKind = 'tour'; s.tourPhase = phase;
+      const round = T.rounds[T.rounds.length - 1];
+      // Your result from the last round you fought
+      for (let i = T.rounds.length - 1; i >= 0; i--) {
+        const m = T.rounds[i].pairs.find(p => p.result && ((p.a && p.a.hero === s.player) || (!p.ghost && p.b && p.b.hero === s.player)));
+        if (!m) continue;
+        if ((s.tourNoticeRound || 0) < T.rounds[i].n) {
+          s.tourNoticeRound = T.rounds[i].n;
+          const meA = m.a.hero === s.player, opp = meA ? m.b : m.a, oppName = opp.ghost ? opp.name : opp.hero.name;
+          const won = m.winner && m.winner.hero === s.player && !m.draw;
+          const me = T.entrants.find(e => e.hero === s.player);
+          s.notice = m.draw ? (m.suddenDeath ? 'A full minute and nobody fell. Sudden death: you both keep your last heart.' : `A full minute and nobody fell: you and ${oppName} both lose a heart.`)
+            : won ? `You beat ${oppName}. You go on with ${me ? me.hp : '?'} health.` : m.ghost ? `The ${oppName} beat you. No heart lost.`
+            : me && me.out ? `${oppName} took your last heart.` : `${oppName} won. You lose a heart (${s.player.hearts} left) and come back at full health.`;
+        }
+        break;
+      }
+      if (phase === 'fight') {
+        if (s.fanfareRound !== round.n) { s.fanfareRound = round.n; if (G.Sound) G.Sound.play('fanfare', 1); }
+        const mine = round.pairs.find(p => !p.result && ((p.a && p.a.hero === s.player) || (!p.ghost && p.b && p.b.hero === s.player)));
+        const meE = T.entrants.find(e => e.hero === s.player);
+        if (mine && meE && !meE.out) { this.mpTourBattle(mine); return; }
+      }
+      s.phase = 'tournament';
+      if (phase === 'break') this.startTimer(ms / 1000); else s.roundEnds = 0;
+      render();
+    },
+    mpTourBattle(m) {
+      const s = this.s;
+      const mirrored = !m.ghost && m.b.hero === s.player;
+      const res = G.Tournament.pvp(m.a, m.b, null, m.seed);
+      const nameB = m.ghost ? m.b.name : m.b.hero.name;
+      s.battle = {
+        tour: true, match: m, res, mirror: mirrored,
+        names: { a: mirrored ? m.a.hero.name : 'You', b0: mirrored ? 'You' : nameB },
+        title: `Tournament round ${G.Tournament.currentRound(s.tour).n}: You vs ${mirrored ? m.a.hero.name : nameB}`,
+        visual: { a: visualFor(m.a.hero), b0: m.ghost ? { ...visualFor(m.b.of), ghost: true } : visualFor(m.b.hero) }, done: false,
+        onDone: () => {
+          if (s.battle.done) return;
+          s.battle.done = true;
+          G.MP.sendTourDone();
+          s.phase = 'tournament'; s.tourPhase = 'fight'; s.roundEnds = 0;
+          s.notice = 'Waiting for the other fights to finish…';
+          const p = s.pendingTour; s.pendingTour = null;
+          if (p) this.mpTour(p.T, p.phase, p.ms); else render();
+        },
+      };
+      s.phase = 'battle'; s.roundEnds = 0;
+      render();
+    },
     all() { return [this.s.player, ...this.s.rivals]; },
 
     // ---------- Timing ----------
@@ -43,6 +138,10 @@ window.G = window.G || {};
     tick() {
       const s = this.s;
       if (!s) return;
+      if (this.mp && (s.roundKind === 'shop' || s.roundKind === 'tour' || ['waiting', 'duelWait', 'mpEnded', 'dead', 'shop'].includes(s.phase))) {
+        if (s.phase === 'shop' && s.shop && s.shop.reviewUntil && !s.shop.reviewDone && now() >= s.shop.reviewUntil) { s.shop.reviewDone = true; s.shop.turnStart = now(); G.UI.refreshShopPicks(); }
+        return;
+      }
       if (s.phase === 'shop') this.shopTick();
       if (!s.roundEnds || now() < s.roundEnds) return;
       s.roundEnds = 0;
@@ -70,6 +169,7 @@ window.G = window.G || {};
       const s = this.s;
       s.phase = 'dead'; s.roundEnds = 0;
       s.notice = text;
+      if (this.mp) G.MP.sendSnap();
       render();
     },
 
@@ -83,6 +183,12 @@ window.G = window.G || {};
       if (!p.alive) { this.playerOut(`Poison took your last heart in room ${s.room}.`); return; }
       if (p.hearts < before[p.id]) say(s, 'Poison took a heart. You come back at full health, poison cleared.');
       const kind = G.Dungeon.roomKind(s.room);
+      if (this.mp) {
+        G.MP.sendSnap();
+        // Shared rooms wait for the host: the Plunder pile, or your duel pairing
+        if (kind === 'shop') { s.roundKind = 'shop'; s.phase = 'shop'; s.shop = null; s.shopMsg = null; s.shopEnded = false; s.roundEnds = 0; render(); return; }
+        if (kind === 'duel') { s.roundKind = 'after'; s.gemDone = true; s.duelDone = true; s.phase = 'duelWait'; s.roundEnds = 0; render(); return; }
+      }
       if (kind === 'shop') { this.startShop(); return; }
       if (kind === 'duel') { s.roundKind = 'after'; s.rivalsPlayedRoom = s.room; s.gemDone = true; this.startDuels(); return; }
       if (kind === 'merchant') { s.merchant = G.Dungeon.merchantStock(p, s.room, s.rng); s.phase = 'merchant'; this.startTimer(CFG().roundSeconds); render(); return; }
@@ -136,7 +242,7 @@ window.G = window.G || {};
       s.bagMsg = null;
       if (s.roundKind === 'room') {
         const before = this.heartsSnapshot();
-        for (const r of s.rivals) if (r.alive) G.AI.aiRoom(r, s.room);
+        if (!this.mp) for (const r of s.rivals) if (r.alive) G.AI.aiRoom(r, s.room);   // in multiplayer the host runs the bots
         s.rivalsPlayedRoom = s.room;
         this.afterHeartLoss(before);
         s.gemDone = false; s.duelDone = false;
@@ -163,6 +269,8 @@ window.G = window.G || {};
         s.phase = 'tree'; s.treeLevel = pick.level;
         this.startTimer(CFG().roundSeconds); render(); return;
       }
+      // Multiplayer: you're done with this room; the host starts the next one when everyone is
+      if (this.mp) { s.phase = 'waiting'; s.roundEnds = 0; G.MP.sendReady(); render(); return; }
       s.room++;
       s.specOptions = null; s.gemOptions = s.room > CFG().gemRoom ? null : s.gemOptions;
       if (s.room > CFG().rooms) { this.startTournament(); return; }
@@ -346,6 +454,7 @@ window.G = window.G || {};
     useBag(i) {
       const s = this.s, p = s.player, it = p.bag[i];
       if (!it || s.phase === 'battle') return;
+      if (this.mp && (s.roundKind === 'tour' || s.phase === 'duelIntro' || s.phase === 'duelWait')) { s.bagMsg = 'Your gear is locked in for player fights.'; render(); return; }
       if (it.kind === 'gear' && !G.Hero.canEquip(p, it)) { s.bagMsg = 'You already wear a legendary. Only one at a time.'; render(); return; }
       if (it.kind === 'gear') {
         // Equipping overwrites: what you were wearing is gone for good (no swapping back)
@@ -429,6 +538,7 @@ window.G = window.G || {};
     startDuelFight() {
       const s = this.s, m = s.duel.mine;
       if (!m) return;
+      if (this.mp) { this.mpDuelFight(); return; }
       // Fight from the player's side so the player is always on the left
       const flip = !m.a.hero.isPlayer;
       const pair = flip ? { a: m.b, b: m.a } : m;
@@ -452,6 +562,36 @@ window.G = window.G || {};
             : `${oppName} won the duel. You lose a heart (${s.player.hearts} left) and come back at full health. +${X.duelLoss} XP.`;
           s.duel.mine = null;
           s.roundKind = 'after';
+          this.nextStep();
+        },
+      };
+      s.phase = 'battle';
+      s.roundEnds = 0;
+      render();
+    },
+
+    mpDuelFight() {
+      const s = this.s, m = s.duel.mine, mirrored = s.duel.mirrored;
+      const res = G.Duel.simulate(m, s.rng);   // the host's seed: both players see the same fight
+      const nameB = m.ghost ? m.b.name : m.b.hero.name, oppName = mirrored ? m.a.hero.name : nameB;
+      s.battle = {
+        duel: true, res, mirror: mirrored, names: { a: mirrored ? m.a.hero.name : 'You', b0: mirrored ? 'You' : nameB },
+        title: `Duel: You vs ${oppName}`,
+        visual: { a: visualFor(m.a.hero), b0: m.ghost ? { ...visualFor(m.b.of), ghost: true } : visualFor(m.b.hero) },
+        done: false,
+        onDone: () => {
+          if (s.battle.done) return;
+          s.battle.done = true;
+          G.Duel.resolve(m, res, s.room);
+          const won = !res.draw && res.winner === (mirrored ? 'b' : 'a');
+          const X = CFG().xp;
+          if (m.ghost) s.notice = res.draw ? `Time ran out against the ${oppName}. No heart lost.` : won ? `You beat the ${oppName}. +${X.duelWin} XP.` : `The ${oppName} got the better of you. No heart lost. +${X.duelLoss} XP.`;
+          else if (res.draw) s.notice = `A full minute and nobody fell: you and ${oppName} both lose a heart. You come back at full health (${s.player.hearts} left).`;
+          else s.notice = won ? `You beat ${oppName}! +${CFG().duel.winGold} gold, +${X.duelWin} XP. Your health goes back to what it was.`
+            : `${oppName} won the duel. You lose a heart (${s.player.hearts} left) and come back at full health. +${X.duelLoss} XP.`;
+          s.duel.mine = null;
+          s.roundKind = 'after';
+          G.MP.sendSnap();
           this.nextStep();
         },
       };
@@ -527,6 +667,7 @@ window.G = window.G || {};
       const it = sh.table.find(x => x.id === id);
       if (!it) return;
       if (!G.Hero.canReceive(s.player, it)) return;
+      if (this.mp) { if (!sh.sent) { sh.sent = true; G.MP.sendPick(id); } return; }
       sh.table = sh.table.filter(x => x !== it);
       sh.msg = G.Hero.receivedText(it, G.Hero.receive(s.player, it));
       sh.picks[h.id] = it.name; sh.turn++; sh.turnStart = Date.now();
@@ -535,6 +676,7 @@ window.G = window.G || {};
     playerShopPass() {
       const h = this.shopTurnHero();
       if (!h || !h.isPlayer || Date.now() < this.s.shop.reviewUntil) return;
+      if (this.mp) { if (!this.s.shop.sent) { this.s.shop.sent = true; G.MP.sendPick(null); } return; }
       this.shopPick(h, null);
       this.s.shop.msg = `You passed and got ${CFG().shop.passGold} gold.`;
       this.shopAfterPick(true);
@@ -548,6 +690,7 @@ window.G = window.G || {};
       const s = this.s, sh = s.shop;
       s.roundEnds = 0;
       const mine = sh.picks[s.player.id];
+      if (this.mp) G.MP.sendSnap();
       s.notice = `Plunder over. You ${mine && !mine.startsWith('passed') ? 'took ' + mine : mine || 'passed'}.`;
       s.roundKind = 'after';
       s.rivalsPlayedRoom = s.room;

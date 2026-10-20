@@ -72,10 +72,12 @@ window.G = window.G || {};
       if (wkey && this.textures.exists(wkey)) { weapon = this.add.image(10, 10, wkey).setOrigin(0.1, 0.5); parts.push(weapon); }
       const cont = this.track(this.add.container(X0, lane, parts));
       const sc = (m.scale || 1) * (side === 'b' && this.cfg.result.fighters.filter(f => f.side === 'b' && f.bornAt === 0).length > 2 ? 0.8 : 1);
-      cont.setScale(side === 'a' ? sc : -sc, sc);
-      const name = this.track(this.add.text(0, 0, m.name, { fontFamily: FONT, fontSize: '12px', color: '#ece3d6', stroke: '#15120f', strokeThickness: 4 }).setOrigin(0.5));
+      const faceRight = (side === 'a') !== !!this.cfg.mirror;
+      cont.setScale(faceRight ? sc : -sc, sc);
+      const label = (this.cfg.names && this.cfg.names[m.id]) || m.name;
+      const name = this.track(this.add.text(0, 0, label, { fontFamily: FONT, fontSize: '12px', color: '#ece3d6', stroke: '#15120f', strokeThickness: 4 }).setOrigin(0.5));
       const bar = this.track(this.add.graphics());
-      const f = { id: m.id, side, m, cont, body, weapon, name, bar, sc, y: lane, dir: side === 'a' ? 1 : -1, lunge: 0, dy: 0,
+      const f = { id: m.id, side, m, cont, body, weapon, name, bar, sc, y: lane, dir: faceRight ? 1 : -1, lunge: 0, dy: 0,
         hp: m.hp, maxHp: m.maxHp, shield: m.shield, maxShield: Math.max(1, m.shield), mana: m.mana, hasMana: m.hasMana, dead: false, gone: false, tint };
       this.F[m.id] = f;
       this.placeFighter(f);
@@ -91,7 +93,8 @@ window.G = window.G || {};
     }
 
     placeFighter(f) {
-      const p = posAt(this.cfg.result.tracks[f.id], this.t);
+      let p = posAt(this.cfg.result.tracks[f.id], this.t);
+      if (this.cfg.mirror) p = G.CONFIG.combat.startGap - p;   // you're side b: play it back from your side
       if (!f.gone) f.cont.x = X0 + p * STEP + f.lunge * f.dir;
       f.cont.y = f.y + f.dy;
     }
@@ -320,12 +323,12 @@ window.G = window.G || {};
     drawBar(f) {
       if (f.gone) { f.bar.clear(); f.name.setVisible(false); return; }
       // An enemy on the hero's lane (1v1 fights) shows its name and bar below, so labels never overlap
-      const below = f.side === 'b' && f.y === 200;
+      const below = ((f.side === 'b') !== !!this.cfg.mirror) && f.y === 200;
       const w = 64, h = 6, x = f.cont.x - w / 2, y = below ? f.y + 34 * f.sc + 14 : f.y - 42 * f.sc;
       f.bar.clear();
       if (f.dead) { f.name.setPosition(f.cont.x, below ? y + 12 : y - 10).setAlpha(0.4); return; }
       f.bar.fillStyle(0x0d0b09, 0.85).fillRect(x - 1, y - 1, w + 2, h + 2);
-      f.bar.fillStyle(f.side === 'a' ? 0x6cc35f : 0xc4473a).fillRect(x, y, w * Math.max(0, f.hp / f.maxHp), h);
+      f.bar.fillStyle((f.side === 'a') !== !!this.cfg.mirror ? 0x6cc35f : 0xc4473a).fillRect(x, y, w * Math.max(0, f.hp / f.maxHp), h);
       let yy = y + h + 1;
       if (f.shield > 0) { f.bar.fillStyle(0x9fc4ff).fillRect(x, yy, w * Math.min(1, f.shield / f.maxShield), 3); yy += 4; }
       if (f.hasMana) { f.bar.fillStyle(0x0d0b09, 0.85).fillRect(x - 1, yy - 1, w + 2, 5); f.bar.fillStyle(0x6f7dff).fillRect(x, yy, w * Math.min(1, f.mana / 100), 3); }

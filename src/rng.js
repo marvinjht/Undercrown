@@ -37,5 +37,6 @@ window.G = window.G || {};
   G.RNG = RNG;
   G.newSeed = () => Math.floor(Math.random() * 4294967296);
   let uid = 0;
-  G.uid = (p = 'id') => p + '_' + (++uid).toString(36);
+  G.uidPrefix = '';   // multiplayer: each player gets their own prefix so item ids never collide
+  G.uid = (p = 'id') => p + '_' + G.uidPrefix + (++uid).toString(36);
 })(window.G);

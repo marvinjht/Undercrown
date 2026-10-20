@@ -21,10 +21,11 @@ window.G = window.G || {};
   const strongest = (heroes, except) => heroes.filter(h => h !== except).sort((a, b) => G.Hero.power(b) - G.Hero.power(a))[0] || except;
 
   // One PvP fight. a and b are { hero, hp } (b may be a ghost spec instead of a hero).
-  function pvp(a, b, rng) {
+  // seed: multiplayer passes the host's seed so every screen plays the exact same fight
+  function pvp(a, b, rng, seed) {
     const bSpec = b.ghost ? b : { s: G.Stats.compute(b.hero), name: b.hero.isPlayer ? 'You' : b.hero.name, hp: b.hp, sprite: 'hero', tint: b.hero.tint };
     return G.simulateFight(G.Stats.compute(a.hero), [bSpec],
-      { seed: rng.int(0, 1e9), aHp: a.hp, aName: a.hero.isPlayer ? 'You' : a.hero.name, pvp: true, maxTime: CFG().arena.maxTime });
+      { seed: seed != null ? seed : rng.int(0, 1e9), aHp: a.hp, aName: a.hero.isPlayer ? 'You' : a.hero.name, pvp: true, maxTime: CFG().arena.maxTime });
   }
 
   // Pair players up. sortKey decides who meets whom (closest first); the last player left fights a ghost.
@@ -60,7 +61,7 @@ window.G = window.G || {};
       const list = heroes.filter(h => h.alive).map(h => ({ hero: h, hp: h.hp }));
       return makePairs(list, rng, e => e.hero.opponents[e.hero.opponents.length - 1]);
     },
-    simulate(pair, rng) { return pvp(pair.a, pair.b, rng); },
+    simulate(pair, rng) { return pvp(pair.a, pair.b, rng, pair.seed); },
     // Returns a short summary; mutates the heroes. hpBefore restores health.
     resolve(pair, res, room) {
       const X = CFG().xp, out = { heartLost: [] };
@@ -143,7 +144,7 @@ window.G = window.G || {};
     if (T.champion) return null;
     return currentRound(T).pairs.find(p => !p.result) || null;
   }
-  function simulate(T, m) { return pvp(m.a, m.b, T.rng); }
+  function simulate(T, m) { return pvp(m.a, m.b, T.rng, m.seed); }
 
   function eliminate(T, e) {
     e.out = true;
@@ -216,5 +217,5 @@ window.G = window.G || {};
   }
 
   G.Duel = Duel;
-  G.Tournament = { create, nextMatch, simulate, resolve, runAll, currentRound, ghostOf, alive };
+  G.Tournament = { create, nextMatch, simulate, resolve, runAll, currentRound, ghostOf, alive, pvp, strongest };
 })(window.G);

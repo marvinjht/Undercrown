@@ -1,6 +1,13 @@
-# Undercrown (v0.1)
+# Undercrown (v0.2)
 
-v0.1 adds: relics (stackable build effects, max 3 copies, data/relics.js), 17 legendaries (one worn at a time, unique per match, data/legendaries.js), hybrids with capstone-weight mechanics (data/sets.js), rares with two affixes, a forge that previews Strengthen and adds one bonus per piece, per-item merchant stock, and the new layout.
+v0.2 adds multiplayer with friends: create a room, share the 5-letter code, up to 6 players, bots (labeled BOT) fill empty seats.
+- src/net.js: transports. Supabase Realtime broadcast for online play; add ?net=local to the address to test with several tabs in one browser.
+- src/mp.js: lobby, host and client logic. Each player runs their own dungeon; the host runs the bots, the room clock,
+  Plunder, duel pairings (with seeds, so both players see the same fight) and the tournament. A player who drops is
+  replaced by a bot ("BOT, was Name"). If the host leaves, the match ends.
+
+
+v0.1 added: relics (stackable build effects, max 3 copies, data/relics.js), 17 legendaries (one worn at a time, unique per match, data/legendaries.js), hybrids with capstone-weight mechanics (data/sets.js), rares with two affixes, a forge that previews Strengthen and adds one bonus per piece, per-item merchant stock, and the new layout.
 
 
 Single-player prototype of a dungeon auto battler. You and 5 AI rivals each walk 29 rooms with 3 hearts,
