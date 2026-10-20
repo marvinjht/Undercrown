@@ -10,7 +10,8 @@ window.G = window.G || {};
 
 (function (G) {
   const CFG = () => G.CONFIG;
-  const MAX = 8;
+  const MAX = 8;        // seats in a room
+  const BOT_FILL = 6;   // bots fill empty seats up to this many players
   const now = () => Date.now();
   const TINTS = [G.PLAYER_TINT, ...G.RIVALS.map(r => r.tint), 0xe07a9a, 0x9ad9c4];
   const BOT_NAMES = G.RIVALS.map(r => r.name).concat(['Grist', 'Ulla', 'Fenn', 'Rook']);
@@ -199,9 +200,12 @@ window.G = window.G || {};
       const L = this.lobby;
       const used = new Set(L.slots.filter(Boolean).map(s => s.name));
       const botNames = BOT_NAMES.filter(n => !used.has(n));
+      // Bots fill the table up to 6. Seats 7 and 8 only ever hold real players.
+      const humans = L.slots.filter(Boolean);
+      const total = Math.max(BOT_FILL, humans.length);
       const players = [];
-      for (let i = 0; i < MAX; i++) {
-        const s = L.slots[i];
+      for (let i = 0; i < total; i++) {
+        const s = humans[i];
         players.push(s ? { slot: i, cid: s.cid, name: s.name, bot: false, tint: TINTS[i] }
           : { slot: i, cid: null, name: botNames.shift() || 'Bot ' + i, bot: true, tint: TINTS[i] });
       }

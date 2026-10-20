@@ -172,7 +172,14 @@ window.G = window.G || {};
 
   function itemPrice(item) {
     if (item.kind === 'consumable') return G.CONSUMABLES[item.cid].price;
-    return CFG().shop.itemCost[item.rarity] + item.room * CFG().shop.itemCostPerRoom;
+    const per = CFG().shop.itemCostPerRoom;
+    return CFG().shop.itemCost[item.rarity] + item.room * (typeof per === 'object' ? per[item.rarity] || 2 : per);
+  }
+  // What the bag pays when you sell something
+  function sellPrice(item) {
+    const S = CFG().sell;
+    if (item.kind === 'consumable') return Math.max(1, Math.round(G.CONSUMABLES[item.cid].price * S.consumablePct / 100));
+    return S[item.rarity] || 0;
   }
 
   function pickN(ids, n, rng) {
@@ -309,7 +316,7 @@ window.G = window.G || {};
   }
 
   G.Dungeon = {
-    monsterFor, buildEnemies, monsterName, makeDoors, doorInfo, danger, goldFor, itemPrice, doorFoes,
+    monsterFor, buildEnemies, monsterName, makeDoors, doorInfo, danger, goldFor, itemPrice, sellPrice, doorFoes,
     specOptions, gemOptions, rollMystery, fight, applyFight, tickPoison, useItem, fightOpts, roomKind, merchantStock, merchantPrice,
     gearDrops, spoilsOptions, takeSpoils, forgeStrengthen, forgeAffix, strengthenGains,
   };

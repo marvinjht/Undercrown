@@ -172,7 +172,7 @@ window.G = window.G || {};
     const spec = p.spec ? G.SPECS[p.spec].name : `Spec at level ${CFG().levels.specLevel}`;
     return `<div class="charblock" style="--pv:${col}">
       <div class="pv-left"><div class="pv-top">${levelBadge(p)}</div><div class="pv-mid"><div id="preview-slot" class="preview-slot" aria-hidden="true"></div>
-        <div class="pv-info"><b>You</b><span>${esc(buildLabel(p))}</span><small>${esc(spec)}${p.gem ? ' · ' + esc(G.GEMS[p.gem].name) : ''}</small></div></div>
+        <div class="pv-info"><b>You</b><span>${esc(buildLabel(p))}</span><small>${p.spec ? `<button class="linkish" data-act="spec-tree" title="See the skill tree">${esc(spec)}</button>` : esc(spec)}${p.gem ? ' · ' + esc(G.GEMS[p.gem].name) : ''}</small></div></div>
         ${vitalsRow(p, 'player-block')}</div>
       <div class="pv-right">${statCols(p)}${setBonus(p)}</div>
       ${relicRow(p)}</div>`;
@@ -287,6 +287,22 @@ window.G = window.G || {};
     const b = el.querySelector('button'); if (b) b.focus();
   }
   function closeSetGuide() { const el = document.getElementById('set-guide'); if (el) el.remove(); }
+  // Your specialization's skill tree, in a pop-up
+  function openSpecTree() {
+    const p = G.Game.s && G.Game.s.player;
+    if (!p || !p.spec) return;
+    closeSetGuide();
+    const S = G.SPECS[p.spec];
+    const el = document.createElement('div');
+    el.id = 'set-guide'; el.className = 'sg-back';
+    el.innerHTML = `<div class="sg-card" role="dialog" aria-modal="true" aria-label="${esc(S.name)} skill tree">
+      <div class="sg-top"><h3>${esc(S.name)} skill tree</h3><button class="ghost" data-act="set-guide-close">Close</button></div>
+      <p class="lede">${esc(S.desc)} Picks at levels ${CFG().levels.treeLevels.join(', ')}; you're level ${p.level}.</p>
+      ${treeGraph(p.spec, p.treePicks, null)}</div>`;
+    document.body.appendChild(el);
+    el.addEventListener('click', e => { if (e.target === el || e.target.closest('[data-act="set-guide-close"]')) closeSetGuide(); });
+    const b = el.querySelector('button'); if (b) b.focus();
+  }
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSetGuide(); });
 
   function supplyPanel() {
@@ -312,12 +328,12 @@ window.G = window.G || {};
       slots.push(`<div class="bag-slot ${open ? 'open' : ''}">
         <button class="bag-item" data-act="bag-menu" data-i="${i}" ${tip(itemTip(it, p))} aria-label="${esc(it.name)}">
           <span class="ico-wrap ${it.kind === 'gear' ? 'r-' + it.rarity : ''}">${G.Art.icon(it.iconKey)}</span><small>${esc(it.name)}</small></button>
-        ${open ? `<div class="bag-menu">${bagUseBtn(p, it, i)}<button class="ghost" data-act="bag-drop" data-i="${i}">Discard</button></div>` : ''}
+        ${open ? `<div class="bag-menu">${bagUseBtn(p, it, i)}<button class="ghost" data-act="bag-sell" data-i="${i}">Sell +${G.Dungeon.sellPrice(it)}g</button></div>` : ''}
       </div>`);
     }
     const buffs = Object.entries(p.buffs || {}).filter(([, v]) => v).map(([k, v]) => k === 'fullMana' ? 'Full mana' : `+${v} ${G.STAT_INFO[k].label}`);
     return `<section class="panel"><h3>Bag <span class="bag-head-r">${goldChip(p)}<span class="chip ${p.bag.length >= size ? 'full' : 'muted'}">${p.bag.length}/${size}</span></span></h3>
-      <p class="hint bag-hint">New gear goes straight onto an empty slot; anything else lands here. To swap gear in, click it and hold Equip. The old piece is gone for good.</p>
+      <p class="hint bag-hint">New gear goes straight onto an empty slot; anything else lands here. To swap gear in, click it and hold Equip (the old piece is gone for good), or sell it for gold.</p>
       <div class="bag">${slots.join('')}</div>
       ${buffs.length ? `<p class="buffs">Next fight: ${buffs.join(', ')}</p>` : ''}
       ${st.bagMsg ? `<p class="bag-msg">${esc(st.bagMsg)}</p>` : ''}</section>`;
@@ -327,7 +343,7 @@ window.G = window.G || {};
     if (!hero.spec) return `<span class="chip muted" ${tip(`<div class="tt-title">No specialization yet</div><p>You choose one at level ${CFG().levels.specLevel}, then make skill tree picks at levels ${CFG().levels.treeLevels.join(', ')}.</p>`)}>Spec at level ${CFG().levels.specLevel}</span>`;
     const S = G.SPECS[hero.spec];
     const nodes = G.Stats.treeFx(hero).nodes;
-    return `<span class="chip" ${tip(`<div class="tt-title">${S.name} <small>${S.role}</small></div><p>${esc(S.desc)}</p>${nodes.map(n => `<p><b>${esc(n.name)}:</b> ${esc(n.desc)}.</p>`).join('')}`)}>${S.name}${nodes.length ? ' ' + nodes.length + '/3' : ''}</span>`;
+    return `<button class="chip chip-btn" data-act="spec-tree" ${tip(`<div class="tt-title">${S.name} <small>${S.role}</small></div><p>${esc(S.desc)}</p>${nodes.map(n => `<p><b>${esc(n.name)}:</b> ${esc(n.desc)}.</p>`).join('')}<p class="tt-extra">Click to see the whole skill tree.</p>`)}>${S.name}${nodes.length ? ' ' + nodes.length + '/3' : ''}</button>`;
   }
   function gemChip(hero) {
     if (!hero.gem) return '';
@@ -812,7 +828,7 @@ window.G = window.G || {};
   // Tournament: watch any fight of the current round (every screen can replay it from the host's seed)
   function tourSpectatePanel(st) {
     const round = G.Tournament.currentRound(st.tour);
-    const ms = round ? round.pairs.filter(p => !p.result) : [];
+    const ms = round ? round.pairs.filter(p => !p.result && p.seed != null) : [];
     if (!ms.length) return '';
     const M = G.MP;
     if (M.tourWatch == null || !ms[M.tourWatch]) M.tourWatch = 0;
@@ -822,8 +838,8 @@ window.G = window.G || {};
   }
   function playTourMatch() {
     const st = G.Game.s, round = G.Tournament.currentRound(st.tour);
-    const m = round && round.pairs.filter(p => !p.result)[G.MP.tourWatch || 0];
-    if (!m) return;
+    const m = round && round.pairs.filter(p => !p.result && p.seed != null)[G.MP.tourWatch || 0];
+    if (!m || m.seed == null) return;   // seeds arrive when the round's fights start
     const nmA = m.a.hero.isPlayer ? 'You' : m.a.hero.name, nmB = m.ghost ? m.b.name : m.b.hero.isPlayer ? 'You' : m.b.hero.name;
     G.Tournament.pvp(m.a, m.b, null, m.seed);
     playSpectate({ args: G._lastArgs, names: { a: nmA, b0: nmB }, title: `${nmA} vs ${nmB}`, slot: -1,
@@ -846,8 +862,8 @@ window.G = window.G || {};
 
   function deadScreen(st) {
     if (G.Game.mp) return `<section class="screen end"><h2>You're out of hearts</h2>
-      <p class="lede">${esc(st.notice || 'The dungeon took your last heart.')} You can watch the players still in, and you'll see the tournament when it starts.</p>
       ${spectatePanel(st)}
+      <p class="lede">${esc(st.notice || 'The dungeon took your last heart.')} You can watch the players still in, and you'll see the tournament when it starts.</p>
       <div class="row-actions"><button class="ghost" data-act="mp-leave">Leave the match</button></div></section>`;
     return `<section class="screen end"><h2>You're out of hearts</h2>
       <p class="lede">${esc(st.notice || 'The dungeon took your last heart.')} In a full game you'd be spectating now.</p>
@@ -904,11 +920,13 @@ window.G = window.G || {};
     const m = G.Tournament.nextMatch(T);
     const mine = m && ((m.a.hero && m.a.hero.isPlayer) || (!m.ghost && m.b.hero.isPlayer));
     const opp = tourOpponent(st);
+    const watchTop = st.tourPhase === 'fight' && G.Game.mp;
     return `<section class="screen"><h2>The Tournament</h2>
+      ${watchTop ? `<p class="waiting">Fights in progress…</p>${tourSpectatePanel(st)}` : ''}
       ${opp ? rivalBlock(opp.ghost ? opp : { hero: opp.hero, hp: opp.hp }) : ''}
       <p class="lede">Last one with hearts wins. Each round everyone is paired up again. Winners keep the health they finish with; losers lose a heart and come back at full health. Fights go to the death; past one minute, both lose a heart.</p>
       ${roundsList(T)}
-      ${st.tourPhase === 'fight' ? `<p class="waiting">Fights in progress…</p>${G.Game.mp ? tourSpectatePanel(st) : ''}` : `<p class="waiting">${mine ? 'Your fight starts' : 'Next fights start'} in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p>`}</section>`;
+      ${watchTop ? '' : st.tourPhase === 'fight' ? '<p class="waiting">Fights in progress…</p>' : `<p class="waiting">${mine ? 'Your fight starts' : 'Next fights start'} in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p>`}</section>`;
   }
 
   function endingScreen(st) {
@@ -934,13 +952,16 @@ window.G = window.G || {};
     const slots = [];
     for (let i = 0; i < 8; i++) {
       const s = L.slots[i];
+      // Bots fill up to 6 seats; seats 7 and 8 stay open for real players
+      const humans = L.slots.filter(Boolean).length, botSeat = i < 6 && i >= humans;
       slots.push(s ? `<li class="${s.cid === M.cid ? 'me' : ''}"><span class="seat">${i + 1}</span><b>${esc(s.name)}</b>${i === 0 ? '<span class="chip">Host</span>' : ''}${s.cid === M.cid ? '<small>you</small>' : ''}</li>`
-        : `<li class="empty"><span class="seat">${i + 1}</span><b>Bot</b><span class="bot-tag">BOT</span><small>fills this seat if nobody joins</small></li>`);
+        : botSeat ? `<li class="empty"><span class="seat">${i + 1}</span><b>Bot</b><span class="bot-tag">BOT</span><small>fills this seat if nobody joins</small></li>`
+        : `<li class="empty open"><span class="seat">${i + 1}</span><b>Open</b><small>players only, no bots</small></li>`);
     }
     const link = location.origin && location.origin !== 'null' ? `${location.href.split('#')[0].split('?')[0]}?room=${M.code}${G.Net.mode() === 'local' ? '&net=local' : ''}` : '';
     return `<div class="title-screen lobby">
       <header class="hero-head"><div class="eyebrow">Room code</div><h1 class="room-code">${esc(M.code)}</h1>
-        <p>Share this code with your friends. Up to 8 players; bots fill the empty seats.</p></header>
+        <p>Share this code with your friends. Up to 8 players. Bots fill empty seats up to 6; seats 7 and 8 are for real players only.</p></header>
       ${link ? `<div class="row-actions"><button class="ghost" data-act="mp-copy" data-link="${esc(link)}">Copy invite link</button></div>` : ''}
       <ul class="seats">${slots.join('')}</ul>
       <div class="row-actions">${isHost ? '<button class="enter" data-act="mp-start">Start the match</button>' : '<p class="waiting">Waiting for the host to start…</p>'}
@@ -971,7 +992,7 @@ window.G = window.G || {};
           <label class="field code"><span>Room code</span><input id="mp-code" maxlength="5" value="${esc(roomFromUrl())}" placeholder="ABCDE" autocapitalize="characters" autocomplete="off"></label>
           <button data-act="mp-join">Join</button>
         </div>
-        <p class="hint">Up to 8 players. Bots fill the empty seats and are labeled BOT.</p>
+        <p class="hint">Up to 8 players. Bots (labeled BOT) fill empty seats up to 6.</p>
       </section>
     </div>`;
   }
@@ -1153,7 +1174,8 @@ window.G = window.G || {};
         if (G.Game.s && G.Game.s.phase === 'battle') { toast(el, 'Can’t use during combat!'); break; }
         bagOpen = bagOpen === +el.dataset.i ? -1 : +el.dataset.i; render(); break;
       case 'bag-use': Gm.useBag(+el.dataset.i); break;
-      case 'bag-drop': Gm.discardBag(+el.dataset.i); break;
+      case 'bag-sell': Gm.sellBag(+el.dataset.i); break;
+      case 'spec-tree': openSpecTree(); break;
       case 'shop-pick': Gm.playerShopPick(el.dataset.id); break;
       case 'shop-buy': Gm.shopBuy(el.dataset.kind, el.dataset.id); break;
       case 'shop-pass': Gm.playerShopPass(); break;

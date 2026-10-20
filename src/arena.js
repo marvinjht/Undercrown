@@ -453,29 +453,31 @@ window.G = window.G || {};
   G.Preview = makePreview();
   G.RivalPreview = makePreview();
 
-  // One arena game for the whole session. Each fight moves its canvas into the fight's slot and starts over.
-  // (Building a new WebGL game per fight used up the browser's WebGL contexts and broke the character portrait.)
+  // A fresh arena game for every fight (a canvas moved around the page could go black until you scrolled).
+  // Its WebGL context is released right away when the fight ends, so they never pile up: too many open
+  // contexts made the browser drop the oldest one, which was the character portrait.
   G.Arena = {
-    game: null, _scene: null, _pending: null, onSpeed: null, host: null,
+    game: null, _scene: null, _pending: null, onSpeed: null,
     start(el, cfg) {
-      if (!this.host) { this.host = document.createElement('div'); this.host.className = 'arena-host'; }
-      el.appendChild(this.host);
-      if (!this.game) {
-        this._pending = cfg;
-        this.game = new Phaser.Game({
-          type: Phaser.AUTO, parent: this.host, width: W, height: H, backgroundColor: '#15120f',
-          scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_HORIZONTALLY },
-          scene: [ArenaScene], banner: false, audio: { noAudio: true },
-        });
-        return;
-      }
-      this.game.scale.refresh();
-      if (this._scene) this._scene.begin(cfg); else this._pending = cfg;
+      this.stop();
+      this._pending = cfg;
+      this.game = new Phaser.Game({
+        type: Phaser.AUTO, parent: el, width: W, height: H, backgroundColor: '#15120f',
+        scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_HORIZONTALLY },
+        scene: [ArenaScene], banner: false, audio: { noAudio: true },
+      });
     },
     stop() {
-      if (this._scene && this._scene.cfg) this._scene.halt();
-      this._pending = null;
-      if (this.host && this.host.parentNode) this.host.parentNode.removeChild(this.host);
+      const g = this.game;
+      this._scene = null; this._pending = null; this.game = null;
+      if (!g) return;
+      const gl = g.renderer && g.renderer.gl;
+      const canvas = g.canvas;
+      g.destroy(true);
+      setTimeout(() => {
+        try { const ext = gl && gl.getExtension('WEBGL_lose_context'); if (ext) ext.loseContext(); } catch (e) { /* already gone */ }
+        if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+      }, 50);
     },
   };
 })(window.G);

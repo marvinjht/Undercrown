@@ -508,11 +508,15 @@ window.G = window.G || {};
       if (s.phase === 'doors') for (const d of s.doors) if (d.monster && d.type !== 'wager') d.danger = G.Dungeon.danger(p, d, s.room);   // a wager's odds stay hidden
       render();
     },
-    discardBag(i) {
+    // Selling replaces discarding: anything in the bag can be turned into gold
+    sellBag(i) {
       const s = this.s, p = s.player, it = p.bag[i];
       if (!it || s.phase === 'battle') return;
+      const g = G.Dungeon.sellPrice(it);
       p.bag.splice(i, 1);
-      s.bagMsg = `Discarded ${it.name}.`;
+      p.gold += g;
+      s.bagMsg = `Sold ${it.name} for ${g} gold.`;
+      if (this.mp) G.MP.sendSnap();
       render();
     },
 

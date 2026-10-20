@@ -2,7 +2,7 @@
 // All stats are flat whole numbers. Chance stats (Crit, Dodge, Stun) mean "out of 100".
 window.G = window.G || {};
 
-G.VERSION = '0.21';   // players in one room must all run the same version
+G.VERSION = '0.22';   // players in one room must all run the same version
 
 G.CONFIG = {
   // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
@@ -48,6 +48,9 @@ G.CONFIG = {
   ghost: { hpMult: 0.5, dmgMult: 0.5 },
   duel: { winGold: 20 },
 
+  // Selling from your bag: gear by rarity; potions and elixirs for half their price
+  sell: { grey: 4, green: 12, rare: 30, legendary: 60, consumablePct: 50 },
+
   shop: {
     reviewSeconds: 10,  // everyone looks over the table before picks start
     turnSeconds: 20,    // each player's turn to pick
@@ -58,7 +61,7 @@ G.CONFIG = {
     potionCost: 30, stock: [1, 3],   // a merchant has 1 to 3 of each potion and elixir
     gearCount: 4, restockCosts: [10, 30],  // two restocks per visit
     bloodHealth: 10, bloodGold: [5, 50],   // sell blood: lose this much health for a random amount of gold
-    itemCost: { grey: 20, green: 44, rare: 90 }, itemCostPerRoom: 2,
+    itemCost: { grey: 8, green: 44, rare: 90 }, itemCostPerRoom: { grey: 1, green: 2, rare: 2 },
   },
 
   // Door weights (out of the total). Trash Pile replaces Treasure; the Vault is rare.
