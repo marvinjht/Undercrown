@@ -196,8 +196,8 @@ window.G = window.G || {};
     if (supplyOpen) {
       const heroes = G.Game.all().filter(h => h.alive);
       detail = `<table class="supply-table"><thead><tr><th>Class</th><th>Left</th>${heroes.map(h => `<th title="${esc(h.name)}">${esc(h.isPlayer ? 'You' : h.name.split(' ').pop().slice(0, 3))}</th>`).join('')}</tr></thead><tbody>${
-        G.CLASS_ORDER.map(c => { const lg = G.Supply.legendaries(c); return `<tr><td style="color:${G.CLASSES[c].color}">${G.CLASSES[c].name}</td><td><b>${counts[c]}</b>/${per}${lg ? ` <span class="lg-plus" title="Legendaries held, on top of the supply">+${lg}</span>` : ''}</td>${heroes.map(h => { const n = G.Supply.held(c, h), l = G.Supply.legendaries(c, h); return `<td>${n || ''}${l ? `<span class="lg-plus">+${l}</span>` : ''}</td>`; }).join('')}</tr>`; }).join('')}</tbody></table>
-        <p class="hint">Every match has ${per} pieces of each class, shared by everyone. When a class runs low, its pieces stop dropping until someone lets one go. Legendaries (gold +) count toward your set but sit on top of the supply.</p>`;
+        G.CLASS_ORDER.map(c => { return `<tr><td style="color:${G.CLASSES[c].color}">${G.CLASSES[c].name}</td><td><b>${counts[c]}</b>/${per}</td>${heroes.map(h => { const n = G.Supply.held(c, h); return `<td>${n || ''}</td>`; }).join('')}</tr>`; }).join('')}</tbody></table>
+        <p class="hint">Every match has ${per} pieces of each class, shared by everyone. When a class runs low, its pieces stop dropping until someone lets one go. Legendaries count toward your set but don’t use up the supply.</p>`;
     }
     return `<div class="supply"><button class="supply-row" data-act="supply" aria-expanded="${supplyOpen}"><span>Set supply</span><span class="supply-bars">${bars}</span><span class="chev">${supplyOpen ? 'Hide' : 'Show'}</span></button>${detail}</div>`;
   }
@@ -315,7 +315,7 @@ window.G = window.G || {};
     if (!G.Hero.canEquip(p, it)) return `<button disabled>Equip locked</button><small class="hold-note">You already wear a legendary</small>`;
     const eq = p.gear[it.slot];
     if (!eq) return `<button data-act="bag-use" data-i="${i}">Equip</button>`;
-    return `<button class="hold" data-hold="bag-use" data-i="${i}" aria-label="Press and hold to equip, replacing ${esc(eq.name)}"><span class="hold-fill"></span><span class="hold-label">Hold to equip</span></button><small class="hold-note">Replaces ${esc(eq.name)}</small>`;
+    return `<button class="hold" data-hold="bag-use" data-i="${i}" aria-label="Press and hold to equip, replacing ${esc(eq.name)}"><span class="hold-fill"></span><span class="hold-label">Hold to equip</span></button><small class="hold-note">Replaces ${esc(eq.name)}, which sells for ${G.Dungeon.sellPrice(eq)} gold</small>`;
   }
 
   function bagPanel(st) {
@@ -333,7 +333,7 @@ window.G = window.G || {};
     }
     const buffs = Object.entries(p.buffs || {}).filter(([, v]) => v).map(([k, v]) => k === 'fullMana' ? 'Full mana' : `+${v} ${G.STAT_INFO[k].label}`);
     return `<section class="panel"><h3>Bag <span class="bag-head-r">${goldChip(p)}<span class="chip ${p.bag.length >= size ? 'full' : 'muted'}">${p.bag.length}/${size}</span></span></h3>
-      <p class="hint bag-hint">New gear goes straight onto an empty slot; anything else lands here. To swap gear in, click it and hold Equip (the old piece is gone for good), or sell it for gold.</p>
+      <p class="hint bag-hint">New gear goes straight onto an empty slot; anything else lands here. To swap gear in, click it and hold Equip (the old piece sells automatically), or sell it for gold.</p>
       <div class="bag">${slots.join('')}</div>
       ${buffs.length ? `<p class="buffs">Next fight: ${buffs.join(', ')}</p>` : ''}
       ${st.bagMsg ? `<p class="bag-msg">${esc(st.bagMsg)}</p>` : ''}</section>`;
@@ -371,7 +371,8 @@ window.G = window.G || {};
   }
   // The eye: watch this player's game live (multiplayer, real players only)
   function eyeBtn(r) {
-    if (!G.Game.mp || r.bot || !r.alive || r.slot == null || r.slot === G.MP.mySlot || st_isWatchingView() || !iAmOut()) return '';
+    if (!G.Game.mp || r.bot || !r.alive || r.slot == null || r.slot === G.MP.mySlot || st_isWatchingView()) return '';
+    if (G.Game.s && G.Game.s.phase === 'battle') return '';   // your own fight first
     const on = G.MP.watching === r.slot;
     return `<button class="eye-btn ${on ? 'on' : ''}" data-act="${on ? 'watch-stop' : 'watch'}" data-slot="${r.slot}" aria-label="${on ? 'Stop watching' : 'Watch'} ${esc(r.name)}" title="${on ? 'Stop watching' : 'Watch their game live'}">${G.Art.icon('eye')}</button>`;
   }
@@ -432,8 +433,17 @@ window.G = window.G || {};
   function vitalsRow(p, key, withGold = false) {
     const max = G.Hero.maxHp(p);
     const poison = p.poison ? `<span class="poison" ${tip(`<div class="tt-title">Poison ${p.poison}</div><p>You lose ${p.poison} health at the start of every room. Only an Antidote or a Purifying Spring clears it; campfires don't.</p>`)}>Poison ${p.poison}</span>` : '';
-    return `<div class="vitals">${heartsRow(p.hearts)}<div class="hp-xp">${hpBar(p.hp, max, '', key)}${xpBar(p)}</div>${poison}${buffChips(p)}
+    return `<div class="vitals">${heartsRow(p.hearts)}<div class="hp-xp">${hpBar(p.hp, max, '', key)}${xpBar(p)}</div>${elixirIcon(p)}${poison}
       ${withGold ? goldChip(p) : ''}</div>`;
+  }
+  // A potion icon next to your health: lit when an elixir is waiting for your next fight, dim when not
+  function elixirIcon(p) {
+    const b = p.buffs || {};
+    const parts = Object.entries(b).filter(([, v]) => v).map(([k, v]) => k === 'fullMana' ? 'Full mana' : `+${v} ${G.STAT_INFO[k].label}`);
+    const body = parts.length
+      ? `<div class="tt-title">Elixirs ready</div><p>${esc(parts.join(', '))}. They last your next fight.</p>`
+      : '<div class="tt-title">No elixir active</div><p>Elixirs from the Merchant add stats to your next fight.</p>';
+    return `<span class="elixir ${parts.length ? 'on' : ''}" ${tip(body)}>${G.Art.icon('potion_iron')}</span>`;
   }
   // Elixirs waiting for your next fight (or active in this one)
   function buffChips(p, active) {
@@ -443,7 +453,8 @@ window.G = window.G || {};
     return `<span class="buff-chip ${active ? 'active' : ''}" ${tip(`<div class="tt-title">${active ? 'Active this fight' : 'Ready for your next fight'}</div><p>${esc(parts.join(', '))}. Elixirs last one fight.</p>`)}>${G.Art.icon('potion_iron')}${esc(parts.join(', '))}</span>`;
   }
   function goldChip(p) {
-    return `<div class="gold" ${tip('<div class="tt-title">Gold</div><p>Spend it at Merchants, the Forge and Wagers. Passing at a Plunder also gives gold.</p>')}><span class="coin"></span>${p.gold}</div>`;
+    const gp = p.isPlayer && G.Game.s && G.Game.s.goldPop, fresh = gp && Date.now() - gp.at < 1500;
+    return `<div class="gold" ${tip('<div class="tt-title">Gold</div><p>Spend it at Merchants, the Forge and Wagers. Passing at a Plunder also gives gold. Equipping over a piece sells the old one.</p>')}><span class="coin"></span>${p.gold}${fresh ? `<span class="gold-pop" style="animation-delay:-${Date.now() - gp.at}ms">+${gp.amount}</span>` : ''}</div>`;
   }
   function xpInfo(p) {
     const L = CFG().levels;
@@ -760,7 +771,7 @@ window.G = window.G || {};
         <button data-act="gem" data-id="${id}">Take the ${esc(g.name)}</button></article>`;
     }).join('');
     return `<section class="screen"><h2>Choose a heart gem</h2>
-      <p class="lede">The Bone King drops three gems. Each one changes how you play for the rest of the run, for better and worse.</p>
+      <p class="lede">${esc(G.Dungeon.monsterFor(CFG().gemRoom, 'boss').name)} drops three gems. Each one changes how you play for the rest of the run, for better and worse.</p>
       <div class="cards three">${cards}</div></section>`;
   }
 
@@ -847,14 +858,26 @@ window.G = window.G || {};
     const ms = round ? round.pairs.filter(p => !p.result && p.seed != null) : [];
     if (!ms.length) return '';
     const M = G.MP;
-    if (M.tourWatch == null || !ms[M.tourWatch]) M.tourWatch = 0;
-    const tabs = ms.map((p, i) => `<button class="${i === M.tourWatch ? '' : 'ghost'}" data-act="tour-watch" data-i="${i}">${esc(nameOf(p.a))} vs ${esc(nameOf(p.b))}</button>`).join('');
+    M.tourWatch = tourWatchIndex(ms);
+    const tabs = ms.map((p, i) => `<button class="${i === M.tourWatch ? '' : 'ghost'}" data-act="tour-watch" data-seed="${p.seed}">${esc(nameOf(p.a))} vs ${esc(nameOf(p.b))}</button>`).join('');
     return `<div class="spectate"><div class="spec-head"><h3>Watch a fight</h3><div class="spec-tabs">${tabs}</div></div>
       <div id="spec-arena" class="arena-slot" data-tour="1"></div><ol id="spec-log" class="log"></ol></div>`;
   }
+  // Which tournament fight the watch box shows: the one you picked, else one you're not in
+  function tourWatchIndex(ms) {
+    const M = G.MP;
+    let i = ms.findIndex(p => p.seed === M.tourWatchSeed);
+    if (i < 0) {
+      const mine = p => (p.a && p.a.hero && p.a.hero.isPlayer) || (p.b && p.b.hero && p.b.hero.isPlayer);
+      i = Math.max(0, ms.findIndex(p => !mine(p)));
+      M.tourWatchSeed = ms[i] ? ms[i].seed : null;
+    }
+    return i;
+  }
   function playTourMatch() {
     const st = G.Game.s, round = G.Tournament.currentRound(st.tour);
-    const m = round && round.pairs.filter(p => !p.result && p.seed != null)[G.MP.tourWatch || 0];
+    const ms = round ? round.pairs.filter(p => !p.result && p.seed != null) : [];
+    const m = ms[tourWatchIndex(ms)];
     if (!m || m.seed == null) return;   // seeds arrive when the round's fights start
     const nmA = m.a.hero.isPlayer ? 'You' : m.a.hero.name, nmB = m.ghost ? m.b.name : m.b.hero.isPlayer ? 'You' : m.b.hero.name;
     G.Tournament.pvp(m.a, m.b, null, m.seed);
@@ -1001,7 +1024,7 @@ window.G = window.G || {};
         <li><b>Class sets</b>Some gear carries a class, and every match has a limited supply. 2, 4 or 6 pieces, or 4 + 2 for a hybrid.</li>
         <li><b>Levels</b>Fights give XP. Pick a spec at level ${CFG().levels.specLevel}, then skill tree choices at ${CFG().levels.treeLevels.join(', ')}.</li>
         <li><b>Every 10 rooms</b>Room 5 is a Plunder (a shared loot pile), 7 a merchant, 8 a boss, and 10 a duel against a rival. Room 30 is the tournament.</li>
-        <li><b>Gear and your bag</b>New gear goes straight onto an empty slot. Anything else lands in your 6-slot bag; hold Equip to swap it in (the old piece is gone), or discard it.</li>
+        <li><b>Gear and your bag</b>New gear goes straight onto an empty slot. Anything else lands in your 6-slot bag; hold Equip to swap it in (the old piece sells automatically), or sell it.</li>
         <li><b>The tournament</b>After room 30, everyone with hearts fights round after round until one is left.</li>
       </ul>
       <div class="row-actions"><button class="enter" data-act="start">Play solo</button></div>
@@ -1024,11 +1047,6 @@ window.G = window.G || {};
   // A light refresh for network updates: never restarts a fight that's playing
   function update() {
     const st = G.Game.s;
-    if (st && G.MP.watching != null && G.MP.views[G.MP.watching]) {
-      const v = G.MP.views[G.MP.watching], f = G.MP.lastFight[G.MP.watching];
-      if (v.state.phase === 'battle' && f && watchFightKey === f.at && document.querySelector('.watching #arena-slot')) return;
-      render(); return;
-    }
     if (st && (st.phase === 'battle' || (specPlaying && document.getElementById('spec-arena')))) {
       const left = document.querySelector('.cols > aside.left');
       if (left) { left.innerHTML = rivalsPanel(st) + youPanel(st); }
@@ -1044,11 +1062,10 @@ window.G = window.G || {};
     hideTip();
     for (const k in tips) delete tips[k];
     const app = $('#app'), st = G.Game.s;
-    // Your own game needs you (a new room, your fight): stop watching
-    if (st && G.MP.watching != null && !['waiting', 'dead', 'duelWait', 'mpEnded', 'tournament'].includes(st.phase)) G.MP.stopWatching(true);
-    if (st && G.Game.mp && G.MP.watching != null && G.MP.views[G.MP.watching]) { renderWatching(app, st); return; }
+    // Your own fight is starting: close the watch window
+    if (st && G.MP.watching != null && st.phase === 'battle') G.MP.stopWatching(true);
     if (!st || st.phase !== 'battle') G.Arena.stop();
-    if (!st) { app.innerHTML = G.MP.active ? lobbyScreen() : titleScreen(); G.Preview.park(); G.RivalPreview.park(); if (!G.MP.active) window.scrollTo(0, 0); return; }
+    if (!st) { app.innerHTML = G.MP.active ? lobbyScreen() : titleScreen(); G.Preview.park(); G.RivalPreview.park(); renderWatchPop(); if (!G.MP.active) window.scrollTo(0, 0); return; }
     if (st.phase === 'battle') bagOpen = -1;
     const screens = { doors: doorsScreen, battle: battleScreen, armory: armoryScreen, reward: rewardScreen, spoils: spoilsScreen, shop: shopScreen,
       merchant: merchantScreen, forge: forgeScreen, wager: wagerScreen, mystery: mysteryScreen, spec: specScreen, tree: treeScreen, gem: gemScreen,
@@ -1073,6 +1090,7 @@ window.G = window.G || {};
     if (sa && sa.dataset.tour) playTourMatch();
     else if (sa && G.MP.watch != null && G.MP.lastFight[G.MP.watch]) playSpectate(G.MP.lastFight[G.MP.watch]);
     if (G.Game.mp) G.MP.sendView();
+    renderWatchPop();
   }
 
   // ---------- Live spectating: their game, drawn with the same screens, untouchable ----------
@@ -1098,33 +1116,70 @@ window.G = window.G || {};
     G.Game.s = vst; if (me) me.isPlayer = false;
     try { return fn(); } finally { G.Game.s = real; if (me) me.isPlayer = true; }
   }
-  function renderWatching(app, st) {
-    const M = G.MP, vst = watchState(), who = M.player(M.watching);
+  // A pop-up window over your own game: their screen, live, untouchable. Their fights play in a second,
+  // separate arena so your own game (and its arena) never gets interrupted.
+  const WATCH_SCREENS = () => ({ doors: doorsScreen, armory: armoryScreen, reward: rewardScreen, spoils: spoilsScreen, shop: shopScreen,
+    merchant: merchantScreen, forge: forgeScreen, wager: wagerScreen, mystery: mysteryScreen, spec: specScreen, tree: treeScreen, gem: gemScreen,
+    duelIntro: duelIntroScreen, dead: deadScreen, tournament: tournamentScreen, ending: endingScreen,
+    waiting: waitingScreen, duelWait: duelWaitScreen, mpEnded: mpEndedScreen });
+  let popAt = 0;
+  function renderWatchPop() {
+    const M = G.MP;
+    let pop = document.getElementById('watch-pop');
+    if (!G.Game.mp || !G.Game.s || M.watching == null) {
+      if (pop) pop.remove();
+      if (watchFightKey != null || G.WatchArena.game) { watchFightKey = null; G.WatchArena.stop(); }
+      watchVst = null;
+      return;
+    }
+    if (!pop) {
+      pop = document.createElement('div');
+      pop.id = 'watch-pop'; pop.className = 'watch-pop';
+      pop.innerHTML = `<div class="wp-box" role="dialog" aria-modal="false"><div class="wp-head"></div>
+        <div class="wp-fight" hidden><p class="wp-ftitle"></p><div class="wp-arena arena-slot"></div><ol class="log wp-log"></ol></div>
+        <div class="wp-screen" inert></div></div>`;
+      pop.addEventListener('click', e => { if (e.target === pop) { G.MP.stopWatching(); } });
+      document.body.appendChild(pop);
+    }
+    refreshWatchPop();
+  }
+  function refreshWatchPop() {
+    const pop = document.getElementById('watch-pop'), M = G.MP;
+    if (!pop || M.watching == null) return;
+    popAt = Date.now();
+    const vst = watchState(), who = M.player(M.watching), h = M.heroes[M.watching];
     watchVst = vst;
-    const screens = { doors: doorsScreen, battle: battleScreen, armory: armoryScreen, reward: rewardScreen, spoils: spoilsScreen, shop: shopScreen,
-      merchant: merchantScreen, forge: forgeScreen, wager: wagerScreen, mystery: mysteryScreen, spec: specScreen, tree: treeScreen, gem: gemScreen,
-      duelIntro: duelIntroScreen, dead: deadScreen, tournament: tournamentScreen, ending: endingScreen,
-      waiting: waitingScreen, duelWait: duelWaitScreen, mpEnded: mpEndedScreen };
-    const inner = asWatched(vst, () => {
+    const mine = G.Game.timeLeft();
+    const status = vst ? `room ${vst.room || '?'}${vst.player ? ` · ${vst.player.hp}/${G.Hero.maxHp(vst.player)} health · ${vst.player.hearts} ${vst.player.hearts === 1 ? 'heart' : 'hearts'}` : ''}` : 'connecting…';
+    pop.querySelector('.wp-head').innerHTML = `${G.Art.icon('eye')}<span><b>${esc(who ? who.name : h ? h.name : '?')}</b> <small>${esc(status)}</small></span>
+      ${mine != null && G.Game.s.phase !== 'battle' ? `<span class="wp-mine">Your timer <b>${Math.ceil(mine)}s</b></span>` : ''}
+      <button class="ghost" data-act="watch-stop">Close</button>`;
+    const fightEl = pop.querySelector('.wp-fight'), scr = pop.querySelector('.wp-screen');
+    const f = M.lastFight[M.watching];
+    if (vst && vst.phase === 'battle' && f) {
+      fightEl.hidden = false; scr.hidden = true;
+      if (watchFightKey !== f.at) {
+        watchFightKey = f.at;
+        pop.querySelector('.wp-ftitle').textContent = f.title || (vst.battle && vst.battle.title) || 'Fight';
+        const res = G.simulateFight(...f.args), b = { res, names: f.names }, lines = [], ol = pop.querySelector('.wp-log');
+        ol.innerHTML = '';
+        G.WatchArena.start(pop.querySelector('.wp-arena'), { result: res, visual: f.visual, names: f.names, mirror: !!f.mirror,
+          onEvent: e => { const l = logLine(e, b); if (!l) return; lines.push(l); ol.innerHTML = lines.slice(-4).map(x => `<li>${esc(x)}</li>`).join(''); } });
+      }
+      return;
+    }
+    // Not fighting: their screen, as they see it
+    fightEl.hidden = true; scr.hidden = false;
+    if (watchFightKey != null) { watchFightKey = null; G.WatchArena.stop(); }
+    if (!vst) { scr.innerHTML = '<p class="waiting">Connecting to their game…</p>'; return; }
+    const screens = WATCH_SCREENS();
+    const html = asWatched(vst, () => {
       const notice = vst.notice && !['dead', 'shop', 'mpEnded'].includes(vst.phase) ? `<p class="notice">${esc(vst.notice)}</p>` : '';
-      const scr = screens[vst.phase] ? screens[vst.phase](vst) : '';
-      return `<div class="shell">${topbar(vst)}<div class="cols"><aside class="left">${rivalsPanel(vst)}${youPanel(vst)}</aside><main class="stage">${notice}${scr}</main>
-        <aside class="side">${bagPanel(vst)}${gearPanel(vst.player)}${statsPanel(vst.player)}</aside></div></div>`;
+      const body = vst.phase === 'battle' ? '<p class="waiting">Their fight is starting…</p>' : screens[vst.phase] ? screens[vst.phase](vst) : '';
+      return notice + body;
     });
-    app.innerHTML = `<div class="watch-bar">${G.Art.icon('eye')}<span>Watching <b>${esc(who ? who.name : '?')}</b>, live. You can’t change anything in their game.</span>
-      <button data-act="watch-stop">Back to my game</button></div><div class="watching" inert>${inner}</div>`;
-    app.dataset.phase = 'watching';
-    const pv = app.querySelector('#preview-slot');
-    if (pv) G.Preview.mount(pv, G.visualFor(vst.player)); else G.Preview.park();
-    G.RivalPreview.park();
-    // Their fight: replay it from the inputs their game sent
-    const f = M.lastFight[M.watching], slot = app.querySelector('#arena-slot');
-    if (vst.phase === 'battle' && f && slot) {
-      watchFightKey = f.at;
-      const res = G.simulateFight(...f.args), b = { res, names: f.names }, lines = [];
-      G.Arena.start(slot, { result: res, visual: f.visual, names: f.names, mirror: !!f.mirror,
-        onEvent: e => { const l = logLine(e, b); if (!l) return; lines.push(l); const ol = app.querySelector('#battle-log'); if (ol) ol.innerHTML = lines.slice(-6).map(x => `<li>${esc(x)}</li>`).join(''); } });
-    } else { watchFightKey = null; G.Arena.stop(); }
+    // ids belong to your own screen; the copy in here drops them
+    scr.innerHTML = html.replace(/\sid="[^"]*"/g, '');
   }
   // Who is watching you: a small eye near the middle of the screen
   function watchBadgeHTML() {
@@ -1140,8 +1195,8 @@ window.G = window.G || {};
   // Updates only clocks each tick, never the whole screen (a re-render would cut off a running fight)
   function tickClock() {
     G.Game.tick();
-    if (G.MP.watching != null && watchVst && document.querySelector('.watching')) { asWatched(watchVst, tickClockBody); return; }
     tickClockBody();
+    if (G.MP.watching != null && document.getElementById('watch-pop') && Date.now() - popAt > 1000) refreshWatchPop();
   }
   function tickClockBody() {
     const left = G.Game.timeLeft();
@@ -1249,9 +1304,9 @@ window.G = window.G || {};
       case 'mp-start': G.MP.hostStart(); break;
       case 'mp-rematch': G.MP.hostRematch(); break;
       case 'spectate': G.MP.watch = +el.dataset.slot; render(); break;
-      case 'tour-watch': G.MP.tourWatch = +el.dataset.i; render(); break;
+      case 'tour-watch': G.MP.tourWatchSeed = +el.dataset.seed; render(); break;
       case 'watch': G.MP.startWatching(+el.dataset.slot); break;
-      case 'watch-stop': G.MP.stopWatching(); render(); break;
+      case 'watch-stop': G.MP.stopWatching(); break;
       case 'mp-leave': G.MP.leave(); Gm.s = null; render(); break;
       case 'mp-copy': { const l = el.dataset.link; try { navigator.clipboard.writeText(l); toast(el, 'Link copied'); } catch (e) { toast(el, l); } break; }
       case 'door': Gm.chooseDoor(+el.dataset.i); break;
@@ -1323,7 +1378,7 @@ window.G = window.G || {};
     document.addEventListener('focusin', e => { const el = e.target.closest('[data-tip]'); if (el) showTip(el); });
     document.addEventListener('focusout', () => hideTip());
     window.addEventListener('scroll', hideTip, { passive: true });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') hideTip(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { hideTip(); if (G.MP.watching != null && document.getElementById('watch-pop')) G.MP.stopWatching(); } });
   }
 
   function init() {
@@ -1350,5 +1405,11 @@ window.G = window.G || {};
     setInterval(tickClock, 200);
   }
 
-  G.UI = { render, init, refreshShopPicks, update, playSpectate, watchBadge };
+  // Watching changed: redraw the eyes on the left and the watch window, without touching your own screen
+  function watchChanged() {
+    const st = G.Game.s, left = document.querySelector('.cols > aside.left');
+    if (st && left) left.innerHTML = rivalsPanel(st) + youPanel(st);
+    renderWatchPop();
+  }
+  G.UI = { render, init, refreshShopPicks, update, playSpectate, watchBadge, watchChanged, refreshWatchPop };
 })(window.G);

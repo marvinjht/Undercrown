@@ -743,3 +743,28 @@ table.tour { width: 100%; border-collapse: collapse; font-size: 15px; font-varia
 .watch-badge .ico { width: 16px; height: 16px; color: #9fdcff; }
 #watch-badge:empty { display: none; }
 @keyframes badgein { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+/* v0.25: elixir icon next to health, gold pop on the gold counter */
+.elixir { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; color: #6d6a80; opacity: .45; cursor: help; flex: none; transition: opacity .2s; }
+.elixir .ico { width: 18px; height: 18px; }
+.elixir.on { opacity: 1; color: #b8c8ff; background: #1c2133; box-shadow: 0 0 0 1px #3c4a7a, 0 0 10px #6f86ff88; animation: elixirglow 1.8s ease-in-out infinite; }
+@keyframes elixirglow { 50% { box-shadow: 0 0 0 1px #5a6cb0, 0 0 16px #8fa2ffcc; } }
+.gold { position: relative; }
+.gold .gold-pop { right: auto; left: 100%; top: -14px; margin-left: 4px; font-size: 15px; white-space: nowrap; }
+
+/* v0.25: watch window (another player's game, floating over yours) */
+.watch-pop { position: fixed; right: 16px; bottom: 16px; z-index: 900; width: min(600px, calc(100vw - 32px)); max-height: min(78vh, 680px); display: flex; }
+.wp-box { flex: 1; display: flex; flex-direction: column; min-height: 0; background: #1a1612; border: 1px solid #5a4a36; border-radius: 10px; box-shadow: 0 18px 50px #000c, 0 0 0 1px #000; overflow: hidden; }
+.wp-head { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #231d17; border-bottom: 1px solid #3a3026; font-size: 14px; }
+.wp-head > .ico { width: 18px; height: 18px; color: #9fd0ff; flex: none; }
+.wp-head > span:first-of-type { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-head small { color: var(--muted, #a89c8c); margin-left: 6px; }
+.wp-mine { font: 600 12px var(--f-mono); color: #f2c14a; white-space: nowrap; }
+.wp-head button { padding: 4px 10px; font-size: 13px; }
+.wp-fight { padding: 8px; }
+.wp-fight .wp-ftitle { margin: 0 0 6px; font-weight: 700; }
+.wp-fight .arena-slot { width: 100%; }
+.wp-fight .log { margin: 6px 0 0; font-size: 12px; max-height: 84px; overflow: hidden; }
+.wp-screen { overflow: auto; padding: 10px 12px; zoom: 0.62; min-height: 0; }
+.wp-screen .waiting { font-size: 20px; }
+@media (max-width: 720px) { .watch-pop { right: 8px; left: 8px; bottom: 8px; width: auto; max-height: 70vh; } .wp-screen { zoom: 0.5; } }

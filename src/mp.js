@@ -263,7 +263,7 @@ window.G = window.G || {};
       // Own randomness (doors, loot) is private to each player
       heroes[me.slot].rng = new G.RNG((m.seed ^ (me.slot + 1) * 0x9e3779b1) >>> 0);
       this.heroes = heroes;
-      G.Game.startMatch({ seed: (m.seed + me.slot * 7919) >>> 0, player: heroes[me.slot], rivals: m.players.filter(p => p.slot !== me.slot).map(p => heroes[p.slot]) });
+      G.Game.startMatch({ seed: (m.seed + me.slot * 7919) >>> 0, matchSeed: m.seed, player: heroes[me.slot], rivals: m.players.filter(p => p.slot !== me.slot).map(p => heroes[p.slot]) });
       if (this.isHost) {
         this.H = { seed: m.seed, rng: new G.RNG((m.seed ^ 0x5bd1e995) >>> 0), room: 0, ready: {}, snaps: {} };
         for (const p of m.players) if (p.bot) heroes[p.slot].rng = new G.RNG((m.seed + p.slot * 104729) >>> 0);
@@ -639,15 +639,15 @@ window.G = window.G || {};
       if (!this.inMatch() || slot === this.mySlot) return this.stopWatching();
       this.watching = slot;
       const msg = { t: 'watch', slot: this.mySlot, target: slot };
-      this.isHost ? this.cast(msg) : (this.send(msg), this.onWatch({ ...msg }));
-      update();
+      this.send(msg); this.onWatch({ ...msg }, true);
+      G.UI.watchChanged();
     },
     stopWatching(silent) {
       if (this.watching == null) return;
       this.watching = null;
       const msg = { t: 'watch', slot: this.mySlot, target: null };
-      if (this.isHost) { this.send(msg); this.onWatch({ ...msg }, silent); } else { this.send(msg); this.onWatch({ ...msg }, silent); }
-      if (!silent) update();
+      this.send(msg); this.onWatch({ ...msg }, true);
+      if (!silent) G.UI.watchChanged();
     },
     onWatch(m, silent) {
       for (const k in this.watchers) this.watchers[k].delete(m.slot);
@@ -678,7 +678,7 @@ window.G = window.G || {};
     },
     onView(m) {
       this.views[m.slot] = { state: m.state, at: now() };
-      if (this.watching === m.slot) update();
+      if (this.watching === m.slot && G.UI.refreshWatchPop) G.UI.refreshWatchPop();
     },
 
     // ---------- Spectating ----------
@@ -693,7 +693,7 @@ window.G = window.G || {};
     onFight(m) {
       this.lastFight[m.slot] = m;
       if (this.watch === m.slot && G.UI.playSpectate) G.UI.playSpectate(m);
-      if (this.watching === m.slot) update();
+      if (this.watching === m.slot && G.UI.refreshWatchPop) G.UI.refreshWatchPop();
     },
     sendTourDone() { const msg = { t: 'tourDone', slot: this.mySlot }; if (this.isHost) this.hostTourDone(this.mySlot); else this.send(msg); },
   };

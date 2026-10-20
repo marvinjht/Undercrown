@@ -2,7 +2,7 @@
 // All stats are flat whole numbers. Chance stats (Crit, Dodge, Stun) mean "out of 100".
 window.G = window.G || {};
 
-G.VERSION = '0.24';   // players in one room must all run the same version
+G.VERSION = '0.25';   // players in one room must all run the same version
 
 G.CONFIG = {
   // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
@@ -12,7 +12,7 @@ G.CONFIG = {
   duelRooms: [10, 20],     // everyone is paired up for a duel
   shopRooms: [5, 15, 25],  // Plunder rounds (shared pile, free picks, weakest first)
   merchantRooms: [7, 17, 27],
-  bossRooms: { 8: 'boneKing', 18: 'gorehorn', 28: 'warden' },
+  bossRooms: { 8: 1, 18: 2, 28: 3 },   // which boss comes is drawn from G.BOSSES at the start of each match (same for everyone)
 
   roundSeconds: 45,        // doors, rewards, spec picks... (fights don't count against it)
   tourBreakSeconds: 6,
@@ -34,9 +34,9 @@ G.CONFIG = {
   shrineCost: 16,          // mystery: blood shrine
   arenaHealPct: 0.30,      // heal walking into the tournament (shown as a number)
 
-  poison: { venomStacks: 10, purifyHeal: 10 },
+  poison: { venomStacks: 10, purifyHeal: 10, fightCap: 50 },   // fightCap: most poison you can pick up in one fight
 
-  phoenix: { burst: 100, burn: 0, burnSeconds: 0, selfBurn: 1, standUp: 10 },   // explodes for 100 on death
+  phoenix: { burst: 100, burn: 20, burnSeconds: 5, selfBurn: 1, standUp: 25, eggSeconds: 5, eggHpPct: 50 },   // explode, burn them, hide in an egg
   stoneHp: 25,
   stoneGrace: 5,           // Heart of Stone: for this many seconds at the start of a fight, every hit deals 1
   stoneCrack: 3,           // Heart of Stone: each hit deals 1 more than the last, up to this
@@ -128,6 +128,7 @@ G.CONFIG = {
     berserkCap: 20,
     manaMax: 100,
     minSpd: 4,
+    spdSoftCap: 10,       // bonus Attack Speed above the weapon's: full value up to this, half past it
     firstCritCap: 6,      // "your first attacks crit" effects add up to at most this many
     critStun: 2,          // a stun from a critical hit lasts this many seconds (normal stuns last 1)
     stunImmune: 3,        // after being stunned, you can't be stunned again for this many seconds

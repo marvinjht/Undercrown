@@ -48,6 +48,14 @@ window.G = window.G || {};
   // Which bonus tiers a class tier turns on (6 = the 4-piece bonus plus the capstone)
   const TIERS = { two: ['two'], four: ['four'], six: ['four', 'six'] };
 
+  // The weapon's own attack speed (what the Attack Speed cap counts bonuses on top of)
+  function weaponSpd(hero, W) {
+    const w = hero.gear.weapon;
+    if (!w) return 10;
+    if (w.legendary && G.LEGENDARIES[w.legendary].stats.spd) return G.LEGENDARIES[w.legendary].stats.spd;
+    return W ? W.spd : 10;
+  }
+
   function compute(hero, opts = {}) {
     const P = C().player, CB = C().combat;
     const t = sumGear(hero);
@@ -79,8 +87,7 @@ window.G = window.G || {};
     // The legendary you wear
     const leg = G.SLOTS.map(sl => hero.gear[sl]).find(it => it && it.legendary);
     if (leg) merge(G.LEGENDARIES[leg.legendary].fx);
-    if (fx.perWarriorDmg) t.dmg += fx.perWarriorDmg * (st.counts.warrior || 0);
-    if (fx.perArcherPierce) t.pierce += fx.perArcherPierce * (st.counts.archer || 0);
+    if (fx.relicSpd) t.spd += fx.relicSpd;   // Twitching Rat Paw
     // Skill tree picks
     const tree = treeFx(hero);
     merge(tree.fx);
@@ -142,7 +149,11 @@ window.G = window.G || {};
     for (const k of ['armor', 'ward', 'dodge', 'crit', 'critDmg', 'leech', 'shield', 'bleed', 'stun', 'holy', 'pierce', 'manaGain', 'startMana']) s[k] = Math.max(0, s[k] || 0);
     s.maxHp = Math.max(10, s.maxHp);
     s.dmg = Math.max(2, s.dmg);
+    // Attack Speed cap: bonus speed on top of the weapon counts fully up to the cap, then half
+    const SC = CB.spdSoftCap, baseSpd = weaponSpd(hero, W);
+    if (SC && s.spd - baseSpd > SC) s.spd = baseSpd + SC + Math.floor((s.spd - baseSpd - SC) / 2);
     s.spd = Math.max(CB.minSpd, s.spd);
+    if (fx.hpShieldPct) s.shield += even(s.maxHp * fx.hpShieldPct / 100);   // Tortoise Shell
     if (fx.armorShield) s.shield += fx.armorShield * s.armor;
     // Monolith: damage from max health
     if (fx.hpDmg) s.dmg += Math.floor(s.maxHp / fx.hpDmg);
@@ -330,6 +341,8 @@ window.G = window.G || {};
     gainXp(hero, n) {
       const L = C().levels, reached = [];
       if (!n || hero.level >= L.max) return reached;
+      const jr = (hero.relics || {}).journal;   // Dead Man's Journal
+      if (jr && G.RELICS.journal) n += G.RELICS.journal.fx(jr).xpBonus;
       hero.xp += n;
       while (hero.level < L.max && hero.xp >= this.xpToNext(hero.level)) {
         hero.xp -= this.xpToNext(hero.level);

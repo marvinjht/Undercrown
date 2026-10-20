@@ -32,14 +32,16 @@ window.G = window.G || {};
       const rivals = G.RIVALS.map(r => G.Hero.create({ name: r.name, tint: r.tint }, rng.fork()));
       this.s = { seed, rng, player, rivals, room: 1, phase: 'doors', roundKind: 'room', roundEnds: 0, notice: null, bagMsg: null, log: [] };
       G.Supply.reset([player, ...rivals]);
+      G.Dungeon.planBosses(seed);
       this.startRoom();
     },
     toTitle() { if (this.mp || (G.MP && G.MP.active)) G.MP.leave(true); this.mp = false; this.s = null; render(); },
 
     // ---------- Multiplayer (see src/mp.js) ----------
     mp: false,
-    startMatch({ seed, player, rivals }) {
+    startMatch({ seed, player, rivals, matchSeed }) {
       this.mp = true;
+      G.Dungeon.planBosses(matchSeed != null ? matchSeed : seed);   // the same bosses for everyone in the room
       this.s = { seed, rng: new G.RNG(seed), player, rivals, room: 1, phase: 'waiting', roundKind: 'room', roundEnds: 0, notice: null, bagMsg: null, log: [] };
       G.Supply.reset([player, ...rivals]);
       render();
@@ -375,7 +377,8 @@ window.G = window.G || {};
       const out = G.Dungeon.applyFight(p, b.res, s.room);
       this.afterHeartLoss(before);
       const notes = [];
-      if (b.res.phoenixWin === 'a') notes.push('Phoenix Heart: you exploded, took them with you, and stood back up.');
+      if (b.res.phoenixWin === 'a') notes.push(`Phoenix Heart: you exploded, outlasted them, and hatched at ${CFG().phoenix.standUp} health.`);
+      if (b.res.poison && p.alive) notes.push(`The bites left you with ${b.res.poison} more poison (${p.poison} total).`);
       if (b.res.goldStolen) notes.push(`A thief escaped with ${b.res.goldStolen} gold.`);
       const bet = b.kind === 'wager' ? s.wagerBet || 0 : 0;
       if (out === 'dead') { p.gold = Math.max(0, p.gold - bet); this.playerOut(`${b.title} took your last heart in room ${s.room}.`); return; }
@@ -488,10 +491,15 @@ window.G = window.G || {};
       if (tourNow && (!me || me.out)) return;
       if (it.kind === 'gear' && !G.Hero.canEquip(p, it)) { s.bagMsg = 'You already wear a legendary. Only one at a time.'; render(); return; }
       if (it.kind === 'gear') {
-        // Equipping overwrites: what you were wearing is gone for good (no swapping back)
+        // Equipping over a piece sells the old one automatically
         p.bag.splice(i, 1);
         const old = G.Hero.equip(p, it);
-        s.bagMsg = old ? `Equipped ${it.name}. ${old.name} is gone.` : `Equipped ${it.name}.`;
+        if (old) {
+          const g = G.Dungeon.sellPrice(old);
+          p.gold += g;
+          s.goldPop = { amount: g, at: Date.now() };
+          s.bagMsg = `Equipped ${it.name}. Sold ${old.name} for ${g} gold.`;
+        } else s.bagMsg = `Equipped ${it.name}.`;
       } else if (me && G.CONSUMABLES[it.cid].heal) {
         // In the tournament, healing restores your tournament health
         const c = G.CONSUMABLES[it.cid];
@@ -515,6 +523,7 @@ window.G = window.G || {};
       const g = G.Dungeon.sellPrice(it);
       p.bag.splice(i, 1);
       p.gold += g;
+      s.goldPop = { amount: g, at: Date.now() };
       s.bagMsg = `Sold ${it.name} for ${g} gold.`;
       if (this.mp) G.MP.sendSnap();
       render();

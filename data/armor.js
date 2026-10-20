@@ -53,7 +53,7 @@ G.RARITY_ORDER = ['grey', 'green', 'rare'];
 // growth: 'flat' grows fast with tier, 'chance' grows slowly, 'fixed' never changes
 G.STAT_INFO = {
   dmg:       { label: 'Damage',      growth: 'flat',   desc: 'Damage dealt by each hit, before the enemy’s Armor or Magic Resist.' },
-  spd:       { label: 'Attack Speed',       growth: 'chance', desc: 'Attacks per 10 seconds. Attack Speed 10 = one attack a second.' },
+  spd:       { label: 'Attack Speed',       growth: 'chance', desc: 'Attacks per 10 seconds. Attack Speed 10 = one attack a second. Bonus speed past +10 over your weapon’s own speed counts half.' },
   hp:        { label: 'Health',      growth: 'flat',   desc: 'More max health. Health does not refill between rooms.' },
   armor:     { label: 'Armor',       growth: 'flat',   desc: 'Every physical hit you take is reduced by this much (a hit always does at least 2).' },
   ward:      { label: 'Magic Resist',        growth: 'flat',   desc: 'Every magic hit you take (spells, wands, holy damage) is reduced by this much.' },

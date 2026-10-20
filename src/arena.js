@@ -43,8 +43,9 @@ window.G = window.G || {};
         this.tweens.add({ targets: glow, alpha: 0.05, scale: 1.25, duration: 600 + Math.random() * 400, yoyo: true, repeat: -1 });
       });
       this.objs = [];
-      G.Arena._scene = this;
-      if (G.Arena._pending) { const p = G.Arena._pending; G.Arena._pending = null; this.begin(p); }
+      const owner = this.arenaOwner = this.game.__owner || G.Arena;
+      owner._scene = this;
+      if (owner._pending) { const p = owner._pending; owner._pending = null; this.begin(p); }
     }
 
     track(o) { this.objs.push(o); return o; }
@@ -224,7 +225,21 @@ window.G = window.G || {};
             this.tweens.add({ targets: [att.cont], x: W + 60, alpha: 0, duration: 600 / this.speed });
           }
           break;
-        case 'revive': if (att) { this.float(att, 'REBORN', '#ff8a4c', 20); att.cont.setAlpha(1); att.cont.angle = 0; att.dead = false; if (att.tint) att.body.setTint(att.tint); else att.body.clearTint(); } break;
+        case 'revive': if (att) {
+          this.float(att, e.hatch ? 'HATCHED' : 'REBORN', '#ff8a4c', 20); att.cont.setAlpha(1); att.cont.angle = 0; att.dead = false;
+          if (att.egg) { att.egg = false; att.tint = att.tint0; this.tweens.add({ targets: att.cont, scaleY: att.sc, duration: 200 / this.speed }); }
+          if (att.tint) att.body.setTint(att.tint); else att.body.clearTint();
+        } break;
+        case 'egg': if (att) {
+          att.egg = true; att.tint0 = att.tint; att.tint = 0xffc070; att.body.setTint(0xffc070);
+          this.float(att, 'EGG ' + e.secs + 's', '#ffc070', 18);
+          this.tweens.add({ targets: att.cont, scaleY: att.sc * 0.8, duration: 200 / this.speed });
+        } break;
+        case 'poison': if (def) this.float(def, '+' + e.amount + ' POISON', '#8fdc5a', 12, -22); break;
+        case 'chill': if (def) this.float(def, 'CHILL ' + e.stacks, '#a8dcff', 12); break;
+        case 'freeze': if (def) { this.float(def, 'FROZEN', '#bfe8ff', 18); const r = this.track(this.add.image(def.cont.x, def.cont.y, 'fx_ring').setTint(0x9fdcff).setScale(0.5).setAlpha(0.9)); this.tweens.add({ targets: r, scale: 1.1, alpha: 0, duration: 700 / this.speed, onComplete: () => r.destroy() }); } break;
+        case 'mire': if (def) this.float(def, 'MIRED ' + e.stacks, '#a89a5a', 12); break;
+        case 'raise': if (att) { this.float(att, 'RAISE DEAD', '#9ff4ff', 18); this.cameras.main.shake(160 / this.speed, 0.004); } break;
         case 'burst': if (att) {
           const ring = this.track(this.add.image(att.cont.x, att.cont.y, 'fx_ring').setTint(0xff7a2c).setScale(0.3));
           this.tweens.add({ targets: ring, scale: 3.2, alpha: 0, duration: 650 / this.speed, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
@@ -234,7 +249,7 @@ window.G = window.G || {};
         case 'kite': if (att) this.float(att, 'KITE', '#8fcf78', 12); break;
         case 'thorns': if (def) this.float(def, String(e.amount), '#c9a26b', 12, 14); break;
         case 'undying': if (att) this.float(att, 'UNDYING', '#ff5b4a', 16); break;
-        case 'stealth_on': if (att) { this.tweens.add({ targets: att.cont, alpha: 0.22, duration: 160 / this.speed }); if (e.label) this.float(att, e.label === 'Night Lord' ? 'NIGHT LORD' : 'VANISH', '#b9a7d9', 14); } break;
+        case 'stealth_on': if (att) { this.tweens.add({ targets: att.cont, alpha: 0.22, duration: 160 / this.speed }); if (e.label) this.float(att, e.label === 'Night Lord' ? 'NIGHT LORD' : e.label === 'Fade' ? 'FADE' : 'VANISH', '#b9a7d9', 14); } break;
         case 'stealth_off': if (att) this.tweens.add({ targets: att.cont, alpha: 1, duration: 160 / this.speed }); break;
         case 'death':
           if (def) { def.dead = true; def.body.setTint(0x555555); this.tweens.add({ targets: def.cont, alpha: 0.35, angle: def.dir * 80, duration: 450 / this.speed }); }
@@ -278,6 +293,7 @@ window.G = window.G || {};
 
     // Sound for an event: weapon sounds for heroes, claws and thuds for monsters, spells by name
     playSfx(e, att, def) {
+      if (this.arenaOwner && this.arenaOwner.muted) return;   // the watch window plays silently
       const S = G.Sound;
       if (!S) return;
       const weaponOf = f => { const v = (this.cfg.visual && this.cfg.visual[f.id]) || {}; const w = v.weapon || f.m.weapon; return w ? w.replace('weapon_', '') : null; };
@@ -315,6 +331,9 @@ window.G = window.G || {};
         case 'kite': S.play('kite'); break;
         case 'burst': S.play('explode'); break;
         case 'revive': S.play('revive'); break;
+        case 'egg': S.play('shield'); break;
+        case 'freeze': S.play('stun'); break;
+        case 'raise': S.play('arcane', 0.4); break;
         case 'undying': S.play('revive'); break;
         case 'death': S.play('death', 0.12); break;
         case 'bleed': case 'burn': S.play('bleed', 0.3); break;
@@ -339,7 +358,7 @@ window.G = window.G || {};
 
     update(_, delta) {
       if (!this.cfg || this.finished) return;
-      if (this.t >= G.CONFIG.combat.fastAfter && this.speed !== 2) { this.speed = 2; if (G.Arena.onSpeed) G.Arena.onSpeed(2); }
+      if (this.t >= G.CONFIG.combat.fastAfter && this.speed !== 2) { this.speed = 2; if (this.arenaOwner && this.arenaOwner.onSpeed) this.arenaOwner.onSpeed(2); }
       const nowMs = performance.now();
       const d = this.lastNow ? Math.min(250, nowMs - this.lastNow) : delta;
       this.lastNow = nowMs;
@@ -456,28 +475,34 @@ window.G = window.G || {};
   // A fresh arena game for every fight (a canvas moved around the page could go black until you scrolled).
   // Its WebGL context is released right away when the fight ends, so they never pile up: too many open
   // contexts made the browser drop the oldest one, which was the character portrait.
-  G.Arena = {
-    game: null, _scene: null, _pending: null, onSpeed: null,
-    start(el, cfg) {
-      this.stop();
-      this._pending = cfg;
-      this.game = new Phaser.Game({
-        type: Phaser.AUTO, parent: el, width: W, height: H, backgroundColor: '#15120f',
-        scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_HORIZONTALLY },
-        scene: [ArenaScene], banner: false, audio: { noAudio: true },
-      });
-    },
-    stop() {
-      const g = this.game;
-      this._scene = null; this._pending = null; this.game = null;
-      if (!g) return;
-      const gl = g.renderer && g.renderer.gl;
-      const canvas = g.canvas;
-      g.destroy(true);
-      setTimeout(() => {
-        try { const ext = gl && gl.getExtension('WEBGL_lose_context'); if (ext) ext.loseContext(); } catch (e) { /* already gone */ }
-        if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
-      }, 50);
-    },
-  };
+  function makeArena(opts = {}) {
+    return {
+      game: null, _scene: null, _pending: null, onSpeed: null, muted: !!opts.muted,
+      start(el, cfg) {
+        this.stop();
+        this._pending = cfg;
+        this.game = new Phaser.Game({
+          type: Phaser.AUTO, parent: el, width: W, height: H, backgroundColor: '#15120f',
+          scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_HORIZONTALLY },
+          scene: [ArenaScene], banner: false, audio: { noAudio: true },
+        });
+        this.game.__owner = this;
+      },
+      stop() {
+        const g = this.game;
+        this._scene = null; this._pending = null; this.game = null;
+        if (!g) return;
+        const gl = g.renderer && g.renderer.gl;
+        const canvas = g.canvas;
+        g.destroy(true);
+        setTimeout(() => {
+          try { const ext = gl && gl.getExtension('WEBGL_lose_context'); if (ext) ext.loseContext(); } catch (e) { /* already gone */ }
+          if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+        }, 50);
+      },
+    };
+  }
+  G.Arena = makeArena();
+  // A second arena for the watch window, so watching never touches your own fight
+  G.WatchArena = makeArena({ muted: true });
 })(window.G);

@@ -6,8 +6,19 @@ window.G = window.G || {};
   const CFG = () => G.CONFIG;
   const even = x => Math.max(2, 2 * Math.round(x / 2));
 
+  // Which bosses this match meets: drawn once from the match seed, so everyone in a room gets the same three
+  let bossPlan = null;
+  function planBosses(seed) {
+    const r = new G.RNG((seed ^ 0x2f6b1d35) >>> 0), pool = G.BOSS_ORDER.slice();
+    bossPlan = {};
+    for (const room of Object.keys(CFG().bossRooms).map(Number).sort((a, b) => a - b)) bossPlan[room] = pool.splice(r.int(0, pool.length - 1), 1)[0];
+    return bossPlan;
+  }
   function monsterFor(room, kind, rng) {
-    if (kind === 'boss') return G.BOSSES[CFG().bossRooms[room]];
+    if (kind === 'boss') {
+      if (!bossPlan) planBosses(rng ? rng.int(0, 1e9) : 1);
+      return G.BOSSES[bossPlan[room]] || G.BOSSES.boneKing;
+    }
     return rng.pick(G.MONSTERS.filter(m => room >= m.minRoom && room <= m.maxRoom));
   }
 
@@ -20,8 +31,8 @@ window.G = window.G || {};
       armor: def.armor ? even(def.armor * (1 + (room - 1) / 20)) : 0,
       ward: def.ward ? even(def.ward * (1 + (room - 1) / 20)) : 0,
       dodge: def.dodge || 0, crit: def.crit || 0, critDmg: 0, stun: def.stun || 0, leech: def.leech || 0,
-      bleed: def.bleed || 0, shield: 0, holy: 0, pierce: 0, manaGain: 0, startMana: 0,
-      spec: null, gem: null, spell: null, fx: {}, type: 'phys', range: 'melee',
+      bleed: def.bleed || 0, shield: 0, holy: 0, pierce: 0, manaGain: 0, startMana: 0, poison: def.poison || 0,
+      spec: null, gem: null, spell: null, fx: { ...(def.fx || {}) }, type: 'phys', range: 'melee',
     };
   }
   // Trait stats grow with depth: about a third early, full strength by the last rooms
@@ -49,17 +60,44 @@ window.G = window.G || {};
     const M = CFG().monster;
     let mult = kind === 'elite' ? M.elite : kind === 'boss' ? M.boss : { hp: 1, hit: 1 };
     if (harder) mult = { hp: mult.hp * harder, hit: mult.hit * harder };
-    const count = (mon.pack || 1) + (kind === 'elite' && mon.pack ? M.elite.packExtra : 0);
+    // Some bosses are tuned separately for the first boss room
+    if (kind === 'boss' && mon.early && room <= 10) mult = { hp: mult.hp * (mon.early.hp || 1), hit: mult.hit * (mon.early.hit || 1) };
     const tr = trait || mon.trait || null;
     const out = [];
+    // Elite forms: a different leader, and the pack's bites get nastier (Hydra Nest)
+    const EF = kind === 'elite' && mon.eliteForm;
+    if (EF) {
+      const L = EF.leader;
+      out.push({ s: applyTrait(statBlock(L, room, mult), tr, room), name: L.name, sprite: 'monster_' + L.id, scale: L.scale || 1.2,
+        tint: 0xffb8a8, isElite: true });
+      for (let i = 0; i < mon.pack + (tr === 'swarm' ? G.ELITE_TRAITS.swarm.extra : 0); i++) {
+        out.push({ s: applyTrait(statBlock({ ...mon, poison: EF.poison }, room, { hp: 1, hit: 1 }), tr, room), name: mon.memberName,
+          sprite: 'monster_' + mon.id, scale: mon.scale || 1, isElite: true });
+      }
+      return out;
+    }
+    const count = (mon.pack || 1) + (kind === 'elite' && mon.pack ? M.elite.packExtra : 0);
     for (let i = 0; i < count; i++) {
       out.push({
         s: applyTrait(statBlock(mon, room, mult), tr, room), name: prefix(mon, kind) + (mon.memberName || mon.name),
         sprite: 'monster_' + mon.id, scale: (mon.scale || 1) * (kind === 'elite' ? 1.12 : 1),
         tint: kind === 'elite' ? 0xffb8a8 : null,
         steal: mon.steal || 0, escapeAfter: mon.escapeAfter || 0,
-        split: splitSpec(mon.split, mon, room, mult), boss: kind === 'boss',
+        split: splitSpec(mon.split, mon, room, mult), boss: kind === 'boss', isElite: kind === 'elite',
       });
+    }
+    // Boss helpers (Wraith King's ghouls, the Alpha's wolves) and the Wraith King's raise
+    // Helpers don't get the boss multipliers, and they're a bit softer early on
+    const MINION = { hp: Math.min(1, 0.4 + room / 45), hit: Math.min(1.1, 0.3 + room / 30) };
+    if (mon.minions) {
+      const N = mon.minions;
+      for (let i = 0; i < N.count; i++) out.push(minion(N, room, MINION));
+    }
+    if (mon.fx && mon.fx.raise && mon.minions) {
+      const lead = out[0];
+      lead.s.spell = { name: 'Raise Dead', aoe: false, dmg: 0, raise: mon.fx.raise.count };
+      lead.s.manaGain = mon.fx.raise.manaGain;
+      lead.raiseSpec = minion(mon.minions, room, MINION);
     }
     if (tr === 'swarm') {
       const W = M.swarmCopy;
@@ -71,20 +109,32 @@ window.G = window.G || {};
     return out;
   }
 
+  function minion(N, room, mult) {
+    return { s: statBlock(N, room, mult), name: N.name, sprite: 'monster_' + N.id, scale: N.scale || 0.85, tint: N.tint || null };
+  }
+
   // "Elite " in front for elite doors, unless the monster is already an elite kind (Elite Slime)
   const prefix = (mon, kind) => (kind === 'elite' && !/^Elite /.test(mon.name) ? 'Elite ' : '');
   function monsterName(mon, kind, trait) {
+    if (kind === 'elite' && mon.eliteForm) { const T0 = trait && G.ELITE_TRAITS[trait]; return (T0 ? T0.name + ' ' : '') + mon.eliteForm.name; }
     const n = prefix(mon, kind) + mon.name;
     const c = (mon.pack || 1) + (kind === 'elite' && mon.pack ? CFG().monster.elite.packExtra : 0);
     const T = trait && G.ELITE_TRAITS[trait];
     return (T ? T.name + ' ' : '') + (c > 1 ? `${n} ×${c}` : n);
   }
 
+  const note = (mon, elite) => { const n = elite && mon.eliteForm ? mon.eliteForm.note : mon.note; return n ? ' ' + n : ''; };
+  function bossDesc(b) {
+    if (b.desc) return b.desc;
+    const T = G.ELITE_TRAITS[b.trait];
+    return T ? `${T.name}: ${T.desc}` : '';
+  }
+
   const DOOR_INFO = {
     armory:   { title: 'The Armory', text: () => 'Every warrior starts here. Pick one of three weapons.' },
-    fight:    { title: 'Fight',    text: d => `${monsterName(d.monster, 'fight')}. +${CFG().xp.fight} XP and gold; gear 1 fight in 3.` },
-    elite:    { title: 'Elite',    text: d => `${monsterName(d.monster, 'elite', d.trait)}. ${G.ELITE_TRAITS[d.trait].desc} +${CFG().xp.elite} XP. Always drops gear.` },
-    boss:     { title: 'Boss',     text: d => `${d.monster.name} (${G.ELITE_TRAITS[d.monster.trait].name}). ${G.ELITE_TRAITS[d.monster.trait].desc} +${CFG().xp.boss} XP. Guaranteed rare item.` },
+    fight:    { title: 'Fight',    text: d => `${monsterName(d.monster, 'fight')}.${note(d.monster)} +${CFG().xp.fight} XP and gold; gear 1 fight in 3.` },
+    elite:    { title: 'Elite',    text: d => `${monsterName(d.monster, 'elite', d.trait)}.${note(d.monster, true)} ${G.ELITE_TRAITS[d.trait].desc} +${CFG().xp.elite} XP. Always drops gear.` },
+    boss:     { title: 'Boss',     text: d => `${d.monster.name}. ${bossDesc(d.monster)} +${CFG().xp.boss} XP. Guaranteed rare item.` },
     trash:    { title: 'Trash Pile', text: () => 'No fight. A little gold and some junk. Maybe something useful.' },
     vault:    { title: 'Treasure Vault', text: () => 'No fight. Pick 1 of 3 items, one of them rare.' },
     rest:     { title: 'Campfire', text: () => `Recover ${CFG().restHeal} health. Does not clear poison.` },
@@ -208,6 +258,7 @@ window.G = window.G || {};
     if (res.goldStolen) hero.gold = Math.max(0, hero.gold - res.goldStolen);
     if (res.winner === 'b') return G.Hero.loseHeart(hero, room) ? 'heart' : 'dead';
     hero.hp = Math.max(1, res.aHp);
+    if (res.poison) hero.poison += res.poison;   // snake bites stay with you
     return res.timeout ? 'timeout' : 'won';
   }
 
@@ -262,8 +313,9 @@ window.G = window.G || {};
     if (i < 0) return '';
     if (item.kind === 'gear') {
       hero.bag.splice(i, 1);
-      const old = G.Hero.equip(hero, item);   // what you wore is gone for good
-      return `Equipped ${item.name}${old ? `, replacing ${old.name}` : ''}.`;
+      const old = G.Hero.equip(hero, item);   // what you wore is sold automatically
+      if (old) { const g = sellPrice(old); hero.gold += g; return `Equipped ${item.name}, sold ${old.name} for ${g} gold.`; }
+      return `Equipped ${item.name}.`;
     }
     const c = G.CONSUMABLES[item.cid];
     hero.bag.splice(i, 1);
@@ -280,7 +332,7 @@ window.G = window.G || {};
     while (buffs.length < 3 && ids.length) buffs.push(ids.splice(rng.int(0, ids.length - 1), 1)[0]);
     // Every potion and elixir has its own stock of 1 to 3 per visit
     const P = CFG().shop.stock, cstock = {};
-    for (const id of ['potion', 'antidote', 'tome', ...buffs]) cstock[id] = rng.int(P[0], P[1]);
+    for (const id of ['potion', 'antidote', 'tome', ...buffs]) cstock[id] = id === 'tome' ? 1 : rng.int(P[0], P[1]);   // one Tome per merchant
     return { stock: G.Loot.offer(hero, room, 'shop', rng, CFG().shop.gearCount).filter(it => it.kind === 'gear'), buffs, cstock,
       restocks: 0, bought: [], msg: null, freeUsed: false };
   }
@@ -317,7 +369,7 @@ window.G = window.G || {};
   }
 
   G.Dungeon = {
-    monsterFor, buildEnemies, monsterName, makeDoors, doorInfo, danger, goldFor, itemPrice, sellPrice, doorFoes,
+    monsterFor, planBosses, bossDesc, buildEnemies, monsterName, makeDoors, doorInfo, danger, goldFor, itemPrice, sellPrice, doorFoes,
     specOptions, gemOptions, rollMystery, fight, applyFight, tickPoison, useItem, fightOpts, roomKind, merchantStock, merchantPrice,
     gearDrops, spoilsOptions, takeSpoils, forgeStrengthen, forgeAffix, strengthenGains,
   };
@@ -337,7 +389,8 @@ window.G = window.G || {};
   function take(hero, item) {
     if (item.kind === 'consumable') { hero.bag.push(item); return `took ${item.name}`; }
     if (item.kind === 'relic') { G.Hero.addRelic(hero, item); return `took the ${item.name} relic`; }
-    G.Hero.equip(hero, item);
+    const old = G.Hero.equip(hero, item);
+    if (old) hero.gold += sellPrice(old);   // the old piece sells automatically
     return `took ${item.name}`;
   }
 

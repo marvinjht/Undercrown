@@ -23,6 +23,7 @@ for (let mi = 0; mi < MATCHES; mi++) {
   const heroes = [];
   for (let i = 0; i < 6; i++) heroes.push(G.Hero.create({ name: 'AI' + i }, rng.fork()));
   G.Supply.reset(heroes);
+  G.Dungeon.planBosses(rng.int(0, 1e9));
   const lostAny = new Set();
   for (let room = 1; room <= C.rooms; room++) {
     for (const h of heroes) {

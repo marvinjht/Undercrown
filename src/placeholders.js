@@ -45,14 +45,19 @@ window.G = window.G || {};
     door_purify: P('M12 3c3 5 6 8 6 11a6 6 0 0 1-12 0c0-3 3-6 6-11zM8.5 15c1 2 2.5 2.5 4 2'),
     crown: P('M3 18h18M4 18l-1-10 5 4 4-7 4 7 5-4-1 10z'),
     gem: P('M7 4h10l4 5-9 12L3 9zM3 9h18M9 4l3 5 3-5M12 9v12'),
-    relic_warlord: P('M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7zM9 10l3 3 3-3M12 13v4'),
-    relic_hawkeye: P('M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 1 0 0-6z'),
-    relic_rending: P('M6 4l4 16M11 4l4 16M16 4l3 12'),
-    relic_bloodied: P('M12 3c3 5 6 8 6 11a6 6 0 0 1-12 0c0-3 3-6 6-11zM9.5 14.5a2.5 2.5 0 0 0 2.5 2.5'),
-    relic_primed: P('M13 2L5 14h6l-1 8 8-12h-6z'),
-    relic_concuss: P('M12 4a8 8 0 1 0 0 16 8 8 0 1 0 0-16zM8 8l8 8M16 8l-8 8'),
-    relic_counter: P('M4 12h12M12 8l4 4-4 4M20 5v14'),
+    relic_knuckle: P('M6 9a3 3 0 1 1 4-3l4 4a3 3 0 1 1 3 4l-4 4a3 3 0 1 1-3-4z'),
+    relic_snare: P('M12 4a8 8 0 1 0 0 16 8 8 0 1 0 0-16zM12 8a4 4 0 1 0 0 8 4 4 0 1 0 0-8zM12 2v4M12 18v4M2 12h4M18 12h4'),
+    relic_spade: P('M12 2v12M8 14h8l-1 6h-6zM9 3h6'),
+    relic_gauze: P('M4 8l12-4 4 4-12 12-4-4zM8 12l4 4M11 9l4 4M15 18c1 1 2 2 2 3'),
+    relic_leeches: P('M7 5h10v3H7zM6 8h12v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2zM9 13c1 2 2-1 3 1s2-1 3 1'),
+    relic_rending: P('M15 3v9a5 5 0 1 1-6 5M12 3h6'),
+    relic_primed: P('M10 21v-9l-1-5a1.5 1.5 0 0 1 3 0l1 4 1-6a1.5 1.5 0 0 1 3 0l-1 8 1 8M16 3l1-1'),
+    relic_concuss: P('M12 3a2 2 0 0 1 2 2c3 1 4 4 4 8v3l2 2H4l2-2v-3c0-4 1-7 4-8a2 2 0 0 1 2-2zM10 20a2 2 0 0 0 4 0'),
+    relic_counter: P('M4 18c4 0 8-2 10-6s5-7 7-8c0 4-2 9-6 12s-8 3-11 2zM11 14l-2-1'),
     relic_bastion: P('M5 4h14v7c0 5-3 8-7 10-4-2-7-5-7-10zM12 8v8M8 12h8'),
+    relic_ratpaw: P('M6 20l5-6M11 14c0-3 1-5 3-6M14 8l1-4M14 8l3-2M14 8l3 1M11 14l4-1'),
+    relic_tortoise: P('M3 15a9 7 0 0 1 18 0zM8 15l2-5h4l2 5M3 15l-1 3M21 15l1 3'),
+    relic_journal: P('M6 3h11a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6zM9 3v18M12 8h4M12 11h4M13 16a1.5 1.5 0 1 0 0.01 0'),
   };
   const POTION_COLORS = { potion: '#d0473a', greater: '#ff6b5a', antidote: '#7fd67a', iron: '#b8b8c8', salve: '#8fb4ff', fury: '#ff9a3c', tonic: '#f2e28c', draught: '#b39cff' };
 
@@ -160,6 +165,20 @@ window.G = window.G || {};
     troll: g => { blob(g, 32, 32, 52, 58, 0x6f7f72, 0xffe066); g.fillStyle(0x56645a).fillCircle(22, 14, 6).fillCircle(22, 50, 6); },
     ogre: g => { blob(g, 32, 32, 54, 58, 0x9a7a5a, 0xff7a3b); g.fillStyle(0x5b4636).fillRect(46, 20, 14, 24); },
     cultist: g => { g.fillStyle(0x5a1820).fillTriangle(10, 32, 46, 8, 46, 56); blob(g, 36, 32, 26, 30, 0x8c2a34, 0xff3040); },
+    snake: g => { g.lineStyle(7, 0x4f7a3a).beginPath().moveTo(4, 40).lineTo(14, 28).lineTo(24, 40).lineTo(34, 30).strokePath(); blob(g, 42, 30, 20, 16, 0x5f9444, 0xffe066); g.lineStyle(2, 0xd04040).lineBetween(52, 30, 58, 30); },
+    hydra: g => {
+      g.lineStyle(6, 0x2f6a5a).lineBetween(14, 32, 40, 12).lineBetween(14, 32, 44, 32).lineBetween(14, 32, 40, 52);
+      blob(g, 16, 32, 26, 34, 0x2f6a5a, 0x10301a);
+      for (const y of [12, 32, 52]) { g.fillStyle(0x3f8a72).fillEllipse(46, y, 16, 12); g.lineStyle(2, OUTLINE).strokeEllipse(46, y, 16, 12); g.fillStyle(0xffe066).fillCircle(50, y - 2, 2); }
+    },
+    ghoul: g => { g.fillStyle(0x9ab8a0, 0.25).fillCircle(32, 32, 22); blob(g, 32, 32, 26, 32, 0x7a9682, 0xd8ff7a); g.lineStyle(2, 0x56685a).lineBetween(40, 22, 50, 18).lineBetween(40, 42, 50, 46); },
+    yeti: g => { blob(g, 48, 48, 66, 74, 0xe8f2fa, 0x2f6fbf); g.fillStyle(0x9fc8e8).fillTriangle(20, 20, 12, 8, 30, 18).fillTriangle(20, 76, 12, 88, 30, 78); g.fillStyle(0xbfe4ff, 0.5).fillCircle(48, 48, 12); },
+    wraithKing: g => {
+      g.fillStyle(0x6a3fa0, 0.35).fillCircle(48, 48, 44); blob(g, 48, 48, 50, 64, 0x3e2a6a, 0x9ff4ff);
+      g.fillStyle(0xd8b13a).fillTriangle(28, 30, 20, 20, 32, 26).fillTriangle(26, 48, 14, 48, 28, 42).fillTriangle(28, 66, 20, 76, 32, 70);
+    },
+    alphaWolf: g => { g.fillStyle(0x3e3c40).fillTriangle(60, 26, 70, 12, 72, 32).fillTriangle(60, 70, 70, 84, 72, 64); g.lineStyle(4, 0x3e3c40).lineBetween(4, 48, 22, 48); blob(g, 48, 48, 60, 40, 0x56535a, 0xff4a3a); g.lineStyle(2, 0xd0d0d0).lineBetween(40, 34, 50, 40).lineBetween(40, 62, 50, 56); },
+    mire: g => { g.fillStyle(0x3a3020, 0.4).fillEllipse(48, 52, 90, 80); blob(g, 48, 48, 72, 70, 0x5a4a2e, 0xc8e05a); g.fillStyle(0x4a3c24).fillCircle(26, 26, 7).fillCircle(30, 72, 9).fillCircle(64, 20, 5); g.fillStyle(0x6a8a3a).fillCircle(56, 70, 4).fillCircle(22, 50, 3); },
     boneKing: g => { blob(g, 48, 48, 60, 72, 0xe9e0c8, 0xff3b30); g.fillStyle(0xd8b13a).fillTriangle(30, 30, 24, 18, 36, 28).fillTriangle(30, 48, 18, 48, 30, 42).fillTriangle(30, 66, 24, 78, 36, 68); },
     gorehorn: g => { blob(g, 48, 48, 66, 76, 0x7a3a2a, 0xffd23f); g.fillStyle(0xeee3c8).fillTriangle(66, 30, 90, 20, 70, 38).fillTriangle(66, 66, 90, 76, 70, 58); },
     warden: g => { g.fillStyle(0x3a4250).fillRect(14, 10, 64, 76); g.lineStyle(3, 0x9aa7b8).strokeRect(14, 10, 64, 76); blob(g, 50, 48, 48, 58, 0x5d6b80, 0x7fe0ff); },

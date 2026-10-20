@@ -4,7 +4,7 @@ window.G = window.G || {};
 G.GEMS = {
   phoenix: {
     name: 'Phoenix Heart', color: '#ff8a4c',
-    up: 'Every time you die, you explode for 100 damage to every enemy. If that kills the last enemy, you win, keep your heart and stand back up at 10 health.',
+    up: 'When you die, you explode for 100 damage and set every enemy burning for 100 more over 5 seconds. Then you become an egg with half your max health for 5 seconds. The egg can’t attack or dodge, and nothing from your gear, sets, spec or relics protects it. If every enemy dies before it cracks, you hatch at 25 health and win.',
     cost: 'In every fight you take 1 burn damage a second.',
   },
   stone: {
