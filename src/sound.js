@@ -46,6 +46,23 @@ window.G = window.G || {};
     src.start(t0, Math.random() * 0.5); src.stop(t0 + dur + 0.02);
   }
 
+  // A brass-like note: two detuned saws through a lowpass that opens on the attack, with a little vibrato
+  function brass(f, delay, dur, vol = 0.12) {
+    const t0 = ctx.currentTime + delay;
+    const fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.Q.value = 2;
+    fl.frequency.setValueAtTime(f * 1.5, t0); fl.frequency.exponentialRampToValueAtTime(f * 6, t0 + 0.06); fl.frequency.exponentialRampToValueAtTime(f * 3, t0 + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + 0.04);
+    g.gain.setValueAtTime(vol, t0 + dur - 0.08); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 5.5; lg.gain.value = f * 0.006; lfo.connect(lg);
+    for (const det of [-6, 6]) {
+      const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(f, t0); o.detune.value = det;
+      lg.connect(o.frequency); o.connect(fl); o.start(t0); o.stop(t0 + dur + 0.05);
+    }
+    lfo.start(t0); lfo.stop(t0 + dur + 0.05);
+    fl.connect(g); g.connect(master);
+  }
+
   // ---------- The sounds ----------
   const SFX = {
     slash:  () => { noise({ f0: 2600, f1: 900, q: 0.8, dur: 0.12, vol: 0.35 }); tone({ type: 'triangle', f0: 1400, f1: 700, dur: 0.06, vol: 0.06, delay: 0.05 }); },
@@ -75,6 +92,13 @@ window.G = window.G || {};
     death:  () => { tone({ type: 'sawtooth', f0: 220, f1: 55, dur: 0.45, vol: 0.12 }); noise({ type: 'lowpass', f0: 600, f1: 100, dur: 0.35, vol: 0.2 }); },
     levelup: () => { [523, 659, 784, 1046, 1318].forEach((f, i) => tone({ type: 'triangle', f0: f, dur: i === 4 ? 0.6 : 0.18, vol: 0.14, delay: i * 0.09 })); tone({ type: 'sine', f0: 1568, dur: 0.6, vol: 0.06, delay: 0.45 }); },
     coin:   () => { tone({ type: 'square', f0: 988, dur: 0.06, vol: 0.05 }); tone({ type: 'square', f0: 1319, dur: 0.18, vol: 0.05, delay: 0.06 }); },
+    // Tournament round: a short gladiator trumpet call (G C E G, then a held high C)
+    fanfare: () => {
+      const n = [[392, 0, 0.16], [523, 0.17, 0.16], [659, 0.34, 0.16], [784, 0.51, 0.3], [659, 0.83, 0.14], [784, 0.98, 0.14], [1047, 1.13, 0.75]];
+      for (const [f, d, l] of n) { brass(f, d, l); brass(f / 2, d, l, 0.06); }
+      noise({ type: 'lowpass', f0: 300, dur: 0.5, vol: 0.25, delay: 1.13 });
+      tone({ type: 'sine', f0: 70, f1: 45, dur: 0.6, vol: 0.4, delay: 1.13 });
+    },
     heart:  () => { tone({ type: 'sine', f0: 160, f1: 60, dur: 0.5, vol: 0.4 }); tone({ type: 'sine', f0: 120, f1: 50, dur: 0.5, vol: 0.3, delay: 0.25 }); },
   };
 

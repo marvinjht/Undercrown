@@ -316,7 +316,7 @@ window.G = window.G || {};
       </div>`);
     }
     const buffs = Object.entries(p.buffs || {}).filter(([, v]) => v).map(([k, v]) => k === 'fullMana' ? 'Full mana' : `+${v} ${G.STAT_INFO[k].label}`);
-    return `<section class="panel"><h3>Bag <span class="chip ${p.bag.length >= size ? 'full' : 'muted'}">${p.bag.length}/${size}</span></h3>
+    return `<section class="panel"><h3>Bag <span class="bag-head-r">${goldChip(p)}<span class="chip ${p.bag.length >= size ? 'full' : 'muted'}">${p.bag.length}/${size}</span></span></h3>
       <p class="hint bag-hint">New gear goes straight onto an empty slot; anything else lands here. To swap gear in, click it and hold Equip. The old piece is gone for good.</p>
       <div class="bag">${slots.join('')}</div>
       ${buffs.length ? `<p class="buffs">Next fight: ${buffs.join(', ')}</p>` : ''}
@@ -393,24 +393,36 @@ window.G = window.G || {};
   }
 
   // Your hearts, health, poison and gold: under your character, and on your own card in the players column
-  function vitalsRow(p, key) {
+  function vitalsRow(p, key, withGold = false) {
     const max = G.Hero.maxHp(p);
     const poison = p.poison ? `<span class="poison" ${tip(`<div class="tt-title">Poison ${p.poison}</div><p>You lose ${p.poison} health at the start of every room. Only an Antidote or a Purifying Spring clears it; campfires don't.</p>`)}>Poison ${p.poison}</span>` : '';
-    return `<div class="vitals">${heartsRow(p.hearts)}${hpBar(p.hp, max, '', key)}${poison}
-      <div class="gold" ${tip('<div class="tt-title">Gold</div><p>Spend it at Merchants, the Forge and Wagers. Passing at a Plunder also gives gold.</p>')}><span class="coin"></span>${p.gold}</div></div>`;
+    return `<div class="vitals">${heartsRow(p.hearts)}<div class="hp-xp">${hpBar(p.hp, max, '', key)}${xpBar(p)}</div>${poison}
+      ${withGold ? goldChip(p) : ''}</div>`;
   }
-  function levelBadge(p) {
+  function goldChip(p) {
+    return `<div class="gold" ${tip('<div class="tt-title">Gold</div><p>Spend it at Merchants, the Forge and Wagers. Passing at a Plunder also gives gold.</p>')}><span class="coin"></span>${p.gold}</div>`;
+  }
+  function xpInfo(p) {
     const L = CFG().levels;
     const need = p.level >= L.max ? 1 : G.Hero.xpToNext(p.level);
-    const xpPct = p.level >= L.max ? 100 : Math.round(p.xp / need * 100);
-    return `<div class="lvl" ${tip(`<div class="tt-title">Level ${p.level}</div><p>${p.level >= L.max ? 'Max level.' : `${p.xp} of ${need} XP to level ${p.level + 1}.`} Every fight gives XP. Spec at level ${L.specLevel}; skill tree picks at ${L.treeLevels.join(', ')}. Each level gives +${L.hpPerLevel} max Health.</p>`)}><b>Lv ${p.level}</b><i><span style="width:${xpPct}%"></span></i></div>`;
+    return { L, need, pct: p.level >= L.max ? 100 : Math.round(p.xp / need * 100) };
   }
+  // The XP bar, right under the health bar
+  function xpBar(p) {
+    const { L, need, pct } = xpInfo(p);
+    return `<div class="xpbar" ${tip(`<div class="tt-title">Level ${p.level}</div><p>${p.level >= L.max ? 'Max level.' : `${p.xp} of ${need} XP to level ${p.level + 1}.`} Every fight gives XP. Spec at level ${L.specLevel}; skill tree picks at ${L.treeLevels.join(', ')}. Each level gives +${L.hpPerLevel} max Health.</p>`)}><i style="width:${pct}%"></i><span>${p.level >= L.max ? 'Max level' : `XP ${p.xp} / ${need}`}</span></div>`;
+  }
+
+  function levelBadge(p) {
+    return `<div class="lvl"><b>Lv ${p.level}</b></div>`;
+  }
+
 
   // Your own card in the players column, set apart from the rivals
   function youPanel(st) {
     const p = st.player;
     return `<section class="panel you-card"><div class="you-top"><span class="dot" style="background:#9fdcff"></span><b>You</b>${levelBadge(p)}</div>
-      ${vitalsRow(p, 'you-card')}
+      ${vitalsRow(p, 'you-card', true)}
       <div class="rv-spec">${esc([p.spec ? G.SPECS[p.spec].name : '', buildLabel(p) === 'No set bonus yet' ? '' : buildLabel(p)].filter(Boolean).join(' · '))}</div></section>`;
   }
 
@@ -647,12 +659,14 @@ window.G = window.G || {};
     return `<section class="screen"><h2>${esc(m.title)}</h2><p class="lede">${esc(m.text)}</p><div class="row-actions">${acts}</div></section>`;
   }
 
+  // A skill tree node you can hover (or tap) to read
+  const mt = (n, lv, cls = '') => `<i class="${cls}" ${tip(`<div class="tt-title">${esc(n.name)} <small>level ${lv}${lv === 20 ? ' capstone' : ', pick one of two'}</small></div><p>${esc(n.desc)}.</p>`)}>${esc(n.name)}</i>`;
   function specScreen(st) {
     const cards = st.specOptions.map(id => {
       const S = G.SPECS[id], T = G.SPEC_TREES[id];
       return `<article class="card spec"><div class="spec-head"><b>${S.name}</b><small>${S.role}</small></div>
         <p>${esc(S.desc)}</p><p class="trait">${esc(S.tip)}</p>
-        <div class="mini-tree"><span>Lv 10</span><i>${esc(T.t10[0].name)}</i><i>${esc(T.t10[1].name)}</i><span>Lv 15</span><i>${esc(T.t15[0].name)}</i><i>${esc(T.t15[1].name)}</i><span>Lv 20</span><i class="cap">${esc(T.t20.name)}</i></div>
+        <div class="mini-tree"><span>Lv 10</span>${mt(T.t10[0], 10)}${mt(T.t10[1], 10)}<span>Lv 15</span>${mt(T.t15[0], 15)}${mt(T.t15[1], 15)}<span>Lv 20</span>${mt(T.t20, 20, 'cap')}</div>
         <button data-act="spec" data-id="${id}">Become a ${S.name}</button></article>`;
     }).join('');
     return `<section class="screen levelup"><h2>Level ${CFG().levels.specLevel}: choose your specialization</h2>
@@ -717,6 +731,15 @@ window.G = window.G || {};
       <p class="waiting">Starts in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p></section>`;
   }
 
+  // Your next tournament opponent (null when you're not fighting next)
+  function tourOpponent(st) {
+    const T = st.tour;
+    if (!T || T.champion) return null;
+    const round = G.Tournament.currentRound(T);
+    const m = round && round.pairs.find(p => !p.result && ((p.a.hero && p.a.hero.isPlayer) || (!p.ghost && p.b.hero && p.b.hero.isPlayer)));
+    if (!m) return null;
+    return m.a.hero && m.a.hero.isPlayer ? m.b : m.a;
+  }
   // The rival you're about to fight, drawn and laid out like your own character block
   function rivalBlock(opp) {
     const h = opp.ghost ? opp.of : opp.hero;
@@ -724,7 +747,7 @@ window.G = window.G || {};
     const col = st.look ? G.CLASSES[st.look].color : '#' + (h.tint || 0x9fdcff).toString(16).padStart(6, '0');
     const name = opp.ghost ? opp.name : h.name;
     const spec = h.spec ? G.SPECS[h.spec].name : 'No spec yet';
-    const ov = opp.ghost ? { s: opp.s, hp: opp.hp } : null;
+    const ov = opp.ghost ? { s: opp.s, hp: opp.hp } : opp.hp != null ? { s: G.Stats.compute(h), hp: opp.hp } : null;
     return `<div class="charblock rival-block ${opp.ghost ? 'ghosted' : ''}" style="--pv:${col}">
       <div class="pv-left"><div class="vs-tag">Your opponent</div><div id="rival-slot" class="preview-slot" aria-hidden="true"></div>
         <div class="pv-info"><b>${esc(name)}</b>${opp.ghost ? '' : heartsRow(h.hearts, 'sm')}<span>${esc(buildLabel(h))}</span><small>Level ${h.level} · ${esc(spec)}${h.gem && !opp.ghost ? ' · ' + esc(G.GEMS[h.gem].name) : ''}</small></div></div>
@@ -785,7 +808,9 @@ window.G = window.G || {};
     }
     const m = G.Tournament.nextMatch(T);
     const mine = m && ((m.a.hero && m.a.hero.isPlayer) || (!m.ghost && m.b.hero.isPlayer));
+    const opp = tourOpponent(st);
     return `<section class="screen"><h2>The Tournament</h2>
+      ${opp ? rivalBlock(opp.ghost ? opp : { hero: opp.hero, hp: opp.hp }) : ''}
       <p class="lede">Last one with hearts wins. Each round everyone is paired up again. Winners keep the health they finish with; losers lose a heart and come back at full health. Fights go to the death; past one minute, both lose a heart.</p>
       ${roundsList(T)}
       <p class="waiting">${mine ? 'Your fight starts' : 'Next fights start'} in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p></section>`;
@@ -803,7 +828,7 @@ window.G = window.G || {};
 
   function titleScreen() {
     return `<div class="title-screen">
-      <header class="hero-head"><div class="eyebrow">Undercrown v0.1 · single player</div><h1>Undercrown</h1>
+      <header class="hero-head"><div class="eyebrow">Undercrown v0.11 · single player</div><h1>Undercrown</h1>
         <p>Six warriors. Thirty rooms each. Three hearts. Health carries from room to room and healing is limited, so spend it wisely. Build an archetype, fight your rivals along the way, and be the last one standing.</p></header>
       <ul class="rules">
         <li><b>Hearts</b>Dying or losing a duel costs a heart. You come back at full health. Lose all three and you're out.</li>
@@ -838,10 +863,9 @@ window.G = window.G || {};
     const pv = document.getElementById('preview-slot');
     if (pv) G.Preview.mount(pv, G.visualFor(st.player)); else G.Preview.park();
     const rv = document.getElementById('rival-slot');
-    if (rv && st.duel && st.duel.mine) {
-      const m = st.duel.mine, opp = m.a.hero && m.a.hero.isPlayer ? m.b : m.a;
-      G.RivalPreview.mount(rv, G.visualFor(opp.ghost ? opp.of : opp.hero));
-    } else G.RivalPreview.park();
+    const rOpp = st.phase === 'tournament' ? tourOpponent(st) : st.duel && st.duel.mine ? (st.duel.mine.a.hero && st.duel.mine.a.hero.isPlayer ? st.duel.mine.b : st.duel.mine.a) : null;
+    if (rv && rOpp) G.RivalPreview.mount(rv, G.visualFor(rOpp.ghost ? rOpp.of : rOpp.hero));
+    else G.RivalPreview.park();
   }
 
   // Updates only clocks each tick, never the whole screen (a re-render would cut off a running fight)

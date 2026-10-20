@@ -14,6 +14,7 @@ G.CONFIG = {
 
   roundSeconds: 45,        // doors, rewards, spec picks... (fights don't count against it)
   tourBreakSeconds: 6,
+  tourIntroExtra: 5,       // extra seconds before the first tournament round
   bagSize: 6,
 
   player: { baseHp: 100, baseCrit: 6 },

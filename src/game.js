@@ -608,13 +608,17 @@ window.G = window.G || {};
       s.tour = G.Tournament.create(field, s.rng.fork());
       s.phase = 'tournament';
       s.roundKind = 'tour';
-      if (!s.tour.champion) this.startTimer(CFG().tourBreakSeconds); else s.roundEnds = 0;
+      // A longer first break to take in the field before the first round
+      if (!s.tour.champion) this.startTimer(CFG().tourBreakSeconds + CFG().tourIntroExtra); else s.roundEnds = 0;
       render();
     },
     tourStep() {
       const s = this.s, T = s.tour;
       s.notice = null;
       const startRound = T.rounds.length;
+      // A trumpet call when a new round begins
+      const rn = G.Tournament.currentRound(T).n;
+      if (s.fanfareRound !== rn) { s.fanfareRound = rn; if (G.Sound) G.Sound.play('fanfare', 1); }
       let m;
       while ((m = G.Tournament.nextMatch(T)) && T.rounds.length === startRound) {
         const mine = m.a.hero.isPlayer || (!m.ghost && m.b.hero.isPlayer);
