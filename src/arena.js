@@ -86,7 +86,9 @@ window.G = window.G || {};
 
     begin(cfg) {
       for (const o of this.objs) o.destroy();
-      this.objs = [];
+      this.objs = []; this.fxg = null; this.ring = null;
+      this.tweens.killAll(); this.time.removeAllEvents();
+      this.cameras.main.resetFX();
       this.cfg = cfg; this.t = 0; this.idx = 0; this.finished = false; this.speed = 1; this.lastNow = 0;
       this.F = {}; this.laneIdx = 0;
       for (const m of cfg.result.fighters) if (m.bornAt === 0) this.makeFighter(m);
@@ -380,6 +382,13 @@ window.G = window.G || {};
       }
     }
 
+    // Stop playing (the fight screen went away)
+    halt() {
+      for (const o of this.objs) o.destroy();
+      this.objs = []; this.fxg = null; this.ring = null; this.cfg = null; this.F = {};
+      this.tweens.killAll(); this.time.removeAllEvents();
+    }
+
     finish() {
       if (this.finished) return;
       this.finished = true;
@@ -444,21 +453,29 @@ window.G = window.G || {};
   G.Preview = makePreview();
   G.RivalPreview = makePreview();
 
-  // A fresh Phaser game is built for every fight and thrown away after it.
+  // One arena game for the whole session. Each fight moves its canvas into the fight's slot and starts over.
+  // (Building a new WebGL game per fight used up the browser's WebGL contexts and broke the character portrait.)
   G.Arena = {
-    game: null, _scene: null, _pending: null, onSpeed: null,
+    game: null, _scene: null, _pending: null, onSpeed: null, host: null,
     start(el, cfg) {
-      this.stop();
-      this._pending = cfg;
-      this.game = new Phaser.Game({
-        type: Phaser.AUTO, parent: el, width: W, height: H, backgroundColor: '#15120f',
-        scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_HORIZONTALLY },
-        scene: [ArenaScene], banner: false, audio: { noAudio: true },
-      });
+      if (!this.host) { this.host = document.createElement('div'); this.host.className = 'arena-host'; }
+      el.appendChild(this.host);
+      if (!this.game) {
+        this._pending = cfg;
+        this.game = new Phaser.Game({
+          type: Phaser.AUTO, parent: this.host, width: W, height: H, backgroundColor: '#15120f',
+          scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_HORIZONTALLY },
+          scene: [ArenaScene], banner: false, audio: { noAudio: true },
+        });
+        return;
+      }
+      this.game.scale.refresh();
+      if (this._scene) this._scene.begin(cfg); else this._pending = cfg;
     },
     stop() {
-      if (this.game) { this.game.destroy(true); this.game = null; }
-      this._scene = null; this._pending = null;
+      if (this._scene && this._scene.cfg) this._scene.halt();
+      this._pending = null;
+      if (this.host && this.host.parentNode) this.host.parentNode.removeChild(this.host);
     },
   };
 })(window.G);

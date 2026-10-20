@@ -23,8 +23,9 @@ window.G = window.G || {};
   // One PvP fight. a and b are { hero, hp } (b may be a ghost spec instead of a hero).
   // seed: multiplayer passes the host's seed so every screen plays the exact same fight
   function pvp(a, b, rng, seed) {
-    const bSpec = b.ghost ? b : { s: G.Stats.compute(b.hero), name: b.hero.isPlayer ? 'You' : b.hero.name, hp: b.hp, sprite: 'hero', tint: b.hero.tint };
-    return G.simulateFight(G.Stats.compute(a.hero), [bSpec],
+    // Potions and elixirs drunk before the fight count here too
+    const bSpec = b.ghost ? b : { s: G.Stats.compute(b.hero, { buffs: true }), name: b.hero.isPlayer ? 'You' : b.hero.name, hp: b.hp, sprite: 'hero', tint: b.hero.tint };
+    return G.simulateFight(G.Stats.compute(a.hero, { buffs: true }), [bSpec],
       { seed: seed != null ? seed : rng.int(0, 1e9), aHp: a.hp, aName: a.hero.isPlayer ? 'You' : a.hero.name, pvp: true, maxTime: CFG().arena.maxTime });
   }
 
@@ -72,6 +73,7 @@ window.G = window.G || {};
       for (let i = 0; i < 2; i++) {
         const e = sides[i];
         if (e.ghost) continue;
+        e.hero.buffs = {};   // elixirs last one fight
         const h = e.hero, won = i === winnerSide && !res.draw;
         h.hp = e.hp;                                      // the winner's health goes back to what it was
         if (!pair.ghost) h.opponents.push(sides[1 - i].hero.id);
@@ -163,6 +165,7 @@ window.G = window.G || {};
     for (let i = 0; i < 2; i++) {
       const e = sides[i];
       if (e.ghost) continue;
+      e.hero.buffs = {};   // elixirs last one fight
       if (!m.ghost) T.lastOpp[e.hero.id] = sides[1 - i].hero.id;
       if (m.draw && !m.ghost) {
         // Past the time limit: both lose a heart and come back at full health

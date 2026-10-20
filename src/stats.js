@@ -280,6 +280,13 @@ window.G = window.G || {};
       hero.hp = Math.min(max, hero.hp + n);
       return hero.hp - before;
     },
+    // How much a heal would restore before the max-health cap (heart gems change it)
+    healAmount(hero, amount) {
+      if (hero.gem === 'gaia' || amount <= 0) return 0;
+      if (hero.gem === 'stone') return 1;
+      if (hero.gem === 'vulture') return 2 * Math.round(amount / 4);
+      return Math.round(amount);
+    },
     maxHp(hero) { return compute(hero).maxHp; },
     power(hero) { return power(compute(hero)); },
     powerWith(hero, item) {

@@ -68,13 +68,31 @@ window.G = window.G || {};
       render();
     },
     // Your duel pairing from the host (canonical sides; mirrored = you're side b)
-    mpDuel(pair, mirrored) {
+    mpDuel(w, mirrored) {
       const s = this.s;
-      s.duel = { pairs: [], mine: pair, mirrored };
-      if (!pair) { s.roundKind = 'after'; this.nextStep(); return; }
+      s.duel = { pairs: [], w, mine: w ? G.MP.duelPair(w) : null, mirrored, goSent: false };
+      if (!w) { s.roundKind = 'after'; this.nextStep(); return; }
       s.phase = 'duelIntro'; s.roundKind = 'duel';
-      this.startTimer(8);
+      this.startTimer(CFG().duelIntroSeconds);
       render();
+    },
+    // Fight when both of you have gone in (a bot or ghost opponent is always ready)
+    mpTryDuelFight() {
+      const s = this.s, d = s.duel;
+      if (!d || !d.w || s.phase !== 'duelIntro') return;
+      const opp = d.mirrored ? d.w.a : d.w.b;
+      const go = G.MP.duelGo && G.MP.duelGo[opp];
+      if (d.w.ghostOf != null || G.MP.isBot(opp) || (go && go.room === s.room) || d.forced) { this.mpDuelFight(); return; }
+      d.waitingFor = opp;
+      clearTimeout(d.waitTimer);
+      d.waitTimer = setTimeout(() => { if (this.s === s && s.phase === 'duelIntro' && s.duel === d) { d.forced = true; this.mpDuelFight(); } }, 15000);
+      render();
+    },
+    mpDuelGoArrived(slot, room) {
+      const s = this.s, d = s && s.duel;
+      if (!d || !d.goSent || s.room !== room || d.waitingFor !== slot) return;
+      clearTimeout(d.waitTimer);
+      this.mpDuelFight();
     },
     // Tournament state from the host
     mpTour(T, phase, ms) {
@@ -111,6 +129,8 @@ window.G = window.G || {};
       const s = this.s;
       const mirrored = !m.ghost && m.b.hero === s.player;
       const res = G.Tournament.pvp(m.a, m.b, null, m.seed);
+      const nmB0 = m.ghost ? m.b.name : m.b.hero.name;
+      G.MP.sendFight({ title: `Tournament: ${m.a.hero.name} vs ${nmB0}`, names: { a: m.a.hero.name, b0: nmB0 }, visual: { a: visualFor(m.a.hero), b0: m.ghost ? { ...visualFor(m.b.of), ghost: true } : visualFor(m.b.hero) } });
       const nameB = m.ghost ? m.b.name : m.b.hero.name;
       s.battle = {
         tour: true, match: m, res, mirror: mirrored,
@@ -120,6 +140,7 @@ window.G = window.G || {};
         onDone: () => {
           if (s.battle.done) return;
           s.battle.done = true;
+          s.player.buffs = {};
           G.MP.sendTourDone();
           s.phase = 'tournament'; s.tourPhase = 'fight'; s.roundEnds = 0;
           s.notice = 'Waiting for the other fights to finish…';
@@ -339,6 +360,7 @@ window.G = window.G || {};
         visual: { a: visualFor(p) },
         done: false, onDone: () => this.battleDone(false),
       };
+      if (this.mp) G.MP.sendFight({ title: `Room ${s.room}: ${s.battle.title}`, visual: s.battle.visual });
       s.phase = 'battle';
       s.notice = null;
       s.roundEnds = 0;                 // fights never eat into your pick time
@@ -443,7 +465,7 @@ window.G = window.G || {};
         f.msg = `The smith hammers your ${it.name} stronger.`;
       } else if (kind === 'affix' && !f.affixed && !it.affixed && p.gold >= F.affixCost) {
         p.gold -= F.affixCost; const r = G.Dungeon.forgeAffix(it, s.rng); f.affixed = true;
-        f.msg = r ? `The smith adds +${r.v} ${G.STAT_INFO[r.k].label} to your ${it.name}.` : '';
+        f.msg = r ? `The smith adds a random affix to your ${it.name}: +${r.v} ${G.STAT_INFO[r.k].label}.` : '';
       }
       const max = G.Hero.maxHp(p); if (p.hp > max) p.hp = max;
       render();
@@ -454,14 +476,35 @@ window.G = window.G || {};
     useBag(i) {
       const s = this.s, p = s.player, it = p.bag[i];
       if (!it || s.phase === 'battle') return;
-      if (this.mp && (s.roundKind === 'tour' || s.phase === 'duelIntro' || s.phase === 'duelWait')) { s.bagMsg = 'Your gear is locked in for player fights.'; render(); return; }
+      const tourNow = s.roundKind === 'tour' && s.tour && !s.tour.champion;
+      const lock = msg => { s.bagMsg = msg; render(); };
+      // Player fights: use potions before the fight (duel card, tournament breaks), never during it
+      if (this.mp) {
+        if (s.phase === 'duelWait') return lock('Wait for your duel pairing.');
+        if (s.phase === 'duelIntro' && s.duel && s.duel.goSent) return lock('You’ve gone in. The fight is about to start.');
+        if (tourNow && (s.tourPhase === 'fight' || (this.timeLeft() != null && this.timeLeft() < 1))) return lock('Wait for the break between fights.');
+      }
+      const me = tourNow ? s.tour.entrants.find(e => e.hero === p) : null;
+      if (tourNow && (!me || me.out)) return;
       if (it.kind === 'gear' && !G.Hero.canEquip(p, it)) { s.bagMsg = 'You already wear a legendary. Only one at a time.'; render(); return; }
       if (it.kind === 'gear') {
         // Equipping overwrites: what you were wearing is gone for good (no swapping back)
         p.bag.splice(i, 1);
         const old = G.Hero.equip(p, it);
         s.bagMsg = old ? `Equipped ${it.name}. ${old.name} is gone.` : `Equipped ${it.name}.`;
+      } else if (me && G.CONSUMABLES[it.cid].heal) {
+        // In the tournament, healing restores your tournament health
+        const c = G.CONSUMABLES[it.cid];
+        p.bag.splice(i, 1);
+        const a = Math.min(me.maxHp - me.hp, G.Hero.healAmount(p, c.heal));
+        me.hp += a;
+        s.bagMsg = `${c.name}: +${a} health for your next fight.`;
       } else s.bagMsg = G.Dungeon.useItem(p, it);
+      if (me && this.mp) G.MP.sendTourUse(me.hp);
+      if (!this.mp && s.phase === 'duelIntro' && s.duel && s.duel.mine) {
+        const side = s.duel.mine.a.hero === p ? s.duel.mine.a : s.duel.mine.b;
+        if (side && !side.ghost) side.hp = p.hp;   // a potion on the duel card counts
+      }
       if (s.phase === 'doors') for (const d of s.doors) if (d.monster && d.type !== 'wager') d.danger = G.Dungeon.danger(p, d, s.room);   // a wager's odds stay hidden
       render();
     },
@@ -532,13 +575,17 @@ window.G = window.G || {};
       if (!s.duel.mine) { this.nextStep(); return; }
       s.phase = 'duelIntro';
       s.roundKind = 'duel';
-      this.startTimer(8);
+      this.startTimer(CFG().duelIntroSeconds);
       render();
     },
     startDuelFight() {
       const s = this.s, m = s.duel.mine;
       if (!m) return;
-      if (this.mp) { this.mpDuelFight(); return; }
+      if (this.mp) {
+        if (!s.duel.goSent) { s.duel.goSent = true; s.roundEnds = 0; G.MP.sendDuelGo(); }
+        this.mpTryDuelFight();
+        return;
+      }
       // Fight from the player's side so the player is always on the left
       const flip = !m.a.hero.isPlayer;
       const pair = flip ? { a: m.b, b: m.a } : m;
@@ -571,8 +618,14 @@ window.G = window.G || {};
     },
 
     mpDuelFight() {
-      const s = this.s, m = s.duel.mine, mirrored = s.duel.mirrored;
+      const s = this.s;
+      if (s.phase !== 'duelIntro') return;
+      // Rebuild the pairing from the latest heroes: both of you, as you went in
+      s.duel.mine = G.MP.duelPair(s.duel.w);
+      const m = s.duel.mine, mirrored = s.duel.mirrored;
       const res = G.Duel.simulate(m, s.rng);   // the host's seed: both players see the same fight
+      const nmB = m.ghost ? m.b.name : m.b.hero.name;
+      G.MP.sendFight({ title: `Duel: ${m.a.hero.name} vs ${nmB}`, names: { a: m.a.hero.name, b0: nmB }, visual: { a: visualFor(m.a.hero), b0: m.ghost ? { ...visualFor(m.b.of), ghost: true } : visualFor(m.b.hero) } });
       const nameB = m.ghost ? m.b.name : m.b.hero.name, oppName = mirrored ? m.a.hero.name : nameB;
       s.battle = {
         duel: true, res, mirror: mirrored, names: { a: mirrored ? m.a.hero.name : 'You', b0: mirrored ? 'You' : nameB },
@@ -735,11 +788,13 @@ window.G = window.G || {};
         m.bought = [];
         m.msg = 'Fresh stock on the table.';
       } else if (kind === 'blood') {
-        if (p.hp <= S.bloodCost[1] && p.gem !== 'stone') return;
-        if (p.gem === 'stone' && p.hp <= 1) return;
-        const cost = p.gem === 'stone' ? 1 : 2 * s.rng.int(S.bloodCost[0] / 2, S.bloodCost[1] / 2);
-        p.hp -= cost; p.gold += S.bloodGold;
-        m.msg = `The merchant takes ${cost} health and hands you ${S.bloodGold} gold.`;
+        // A gamble: always the same health, a random handful of gold
+        const cost = p.gem === 'stone' ? 1 : S.bloodHealth;
+        if (p.hp <= cost) return;
+        const gold = s.rng.int(S.bloodGold[0], S.bloodGold[1]);
+        p.hp -= cost; p.gold += gold;
+        m.bloodPop = { gold, seq: (m.bloodPop ? m.bloodPop.seq : 0) + 1 };
+        m.msg = `The merchant takes ${cost} health and hands you ${gold} gold.`;
       }
       render();
     },

@@ -626,5 +626,6 @@ window.G = window.G || {};
     };
   }
 
-  G.simulateFight = (a, b, o) => { const r = simulateFight(a, b, o); if (G._fightLog) G._fightLog.push(r.duration); return r; };
+  // _lastArgs: multiplayer sends a fight's exact inputs to spectators, who replay it locally
+  G.simulateFight = (a, b, o) => { G._lastArgs = [a, b, o]; const r = simulateFight(a, b, o); if (G._fightLog) G._fightLog.push(r.duration); return r; };
 })(window.G);

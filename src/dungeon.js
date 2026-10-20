@@ -93,7 +93,7 @@ window.G = window.G || {};
     purify:   { title: 'Purifying Spring', text: () => `Clears all poison and heals ${CFG().poison.purifyHeal}.` },
     shop:     { title: 'Plunder', text: () => 'A shared pile of loot. Free picks for everyone, weakest first.' },
     merchant: { title: 'Merchant', text: () => 'No fight. Spend gold on gear and potions, or sell blood.' },
-    forge:    { title: 'Forge',    text: () => `No fight. Strengthen an item (${CFG().forge.upgradeCost} gold) or add a bonus stat to one (${CFG().forge.affixCost} gold).` },
+    forge:    { title: 'Forge',    text: () => `No fight. Strengthen an item (${CFG().forge.upgradeCost} gold) or add a random affix to one (${CFG().forge.affixCost} gold).` },
     trainer:  { title: 'Trainer',  text: () => `No fight. Gain ${CFG().xp.trainer} XP.` },
     wager:    { title: 'Wager',    text: d => `${monsterName(d.monster, 'fight')}, tougher than usual. No backing out: bet gold, and win to double it.` },
   };

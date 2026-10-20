@@ -57,7 +57,7 @@ G.LEGENDARIES = {
     stats: { dmg: 7, spd: 10, manaGain: 20, spellDmg: 34, startMana: 40, ward: 4 }, fx: { hex: { pct: 10, secs: 4, max: 3 } },
     desc: 'Each Firebolt curses the target: it takes 10% more damage from everything for 4 seconds, stacking 3 times.' },
   inferno: { name: 'Inferno', slot: 'weapon', weaponType: 'staff', cls: 'mage',
-    stats: { dmg: 14, spd: 10 }, fx: { meleeStaff: 1, noSpell: 1, burnHit: { dmg: 6, secs: 3 }, fireRing: { start: 3, closed: 15, dmg: 8 } },
-    desc: 'A melee staff. Hits burn for 6 a second over 3 seconds. From 3 seconds in, fire closes in from both walls (fully closed by 15 seconds); enemies in it burn 8 a second. You’re immune.' },
+    stats: { dmg: 14, spd: 10 }, fx: { meleeStaff: 1, noSpell: 1, burnHit: { dmg: 6, secs: 3 }, fireRing: { start: 1, closed: 13, dmg: 8 } },
+    desc: 'A melee staff. Hits burn for 6 a second over 3 seconds. From 1 second in, fire closes in from both walls (fully closed by 13 seconds); enemies in it burn 8 a second. You’re immune.' },
 };
 G.LEGENDARY_ORDER = Object.keys(G.LEGENDARIES);

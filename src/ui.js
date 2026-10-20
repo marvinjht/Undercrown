@@ -401,8 +401,15 @@ window.G = window.G || {};
   function vitalsRow(p, key, withGold = false) {
     const max = G.Hero.maxHp(p);
     const poison = p.poison ? `<span class="poison" ${tip(`<div class="tt-title">Poison ${p.poison}</div><p>You lose ${p.poison} health at the start of every room. Only an Antidote or a Purifying Spring clears it; campfires don't.</p>`)}>Poison ${p.poison}</span>` : '';
-    return `<div class="vitals">${heartsRow(p.hearts)}<div class="hp-xp">${hpBar(p.hp, max, '', key)}${xpBar(p)}</div>${poison}
+    return `<div class="vitals">${heartsRow(p.hearts)}<div class="hp-xp">${hpBar(p.hp, max, '', key)}${xpBar(p)}</div>${poison}${buffChips(p)}
       ${withGold ? goldChip(p) : ''}</div>`;
+  }
+  // Elixirs waiting for your next fight (or active in this one)
+  function buffChips(p, active) {
+    const b = p.buffs || {};
+    const parts = Object.entries(b).filter(([, v]) => v).map(([k, v]) => k === 'fullMana' ? 'Full mana' : `+${v} ${G.STAT_INFO[k].label}`);
+    if (!parts.length) return '';
+    return `<span class="buff-chip ${active ? 'active' : ''}" ${tip(`<div class="tt-title">${active ? 'Active this fight' : 'Ready for your next fight'}</div><p>${esc(parts.join(', '))}. Elixirs last one fight.</p>`)}>${G.Art.icon('potion_iron')}${esc(parts.join(', '))}</span>`;
   }
   function goldChip(p) {
     return `<div class="gold" ${tip('<div class="tt-title">Gold</div><p>Spend it at Merchants, the Forge and Wagers. Passing at a Plunder also gives gold.</p>')}><span class="coin"></span>${p.gold}</div>`;
@@ -486,6 +493,7 @@ window.G = window.G || {};
       ${b.duel || b.tour ? '<p class="lede">Player fights: every hit deals a quarter damage, and the fight goes to the death. Past one minute, both lose a heart.</p>' : ''}
       <div id="arena-slot" class="arena-slot"></div>
       <div class="battle-bar"><span class="speed-tag" id="speed-tag">1x speed</span><small>Fights speed up to 2x after ${CFG().combat.fastAfter} seconds. The round timer waits for the fight.${b.duel || b.tour ? '' : ` If time runs out (${CFG().combat.maxTime}s), you get half the gold and XP and no items.`}</small></div>
+      ${buffChips(st.player, true) ? `<div class="active-buffs">${buffChips(st.player, true)}</div>` : ''}
       <ol id="battle-log" class="log" aria-live="polite"></ol>
       ${b.duel || b.tour ? '' : relicRow(st.player)}
     </section>`;
@@ -590,8 +598,11 @@ window.G = window.G || {};
         <button data-act="shop-buy" data-kind="cons" data-id="${id}" ${disabled || p.gold < price || full ? 'disabled' : ''}>${disabled ? label || 'Sold out' : full ? 'Bag full' : `${price} gold`}</button></div>`;
     };
     const restockCost = S.restockCosts[m.restocks];
-    const bloodNote = p.gem === 'stone' ? 'Lose 1 health (Heart of Stone)' : `Lose ${S.bloodCost[0]} to ${S.bloodCost[1]} health`;
-    const tooWeak = p.gem === 'stone' ? p.hp <= 1 : p.hp <= S.bloodCost[1];
+    const bloodCost = p.gem === 'stone' ? 1 : S.bloodHealth;
+    const bloodNote = `Lose ${bloodCost} health${p.gem === 'stone' ? ' (Heart of Stone)' : ''}`;
+    const tooWeak = p.hp <= bloodCost;
+    const pop = m.bloodPop && m.bloodPop.seq !== m.bloodShown ? m.bloodPop : null;
+    if (pop) m.bloodShown = pop.seq;
     return `<section class="screen shop">
       <h2>Merchant</h2>
       <p class="lede">A trader with a cart full of gear. You have ${p.gold} gold. Stay as long as the room timer allows, or leave when you're done.</p>
@@ -600,8 +611,8 @@ window.G = window.G || {};
         ${consRow('potion', S.potionCost, `${m.cstock.potion} in stock.`, m.cstock.potion <= 0)}
         ${consRow('antidote', G.CONSUMABLES.antidote.price, `${m.cstock.antidote} in stock.`, m.cstock.antidote <= 0)}
         ${m.buffs.map(id => consRow(id, G.CONSUMABLES[id].price, `${m.cstock[id]} in stock.`, m.cstock[id] <= 0)).join('')}
-        <div class="potion card"><span class="flask blood"></span><div><b>Sell blood</b><small>${bloodNote}, gain ${S.bloodGold} gold.</small></div>
-          <button data-act="shop-buy" data-kind="blood" ${tooWeak ? 'disabled' : ''}>${tooWeak ? 'Too weak' : `Bleed for ${S.bloodGold}`}</button></div>
+        <div class="potion card blood-card"><span class="flask blood"></span><div><b>Sell blood</b><small>${bloodNote} for a random ${S.bloodGold[0]} to ${S.bloodGold[1]} gold.</small></div>
+          <button data-act="shop-buy" data-kind="blood" ${tooWeak ? 'disabled' : ''}>${tooWeak ? 'Too weak' : 'Bleed for gold'}</button>${pop ? `<span class="gold-pop ${pop.gold >= 35 ? 'big' : ''}">+${pop.gold} gold</span>` : ''}</div>
       </div>
       <div class="cards">${stock}</div>
       <div class="row-actions">
@@ -619,10 +630,10 @@ window.G = window.G || {};
       const legend = it.rarity === 'legendary';
       return itemCard(it, p, `<div class="forge-opt"><ul class="forge-preview">${legend ? '<li>Legendary stats are fixed.</li>' : preview}</ul>
           <button data-act="forge" data-kind="strengthen" data-slot="${sl}" ${legend || f.strengthened || p.gold < F.upgradeCost ? 'disabled' : ''}>${legend ? 'Can’t strengthen' : `Strengthen (${F.upgradeCost})`}</button></div>
-        <button class="ghost" data-act="forge" data-kind="affix" data-slot="${sl}" ${it.affixed || f.affixed || p.gold < F.affixCost ? 'disabled' : ''}>${it.affixed ? 'Already forged' : `Add a random bonus stat (${F.affixCost})`}</button>`);
+        <button class="ghost" data-act="forge" data-kind="affix" data-slot="${sl}" ${it.affixed || f.affixed || p.gold < F.affixCost ? 'disabled' : ''}>${it.affixed ? 'Already forged' : `Add a random affix (${F.affixCost})`}</button>`);
     }).join('');
     return `<section class="screen"><h2>Forge</h2>
-      <p class="lede">The smith can strengthen one item (its base stats grow by one tier; the card shows exactly how) and add one random bonus stat to one item. Each piece can only take one added bonus. You have ${p.gold} gold.</p>
+      <p class="lede">The smith can strengthen one item (its base stats grow by one tier; the card shows exactly how) and add one random affix to one item. Each piece can only take one added affix. You have ${p.gold} gold.</p>
       ${f.msg ? `<p class="notice">${esc(f.msg)}</p>` : ''}
       <div class="cards">${cards}</div>
       <div class="row-actions"><button data-act="forge-leave">Leave the forge</button></div></section>`;
@@ -733,8 +744,10 @@ window.G = window.G || {};
       ${rivalBlock(opp)}
       <p class="lede">Everyone still in is paired up. ${opp.ghost ? `You're the odd one out, so you face a ghost: a half-strength copy of ${esc(opp.of.name)}. Losing to it costs no heart.` : `You face <b>${esc(opp.hero.name)}</b>. The loser loses a heart.`} You fight at your current health. The winner's health goes back to what it was; the loser comes back at full. Past one minute, both lose a heart.</p>
       ${others ? `<div class="round"><h4>Other duels</h4><ul>${others}</ul></div>` : ''}
-      <div class="row-actions"><button data-act="duel-go">Fight</button></div>
-      <p class="waiting">Starts in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p></section>`;
+      <p class="hint">You can drink potions and elixirs now, before the fight. Not once it starts.</p>
+      ${d.goSent ? `<p class="waiting">Waiting for ${esc(opp.hero ? opp.hero.name : 'your opponent')} to go in…</p>`
+        : `<div class="row-actions"><button class="enter" data-act="duel-go">Fight</button></div>
+      <p class="waiting">The fight starts in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p>`}</section>`;
   }
 
   // Your next tournament opponent (null when you're not fighting next)
@@ -782,9 +795,59 @@ window.G = window.G || {};
       <div class="row-actions"><button data-act="title">Back to the title</button></div></section>`;
   }
 
+  // ---------- Spectating (multiplayer, once you're out) ----------
+  let specPlaying = false;
+  function spectatePanel(st) {
+    const M = G.MP;
+    const live = M.players.filter(p => !p.bot && p.slot !== M.mySlot && M.heroes[p.slot] && M.heroes[p.slot].alive);
+    if (M.watch != null && !live.some(p => p.slot === M.watch)) M.watch = null;
+    if (M.watch == null && live.length) M.watch = live[0].slot;
+    const tabs = live.map(p => `<button class="${p.slot === M.watch ? '' : 'ghost'}" data-act="spectate" data-slot="${p.slot}">${esc(p.name)}</button>`).join('');
+    if (!live.length) return '<p class="hint">No players left to watch. Bots play their rooms instantly; you’ll see the tournament when it starts.</p>';
+    const f = M.lastFight[M.watch], h = M.heroes[M.watch];
+    return `<div class="spectate"><div class="spec-head"><h3>Watching</h3><div class="spec-tabs">${tabs}</div></div>
+      <p class="spec-status" id="spec-title">${esc(h.name)}: room ${h.room || '?'}${f ? ` · ${esc(f.title)}` : ''} · ${h.hp}/${G.Hero.maxHp(h)} health, ${h.hearts} ${h.hearts === 1 ? 'heart' : 'hearts'}</p>
+      ${f ? '<div id="spec-arena" class="arena-slot"></div><ol id="spec-log" class="log"></ol>' : `<p class="waiting">Waiting for ${esc(h.name)}’s next fight…</p>`}</div>`;
+  }
+  // Tournament: watch any fight of the current round (every screen can replay it from the host's seed)
+  function tourSpectatePanel(st) {
+    const round = G.Tournament.currentRound(st.tour);
+    const ms = round ? round.pairs.filter(p => !p.result) : [];
+    if (!ms.length) return '';
+    const M = G.MP;
+    if (M.tourWatch == null || !ms[M.tourWatch]) M.tourWatch = 0;
+    const tabs = ms.map((p, i) => `<button class="${i === M.tourWatch ? '' : 'ghost'}" data-act="tour-watch" data-i="${i}">${esc(nameOf(p.a))} vs ${esc(nameOf(p.b))}</button>`).join('');
+    return `<div class="spectate"><div class="spec-head"><h3>Watch a fight</h3><div class="spec-tabs">${tabs}</div></div>
+      <div id="spec-arena" class="arena-slot" data-tour="1"></div><ol id="spec-log" class="log"></ol></div>`;
+  }
+  function playTourMatch() {
+    const st = G.Game.s, round = G.Tournament.currentRound(st.tour);
+    const m = round && round.pairs.filter(p => !p.result)[G.MP.tourWatch || 0];
+    if (!m) return;
+    const nmA = m.a.hero.isPlayer ? 'You' : m.a.hero.name, nmB = m.ghost ? m.b.name : m.b.hero.isPlayer ? 'You' : m.b.hero.name;
+    G.Tournament.pvp(m.a, m.b, null, m.seed);
+    playSpectate({ args: G._lastArgs, names: { a: nmA, b0: nmB }, title: `${nmA} vs ${nmB}`, slot: -1,
+      visual: { a: G.visualFor(m.a.hero), b0: m.ghost ? { ...G.visualFor(m.b.of), ghost: true } : G.visualFor(m.b.hero) } });
+  }
+  function playSpectate(m) {
+    const el = document.getElementById('spec-arena');
+    const st = G.Game.s;
+    if (!el || !st || st.phase === 'battle') { if (st && st.phase !== 'battle') render(); return; }
+    const res = G.simulateFight(...m.args);
+    const b = { res, names: m.names };
+    const lines = [];
+    const t = document.getElementById('spec-title'), h = G.MP.heroes[m.slot];
+    if (t && h) t.textContent = `${h.name}: ${m.title}`;
+    specPlaying = true;
+    G.Arena.start(el, { result: res, visual: m.visual, names: m.names, mirror: false,
+      onEvent: e => { const l = logLine(e, b); if (!l) return; lines.push(l); const ol = document.getElementById('spec-log'); if (ol) ol.innerHTML = lines.slice(-5).map(x => `<li>${esc(x)}</li>`).join(''); },
+      onDone: () => { specPlaying = false; } });
+  }
+
   function deadScreen(st) {
     if (G.Game.mp) return `<section class="screen end"><h2>You're out of hearts</h2>
-      <p class="lede">${esc(st.notice || 'The dungeon took your last heart.')} You're spectating now: the players column keeps updating, and you'll see the tournament when it starts.</p>
+      <p class="lede">${esc(st.notice || 'The dungeon took your last heart.')} You can watch the players still in, and you'll see the tournament when it starts.</p>
+      ${spectatePanel(st)}
       <div class="row-actions"><button class="ghost" data-act="mp-leave">Leave the match</button></div></section>`;
     return `<section class="screen end"><h2>You're out of hearts</h2>
       <p class="lede">${esc(st.notice || 'The dungeon took your last heart.')} In a full game you'd be spectating now.</p>
@@ -835,7 +898,8 @@ window.G = window.G || {};
       return `<section class="screen end"><h2>${won ? 'You are the last one standing' : `${esc(T.champion.hero.name)} wins the tournament`}</h2>
         <p class="lede">${T.entrants.length === 1 ? 'Everyone else ran out of hearts in the dungeon.' : won ? 'Thirty rooms, a tournament, and nobody could stop you.' : 'You made it to the end. Next time, the crown.'}</p>
         ${placements(T)}${roundsList(T)}
-        <div class="row-actions"><button data-act="title">Play again</button></div></section>`;
+        <div class="row-actions">${G.Game.mp ? (G.MP.isHost ? '<button class="enter" data-act="mp-rematch">Play again (same room)</button><button class="ghost" data-act="mp-leave">Leave</button>'
+          : '<p class="waiting">The host can start a rematch in this room.</p><button class="ghost" data-act="mp-leave">Leave</button>') : '<button class="enter" data-act="title">Play again</button>'}</div></section>`;
     }
     const m = G.Tournament.nextMatch(T);
     const mine = m && ((m.a.hero && m.a.hero.isPlayer) || (!m.ghost && m.b.hero.isPlayer));
@@ -844,7 +908,7 @@ window.G = window.G || {};
       ${opp ? rivalBlock(opp.ghost ? opp : { hero: opp.hero, hp: opp.hp }) : ''}
       <p class="lede">Last one with hearts wins. Each round everyone is paired up again. Winners keep the health they finish with; losers lose a heart and come back at full health. Fights go to the death; past one minute, both lose a heart.</p>
       ${roundsList(T)}
-      ${st.tourPhase === 'fight' ? '<p class="waiting">Fights in progress…</p>' : `<p class="waiting">${mine ? 'Your fight starts' : 'Next fights start'} in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p>`}</section>`;
+      ${st.tourPhase === 'fight' ? `<p class="waiting">Fights in progress…</p>${G.Game.mp ? tourSpectatePanel(st) : ''}` : `<p class="waiting">${mine ? 'Your fight starts' : 'Next fights start'} in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p>`}</section>`;
   }
 
   function endingScreen(st) {
@@ -868,7 +932,7 @@ window.G = window.G || {};
     const L = M.lobby || { slots: [] };
     const isHost = M.isHost;
     const slots = [];
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 8; i++) {
       const s = L.slots[i];
       slots.push(s ? `<li class="${s.cid === M.cid ? 'me' : ''}"><span class="seat">${i + 1}</span><b>${esc(s.name)}</b>${i === 0 ? '<span class="chip">Host</span>' : ''}${s.cid === M.cid ? '<small>you</small>' : ''}</li>`
         : `<li class="empty"><span class="seat">${i + 1}</span><b>Bot</b><span class="bot-tag">BOT</span><small>fills this seat if nobody joins</small></li>`);
@@ -876,7 +940,7 @@ window.G = window.G || {};
     const link = location.origin && location.origin !== 'null' ? `${location.href.split('#')[0].split('?')[0]}?room=${M.code}${G.Net.mode() === 'local' ? '&net=local' : ''}` : '';
     return `<div class="title-screen lobby">
       <header class="hero-head"><div class="eyebrow">Room code</div><h1 class="room-code">${esc(M.code)}</h1>
-        <p>Share this code with your friends. Up to 6 players; bots fill the empty seats.</p></header>
+        <p>Share this code with your friends. Up to 8 players; bots fill the empty seats.</p></header>
       ${link ? `<div class="row-actions"><button class="ghost" data-act="mp-copy" data-link="${esc(link)}">Copy invite link</button></div>` : ''}
       <ul class="seats">${slots.join('')}</ul>
       <div class="row-actions">${isHost ? '<button class="enter" data-act="mp-start">Start the match</button>' : '<p class="waiting">Waiting for the host to start…</p>'}
@@ -887,7 +951,7 @@ window.G = window.G || {};
 
   function titleScreen() {
     return `<div class="title-screen">
-      <header class="hero-head"><div class="eyebrow">Undercrown v0.2</div><h1>Undercrown</h1>
+      <header class="hero-head"><div class="eyebrow">Undercrown v${G.VERSION}</div><h1>Undercrown</h1>
         <p>Six warriors. Thirty rooms each. Three hearts. Health carries from room to room and healing is limited, so spend it wisely. Build an archetype, fight your rivals along the way, and be the last one standing.</p></header>
       <ul class="rules">
         <li><b>Hearts</b>Dying or losing a duel costs a heart. You come back at full health. Lose all three and you're out.</li>
@@ -907,7 +971,7 @@ window.G = window.G || {};
           <label class="field code"><span>Room code</span><input id="mp-code" maxlength="5" value="${esc(roomFromUrl())}" placeholder="ABCDE" autocapitalize="characters" autocomplete="off"></label>
           <button data-act="mp-join">Join</button>
         </div>
-        <p class="hint">Up to 6 players. Bots fill the empty seats and are labeled BOT.</p>
+        <p class="hint">Up to 8 players. Bots fill the empty seats and are labeled BOT.</p>
       </section>
     </div>`;
   }
@@ -917,7 +981,7 @@ window.G = window.G || {};
   // A light refresh for network updates: never restarts a fight that's playing
   function update() {
     const st = G.Game.s;
-    if (st && st.phase === 'battle') {
+    if (st && (st.phase === 'battle' || (specPlaying && document.getElementById('spec-arena')))) {
       const left = document.querySelector('.cols > aside.left');
       if (left) { left.innerHTML = rivalsPanel(st) + youPanel(st); }
       return;
@@ -952,6 +1016,11 @@ window.G = window.G || {};
     const rOpp = st.phase === 'tournament' ? tourOpponent(st) : st.duel && st.duel.mine ? (st.duel.mine.a.hero && st.duel.mine.a.hero.isPlayer ? st.duel.mine.b : st.duel.mine.a) : null;
     if (rv && rOpp) G.RivalPreview.mount(rv, G.visualFor(rOpp.ghost ? rOpp.of : rOpp.hero));
     else G.RivalPreview.park();
+    // Spectating: replay the watched player's latest fight
+    specPlaying = false;
+    const sa = document.getElementById('spec-arena');
+    if (sa && sa.dataset.tour) playTourMatch();
+    else if (sa && G.MP.watch != null && G.MP.lastFight[G.MP.watch]) playSpectate(G.MP.lastFight[G.MP.watch]);
   }
 
   // Updates only clocks each tick, never the whole screen (a re-render would cut off a running fight)
@@ -1060,6 +1129,9 @@ window.G = window.G || {};
       case 'mp-create': { const n = ($('#mp-name') || {}).value || ''; if (!n.trim()) { toast(el, 'Enter your name first'); break; } G.MP.create(n); break; }
       case 'mp-join': { const n = ($('#mp-name') || {}).value || '', c = ($('#mp-code') || {}).value || ''; if (!n.trim()) { toast(el, 'Enter your name first'); break; } if (!c.trim()) { toast(el, 'Enter the room code'); break; } G.MP.join(c, n); break; }
       case 'mp-start': G.MP.hostStart(); break;
+      case 'mp-rematch': G.MP.hostRematch(); break;
+      case 'spectate': G.MP.watch = +el.dataset.slot; render(); break;
+      case 'tour-watch': G.MP.tourWatch = +el.dataset.i; render(); break;
       case 'mp-leave': G.MP.leave(); Gm.s = null; render(); break;
       case 'mp-copy': { const l = el.dataset.link; try { navigator.clipboard.writeText(l); toast(el, 'Link copied'); } catch (e) { toast(el, l); } break; }
       case 'door': Gm.chooseDoor(+el.dataset.i); break;
@@ -1157,5 +1229,5 @@ window.G = window.G || {};
     setInterval(tickClock, 200);
   }
 
-  G.UI = { render, init, refreshShopPicks, update };
+  G.UI = { render, init, refreshShopPicks, update, playSpectate };
 })(window.G);

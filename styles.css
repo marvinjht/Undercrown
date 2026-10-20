@@ -709,3 +709,19 @@ table.tour { width: 100%; border-collapse: collapse; font-size: 15px; font-varia
 .wait-list li span:last-child { margin-left: auto; font-size: 13px; color: var(--muted); }
 .wait-list li.w-ready span:last-child { color: var(--up); }
 .wait-list li.w-playing span:last-child { color: var(--r-gold); }
+.arena-host { width: 100%; height: 100%; }
+.blood-card { position: relative; }
+.gold-pop { position: absolute; right: 18px; top: -6px; font: 700 18px var(--f-mono); color: var(--r-gold); text-shadow: 0 2px 6px #000; pointer-events: none; animation: goldpop 1.6s ease-out forwards; }
+.gold-pop.big { font-size: 24px; color: #ffe08a; }
+@keyframes goldpop { 0% { opacity: 0; transform: translateY(10px) scale(.8); } 15% { opacity: 1; transform: translateY(0) scale(1.1); } 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-26px) scale(1); } }
+.buff-chip { display: inline-flex; align-items: center; gap: 4px; font: 600 12px var(--f-mono); color: #b8c8ff; border: 1px solid #3c4a7a; background: #1c2133; border-radius: 4px; padding: 3px 6px; cursor: help; white-space: nowrap; }
+.buff-chip .ico { width: 14px; height: 14px; }
+.buff-chip.active { color: #15120f; background: #b8c8ff; border-color: #b8c8ff; }
+.buff-chip.active .ico { color: #15120f; }
+.active-buffs { display: flex; gap: 8px; align-items: center; }
+.spectate { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.spec-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.spec-head h3 { margin: 0; font-size: 18px; }
+.spec-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.spec-tabs button { min-height: 36px; padding: 6px 12px; font-size: 14px; }
+.spec-status { margin: 0; color: var(--muted); font-size: 14px; }

@@ -2,6 +2,8 @@
 // All stats are flat whole numbers. Chance stats (Crit, Dodge, Stun) mean "out of 100".
 window.G = window.G || {};
 
+G.VERSION = '0.21';   // players in one room must all run the same version
+
 G.CONFIG = {
   // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
   rooms: 29,               // dungeon rooms; the tournament is room 30. Room 1 is the Armory.
@@ -14,7 +16,8 @@ G.CONFIG = {
 
   roundSeconds: 45,        // doors, rewards, spec picks... (fights don't count against it)
   tourBreakSeconds: 6,
-  tourIntroExtra: 5,       // extra seconds before the first tournament round
+  tourIntroExtra: 5,
+  duelIntroSeconds: 5,     // the duel card shows this long before the fight starts (or press Fight)       // extra seconds before the first tournament round
   bagSize: 6,
 
   player: { baseHp: 100, baseCrit: 6 },
@@ -53,8 +56,8 @@ G.CONFIG = {
     extraTableItems: 2,                   // free table = players + this
     // Everything below is the merchant door
     potionCost: 30, stock: [1, 3],   // a merchant has 1 to 3 of each potion and elixir
-    gearCount: 4, restockCosts: [25, 50],  // two restocks per visit
-    bloodGold: 10, bloodCost: [6, 20],
+    gearCount: 4, restockCosts: [10, 30],  // two restocks per visit
+    bloodHealth: 10, bloodGold: [5, 50],   // sell blood: lose this much health for a random amount of gold
     itemCost: { grey: 20, green: 44, rare: 90 }, itemCostPerRoom: 2,
   },
 
