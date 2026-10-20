@@ -17,7 +17,7 @@ window.G = window.G || {};
 
   // ---------- Shared set supply ----------
   // Each match has CONFIG.supplyPerClass pieces of every class. A piece is "taken" while a player who still
-  // has hearts wears it or carries it in their bag. Scrapping, replacing, discarding or selling it frees it.
+  // has hearts wears it or carries it in their bag. Replacing or discarding it frees it.
   const Supply = {
     heroes: [],
     reset(heroes) { this.heroes = heroes || []; },

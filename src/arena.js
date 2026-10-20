@@ -119,6 +119,19 @@ window.G = window.G || {};
       this.tweens.add({ targets: p, x: def.cont.x, y: def.cont.y, duration: 160 / this.speed, onComplete: () => p.destroy() });
     }
 
+    // Smoke Bomb: a grey cloud that billows around the fighter and thins out over its duration
+    smoke(f, dur) {
+      const life = dur * 1000 / this.speed;
+      for (let i = 0; i < 9; i++) {
+        const ang = (i / 9) * Math.PI * 2, r = 14 + (i % 3) * 8;
+        const c = this.add.circle(Math.cos(ang) * r, 4 + Math.sin(ang) * r * 0.7, 16 + (i % 3) * 5, i % 2 ? 0x8a8794 : 0xb6b3bd, 1).setAlpha(0);
+        f.cont.add(c);
+        this.tweens.add({ targets: c, alpha: 0.45, scale: 1.35, duration: 180 / this.speed, ease: 'Quad.easeOut' });
+        this.tweens.add({ targets: c, alpha: 0, scale: 1.9, x: c.x * 1.8, y: c.y - 14, delay: 180 / this.speed, duration: life - 180 / this.speed, ease: 'Sine.easeIn', onComplete: () => c.destroy() });
+      }
+      this.float(f, 'SMOKE BOMB', '#c9c6d2', 12);
+    }
+
     flash(f) {
       f.body.setTintFill(0xffffff);
       this.time.delayedCall(70 / this.speed, () => {
@@ -171,7 +184,8 @@ window.G = window.G || {};
         case 'parry': if (def) this.float(def, 'PARRY', '#9fe3ff', 15); break;
         case 'heal': if (att) this.float(att, '+' + e.amount, '#7be07b', 14, -20 * att.dir); break;
         case 'bleed': if (def) this.float(def, String(e.amount), '#d0473a', 12, 18); break;
-        case 'stun': if (def) this.float(def, 'STUNNED', '#ffd34d', 13); break;
+        case 'stun': if (def) this.float(def, e.secs > 1 ? 'STUNNED ' + e.secs + 's' : 'STUNNED', '#ffd34d', e.secs > 1 ? 15 : 13); break;
+        case 'smoke': if (att) this.smoke(att, e.dur || 2); break;
         case 'double': if (att) this.float(att, 'DOUBLE SHOT', '#8fcf78', 12); break;
         case 'steal': if (att) this.float(att, `-${e.amount}g`, '#f2c14a', 13); break;
         case 'cheap_ready': break;
@@ -222,7 +236,7 @@ window.G = window.G || {};
         case 'dodge': S.play('dodge'); break;
         case 'parry': S.play('parry'); break;
         case 'stun': S.play('stun'); break;
-        case 'stealth_on': S.play('stealth'); break;
+        case 'stealth_on': case 'smoke': S.play('stealth'); break;
         case 'double': S.play('double'); break;
         case 'kite': S.play('kite'); break;
         case 'burst': S.play('explode'); break;
@@ -280,8 +294,9 @@ window.G = window.G || {};
       G.Art.makeTextures(this);
       this.add.ellipse(PW / 2, PH / 2 + 34, 120, 26, 0x000000, 0.35);
       this.holder = null;
-      G.Preview._scene = this;
-      if (G.Preview._vis) this.draw(G.Preview._vis);
+      const owner = this.game.__owner;
+      owner._scene = this;
+      if (owner._vis) this.draw(owner._vis);
     }
     draw(vis) {
       if (this.holder) this.holder.destroy();
@@ -302,23 +317,29 @@ window.G = window.G || {};
       this.tweens.add({ targets: this.holder, y: PH / 2 - 4, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
   }
-  G.Preview = {
-    game: null, _scene: null, _vis: null,
-    mount(el, vis) {
-      this._vis = vis;
-      if (!this.game) {
-        this.game = new Phaser.Game({ type: Phaser.WEBGL, parent: el, width: PW, height: PH, transparent: true,
-          scale: { mode: Phaser.Scale.NONE }, scene: [PreviewScene], banner: false, audio: { noAudio: true } });
-        return;
-      }
-      if (this.game.canvas && this.game.canvas.parentNode !== el) el.appendChild(this.game.canvas);
-      if (this._scene) this._scene.draw(vis);
-    },
-    // Keep the canvas out of the page when no preview slot is showing
-    park() {
-      if (this.game && this.game.canvas && this.game.canvas.parentNode) this.game.canvas.parentNode.removeChild(this.game.canvas);
-    },
-  };
+  // Each preview is its own small canvas game: one for you, one for the rival on the duel screen
+  function makePreview() {
+    return {
+      game: null, _scene: null, _vis: null,
+      mount(el, vis) {
+        this._vis = vis;
+        if (!this.game) {
+          this.game = new Phaser.Game({ type: Phaser.WEBGL, parent: el, width: PW, height: PH, transparent: true,
+            scale: { mode: Phaser.Scale.NONE }, scene: [PreviewScene], banner: false, audio: { noAudio: true } });
+          this.game.__owner = this;
+          return;
+        }
+        if (this.game.canvas && this.game.canvas.parentNode !== el) el.appendChild(this.game.canvas);
+        if (this._scene) this._scene.draw(vis);
+      },
+      // Keep the canvas out of the page when no preview slot is showing
+      park() {
+        if (this.game && this.game.canvas && this.game.canvas.parentNode) this.game.canvas.parentNode.removeChild(this.game.canvas);
+      },
+    };
+  }
+  G.Preview = makePreview();
+  G.RivalPreview = makePreview();
 
   // A fresh Phaser game is built for every fight and thrown away after it.
   G.Arena = {

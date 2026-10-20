@@ -554,3 +554,58 @@ table.tour { width: 100%; border-collapse: collapse; font-size: 15px; font-varia
 .b-match.won { border-color: #7a5c1c; }
 
 .b-col { flex-basis: 184px; }
+
+/* ---------- v6: set bonuses under stats, set guide, hold to equip, duel opponent ---------- */
+.charblock .pv-right { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.charblock .pv-info { display: flex; flex-direction: column; gap: 2px; }
+.setbonus { border-top: 1px solid rgba(61, 50, 42, .7); padding-top: 6px; margin-top: 6px; }
+.charblock .setbonus { margin-top: 0; }
+.sb-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sb-head h4 { font: 600 11px var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.qmark { min-height: 0; width: 26px; height: 26px; padding: 0; border-radius: 50%; font: 700 14px var(--f-body); background: var(--bg); border: 1px solid var(--line); color: var(--r-gold); }
+.qmark:hover { border-color: var(--r-gold); }
+.setbonus .sets { margin-top: 4px; gap: 2px; }
+.setbonus .sets li { grid-template-columns: auto auto 1fr; gap: 8px; padding: 2px 0; font-size: 14px; }
+.setbonus .sets li small { text-align: right; font-size: 12px; }
+.setbonus .sets li.on small { color: var(--text); }
+.setbonus .sets li:not(.on) { opacity: .75; }
+.set-name.hy { color: var(--r-gold); }
+.setbonus .hint { margin: 4px 0 0; font-size: 13px; }
+.tier { margin: 6px 0 0; }
+.tier.off { color: #75695d; }
+.tier.off b { color: #8a7d70; }
+.tier.on { color: var(--text); }
+.tier.on b { color: var(--r-gold); }
+.tier-tag { font: 600 10px var(--f-mono); text-transform: uppercase; letter-spacing: .06em; color: #15120f; background: var(--r-gold); padding: 1px 5px; border-radius: 3px; margin-left: 4px; vertical-align: 1px; }
+
+.sg-back { position: fixed; inset: 0; z-index: 60; background: rgba(8, 6, 5, .72); display: grid; place-items: center; padding: 16px; overflow: auto; }
+.sg-card { width: min(920px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+.sg-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.sg-top h3 { margin: 0; font-family: var(--f-display); font-weight: 500; font-size: 28px; }
+.sg-card .lede { margin: 8px 0 12px; font-size: 15px; }
+.sg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+.sg-class { background: var(--bg-3); border: 1px solid var(--line); border-top: 3px solid var(--set); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+.sg-class h4 { margin: 0; color: var(--set); font-size: 17px; }
+.sg-h { margin: 16px 0 6px; font-size: 17px; }
+.sg-hy { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 6px 14px; font-size: 14px; }
+.sg-hy li { margin: 0; padding: 6px 10px; background: var(--bg-3); border-radius: 6px; }
+
+.hold { position: relative; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: none; }
+.hold .hold-fill { position: absolute; inset: 0; width: 0; background: rgba(232, 144, 63, .45); pointer-events: none; }
+.hold.holding .hold-fill { width: 100%; transition: width var(--hold, 800ms) linear; }
+.hold .hold-label { position: relative; }
+.hold-note { font-size: 11px; text-align: center; line-height: 1.2; }
+
+.rival-block { border-left-color: var(--pv); }
+.vs-tag { position: absolute; font: 600 10px var(--f-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--down); }
+.rival-block .pv-left { position: relative; padding-top: 12px; }
+.rival-block .pv-left .vs-tag { top: 0; left: 0; }
+.rival-block.ghosted .preview-slot { opacity: .5; }
+.rival-block .hearts { margin: 2px 0; }
+.supply-panel { padding: 10px 14px; } .supply-panel .supply { margin-top: 0; padding-top: 0; border-top: 0; }
+/* Phones: room track gets its own full row so the pips don't stack into a column */
+@media (max-width: 640px) {
+  .top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; }
+  .top .track { flex: 1 1 100%; order: -1; }
+  .top .vitals { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; }
+}

@@ -48,7 +48,7 @@ G.EFFECTS = {
   primed:   { name: 'Primed',       classes: ['mage'],               fx: { openingSpell: 1 },   desc: 'Your first spell each fight goes off at the start' },
   concuss:  { name: 'Concussive',   classes: ['warrior', 'paladin'], general: true, fx: { fourthStun: 4 }, desc: 'Every 4th hit stuns' },
   counter:  { name: 'Counterpoise', classes: ['rogue', 'archer'],    general: true, fx: { afterDodge: 8 }, desc: 'After you dodge, your next hit deals +8' },
-  bastion:  { name: 'Bastion',      classes: ['paladin', 'warrior'], general: true, fx: { shieldSpd: 2 },  desc: 'While your Shield holds, +2 Speed' },
+  bastion:  { name: 'Bastion',      classes: ['paladin', 'warrior'], general: true, fx: { shieldSpd: 2 },  desc: 'While your Shield holds, +2 Attack Speed' },
 };
 G.EFFECT_ORDER = Object.keys(G.EFFECTS);
 
@@ -62,20 +62,20 @@ G.RARITY_ORDER = ['grey', 'green', 'rare'];
 
 // growth: 'flat' grows fast with tier, 'chance' grows slowly, 'fixed' never changes
 G.STAT_INFO = {
-  dmg:       { label: 'Damage',      growth: 'flat',   desc: 'Damage dealt by each hit, before the enemy’s Armor or Ward.' },
-  spd:       { label: 'Speed',       growth: 'chance', desc: 'Attacks per 10 seconds. Speed 10 = one attack a second.' },
+  dmg:       { label: 'Damage',      growth: 'flat',   desc: 'Damage dealt by each hit, before the enemy’s Armor or Magic Resist.' },
+  spd:       { label: 'Attack Speed',       growth: 'chance', desc: 'Attacks per 10 seconds. Attack Speed 10 = one attack a second.' },
   hp:        { label: 'Health',      growth: 'flat',   desc: 'More max health. Health does not refill between rooms.' },
   armor:     { label: 'Armor',       growth: 'flat',   desc: 'Every physical hit you take is reduced by this much (a hit always does at least 2).' },
-  ward:      { label: 'Ward',        growth: 'flat',   desc: 'Every magic hit you take (spells, wands, holy damage) is reduced by this much.' },
+  ward:      { label: 'Magic Resist',        growth: 'flat',   desc: 'Every magic hit you take (spells, wands, holy damage) is reduced by this much.' },
   shield:    { label: 'Shield',      growth: 'flat',   desc: 'Soaks up this much damage at the start of every fight.' },
   crit:      { label: 'Crit',        growth: 'chance', desc: 'Out of 100 hits, how many are crits. Crits deal double damage.' },
   critDmg:   { label: 'Crit Damage', growth: 'flat',   desc: 'Extra damage added to every crit.' },
   dodge:     { label: 'Dodge',       growth: 'chance', desc: 'Out of 100 attacks, how many miss you. Max 30.' },
   leech:     { label: 'Life on Hit', growth: 'chance', desc: 'Heal this much every time you hit. The healing stays after the fight.' },
-  holy:      { label: 'Holy',        growth: 'flat',   desc: 'Extra magic damage added to every hit. Gets past Armor; Ward blocks it.' },
+  holy:      { label: 'Holy',        growth: 'flat',   desc: 'Extra magic damage added to every hit. Gets past Armor; Magic Resist blocks it.' },
   pierce:    { label: 'Pierce',      growth: 'chance', desc: 'Your physical hits ignore this much of the target’s Armor.' },
   bleed:     { label: 'Bleed',       growth: 'flat',   desc: 'Each hit makes the target take this much damage a second for 3 seconds.' },
-  stun:      { label: 'Stun',        growth: 'chance', desc: 'Out of 100 hits, how many stun the target for 1 second.' },
+  stun:      { label: 'Stun',        growth: 'chance', desc: 'Out of 100 hits, how many stun the target for 1 second (2 seconds if the hit was critical).' },
   manaGain:  { label: 'Mana per attack', growth: 'fixed', desc: 'Mana gained each attack. At 100 mana you cast your spell.' },
   spellDmg:  { label: 'Spell Damage', growth: 'flat',  desc: 'Magic damage your spell deals.' },
   startMana: { label: 'Starting Mana', growth: 'fixed', desc: 'Mana you start every fight with.' },

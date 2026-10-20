@@ -30,13 +30,13 @@ G.CONFIG = {
   shrineCost: 16,          // mystery: blood shrine
   arenaHealPct: 0.30,      // heal walking into the tournament (shown as a number)
 
-  poison: { venomStacks: 3, purifyHeal: 10 },
+  poison: { venomStacks: 10, purifyHeal: 10 },
 
   phoenix: { burst: 50, burn: 10, burnSeconds: 5, selfBurn: 1, standUp: 10 },
   stoneHp: 25,
-  stoneCrack: 5,           // Heart of Stone: each hit deals 1 more than the last, up to this
+  stoneCrack: 3,           // Heart of Stone: each hit deals 1 more than the last, up to this
   gaiaShield: 100,
-  vultureHeal: 30,
+  vultureHeal: 30,         // Vulture's Heart: heal this much and gain this much max health whenever a rival loses a heart
 
   // PvP (duels and the tournament): every hit deals half damage so fights last longer
   arena: { damageMult: 0.25, maxTime: 60 },   // past 60 seconds, both players lose a heart
@@ -56,7 +56,6 @@ G.CONFIG = {
     bloodGold: 10, bloodCost: [6, 20],
     itemCost: { grey: 20, green: 44, rare: 90 }, itemCostPerRoom: 2,
   },
-  salvage: { grey: 2, green: 8, rare: 20 },
 
   // Door weights (out of the total). Trash Pile replaces Treasure; the Vault is rare.
   doorWeights: { fight: 46, elite: 16, trash: 8, vault: 4, rest: 10, mystery: 7, venom: 5, purify: 5, forge: 7, trainer: 7, wager: 6 },
@@ -116,6 +115,7 @@ G.CONFIG = {
     berserkCap: 20,
     manaMax: 100,
     minSpd: 4,
+    critStun: 2,          // a stun from a critical hit lasts this many seconds (normal stuns last 1)
     stunImmune: 3,        // after being stunned, you can't be stunned again for this many seconds
   },
 };

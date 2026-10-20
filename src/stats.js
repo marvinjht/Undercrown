@@ -246,6 +246,15 @@ window.G = window.G || {};
       hero.hp = Math.min(max, hero.hp + a);
       return hero.hp - before;
     },
+    // Vulture's Heart: a rival lost a heart. Gain max health and heal the same amount (not reduced).
+    vultureFeed(hero, times = 1) {
+      const n = C().vultureHeal * times;
+      hero.bonus = hero.bonus || {};
+      hero.bonus.hp = (hero.bonus.hp || 0) + n;
+      const max = compute(hero).maxHp, before = hero.hp;
+      hero.hp = Math.min(max, hero.hp + n);
+      return hero.hp - before;
+    },
     maxHp(hero) { return compute(hero).maxHp; },
     power(hero) { return power(compute(hero)); },
     powerWith(hero, item) {
@@ -256,6 +265,17 @@ window.G = window.G || {};
       return p;
     },
     bagFull(hero) { return hero.bag.length >= C().bagSize; },
+    // New loot: gear goes straight onto an empty slot; otherwise (or for consumables) into the bag.
+    // Returns 'equipped', 'bag', or null when the bag is full.
+    canReceive(hero, item) { return (item.kind === 'gear' && !hero.gear[item.slot]) || !this.bagFull(hero); },
+    receive(hero, item) {
+      if (item.kind === 'gear' && !hero.gear[item.slot]) { this.equip(hero, item); return 'equipped'; }
+      if (this.bagFull(hero)) return null;
+      hero.bag.push(item); return 'bag';
+    },
+    receivedText(item, where) {
+      return where === 'equipped' ? `You equipped the ${item.name}.` : `${item.name} went into your bag.${item.kind === 'gear' ? ' Click it in your bag and hold Equip to swap it in.' : ''}`;
+    },
 
     // ---------- Levels ----------
     xpToNext(level) { return C().levels.xpBase + level; },

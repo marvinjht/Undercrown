@@ -197,11 +197,16 @@ window.G = window.G || {};
     }
   }
 
-  // Vulture's Heart heals whenever a rival loses a heart
+  // Vulture's Heart grows and heals whenever a rival loses a heart
   function vultureFeed(T, victim) {
     for (const e of alive(T)) {
       if (e.hero === victim || e.hero.gem !== 'vulture') continue;
-      e.hp = Math.min(e.maxHp, e.hp + CFG().vultureHeal);
+      // +max health and a heal of the same amount; the entrant tracks both
+      const n = CFG().vultureHeal;
+      e.hero.bonus = e.hero.bonus || {};
+      e.hero.bonus.hp = (e.hero.bonus.hp || 0) + n;
+      e.maxHp += n;
+      e.hp = Math.min(e.maxHp, e.hp + n);
     }
   }
 

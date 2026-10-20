@@ -4,7 +4,7 @@
 //
 // Rules (all flat numbers):
 //  Sides start CONFIG.combat.startGap steps apart. Out of range = walk in at moveSpeed steps/second.
-//  Physical hits lose Armor (minus Pierce), magic hits lose Ward; never below minHit. Holy = extra magic.
+//  Physical hits lose Armor (minus Pierce), magic hits lose Magic Resist; never below minHit. Holy = extra magic.
 //  Crit: double damage plus Crit Damage. Shield soaks damage first. Mana fills per attack; at 100, cast.
 window.G = window.G || {};
 
@@ -33,7 +33,7 @@ window.G = window.G || {};
         shield: s.shield || 0, mana: Math.min(CB.manaMax, s.startMana || 0), alive: true,
         nextAtk: 0.3 + rng.range(0, 0.4) * 10 / s.spd, atkCount: 0, hitsLanded: 0, incoming: 0,
         invis: !!(s.fx && s.fx.openInvis), invisUntil: s.fx && s.fx.openInvis ? s.fx.openInvis : -1,
-        nextCheap: s.spec === 'shadow' ? 2 : Infinity, cheapShot: false, smokeUntil: -1, stunImmuneUntil: -1, crack: 0,
+        nextCheap: s.spec === 'shadow' ? 2 : Infinity, cheapShot: false, smokeUntil: -1, stunImmuneUntil: -1, crack: {},
         bleed: 0, bleedUntil: -1, nextBleed: Infinity,
         firstCrits: Math.max((s.fx && s.fx.firstCrits) || 0, 0), dmgBonus: 0, hurtBonus: 0, nextHitBonus: 0,
         swUsed: false, reviveAvail: !!spec.revive, vanishUsed: false,
@@ -89,8 +89,8 @@ window.G = window.G || {};
           def.shield -= used; absorbed = Math.ceil(used / 2); amt -= absorbed;
         } else { absorbed = Math.min(def.shield, amt); def.shield -= absorbed; amt -= absorbed; }
       }
-      // Heart of Stone: each hit to health deals 1 more than the last, up to the cap
-      if (amt > 0 && def.s.gem === 'stone') { def.crack = Math.min(G.CONFIG.stoneCrack, def.crack + 1); amt = def.crack; }
+      // Heart of Stone: each attacker's hits to health deal 1 more than that attacker's last, up to the cap
+      if (amt > 0 && def.s.gem === 'stone') { const k = att ? att.id : '_'; def.crack[k] = Math.min(G.CONFIG.stoneCrack, (def.crack[k] || 0) + 1); amt = def.crack[k]; }
       def.hp -= amt;
       // Berserker: Undying Rage keeps you at 1 for a few seconds
       if (def.hp <= 0 && def.undyingUntil >= t) def.hp = 1;
@@ -181,7 +181,7 @@ window.G = window.G || {};
       if (!def.alive || (def.s.fx && def.s.fx.stunImmune) || t < def.stunImmuneUntil) return;
       def.nextAtk = Math.max(def.nextAtk, t + secs);
       def.stunImmuneUntil = t + secs + CB.stunImmune;
-      push({ type: 'stun', src: att.id, tgt: def.id });
+      push({ type: 'stun', src: att.id, tgt: def.id, secs });
     }
 
     function cast(f) {
@@ -243,7 +243,7 @@ window.G = window.G || {};
         }
       }
       let crit = false, ambush = false;
-      if (att.cheapShot) { crit = true; att.cheapShot = false; ambush = true; if (fx.smokeDodge) att.smokeUntil = t + 2; }
+      if (att.cheapShot) { crit = true; att.cheapShot = false; ambush = true; if (fx.smokeDodge) { att.smokeUntil = t + 2; push({ type: 'smoke', src: att.id, dur: 2 }); } }
       else if (att.firstCrits > 0) { crit = true; att.firstCrits--; }
       else if (counter && fx.counterCrit) crit = true;
       else crit = roll(att.s.crit);
@@ -291,7 +291,7 @@ window.G = window.G || {};
       afterDamage(def, att);
       if (def.alive) {
         applyBleed(def, Math.max(att.s.bleed || 0, crit && fx.critBleed ? fx.critBleed : 0, ambush ? (fx.cheapBleed || SH.bleed) : 0), att);
-        if (roll(att.s.stun) || (fx.fourthStun && att.hitsLanded % fx.fourthStun === 0)) stun(att, def, 1);
+        if (roll(att.s.stun) || (fx.fourthStun && att.hitsLanded % fx.fourthStun === 0)) stun(att, def, crit ? CB.critStun : 1);   // a crit stun lasts longer
       }
       return r.dealt;
     }

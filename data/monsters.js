@@ -33,7 +33,7 @@ G.BOSSES = {
 // Elite traits: every elite rolls one, shown on its door. Each punishes a one-note build.
 G.ELITE_TRAITS = {
   ironclad:      { name: 'Ironclad',      stats: { armor: 12 }, desc: '+12 Armor. Bring magic, holy or Pierce.' },
-  spellward:     { name: 'Spellward',     stats: { ward: 12 },  desc: '+12 Ward. Bring physical damage.' },
+  spellward:     { name: 'Spellward',     stats: { ward: 12 },  desc: '+12 Magic Resist. Bring physical damage.' },
   swarm:         { name: 'Swarm',         extra: 2,             desc: 'Comes with 2 extra weak copies. Cleave, area spells and fast attacks help.' },
   evasive:       { name: 'Evasive',       stats: { dodge: 20 }, desc: '+20 Dodge. Fast attacks and Crit help.' },
   thorns:        { name: 'Thorns',        thorns: 3,            desc: 'Every hit it takes deals 3 back. Slow heavy hits and Life on Hit help.' },

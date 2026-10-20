@@ -61,8 +61,8 @@ window.G = window.G || {};
         if (lost <= 0) continue;
         for (const v of this.all()) {
           if (v === h || !v.alive || v.gem !== 'vulture') continue;
-          const got = G.Hero.heal(v, CFG().vultureHeal * lost);
-          if (v.isPlayer && got) say(s, `${h.name} lost a heart. Vulture’s Heart heals you ${got}.`);
+          const got = G.Hero.vultureFeed(v, lost);
+          if (v.isPlayer) say(s, `${h.name} lost a heart. Vulture’s Heart: +${CFG().vultureHeal * lost} max health${got ? `, healed ${got}` : ''}.`);
         }
       }
     },
@@ -87,7 +87,7 @@ window.G = window.G || {};
       if (kind === 'duel') { s.roundKind = 'after'; s.rivalsPlayedRoom = s.room; s.gemDone = true; this.startDuels(); return; }
       if (kind === 'merchant') { s.merchant = G.Dungeon.merchantStock(p, s.room, s.rng); s.phase = 'merchant'; this.startTimer(CFG().roundSeconds); render(); return; }
       s.doors = G.Dungeon.makeDoors(p, s.room, s.rng);
-      for (const d of s.doors) if (d.monster) d.danger = G.Dungeon.danger(p, d, s.room);
+      for (const d of s.doors) if (d.monster && d.type !== 'wager') d.danger = G.Dungeon.danger(p, d, s.room);   // a wager's odds stay hidden
       s.phase = 'doors';
       this.startTimer(CFG().roundSeconds);
       render();
@@ -117,7 +117,7 @@ window.G = window.G || {};
         case 'mystery':
           if (s.mystery.id === 'ambush') { this.startBattle({ type: 'fight', monster: G.Dungeon.monsterFor(s.room, 'fight', s.rng) }, 'fight'); return; }
           break;
-        case 'wager': auto = 'Time ran out. You walked away from the wager.'; break;
+        case 'wager': { const B = CFG().wager.bets.filter(b => p.gold >= b); s.wagerBet = B[0] || 0; s.notice = s.wagerBet ? `Time ran out. You bet ${s.wagerBet} gold.` : 'Time ran out. You fight with nothing on the line.'; this.startBattle(s.door, 'wager'); return; }
         case 'merchant': auto = 'Time ran out, so you left the merchant.'; break;
         case 'forge': auto = 'Time ran out, so you left the forge.'; break;
         case 'spec': { const id = G.AI.autoSpec(p, s.specOptions); s.notice = `Time ran out. You became a ${G.SPECS[id].name}.`; this.nextStep(); return; }
@@ -285,20 +285,20 @@ window.G = window.G || {};
       if (!silent) render();
     },
 
-    // Everything you take goes into your bag first; equip it from there
+    // Gear for an empty slot is equipped right away; anything else goes into your bag
     takeItem(id) {
       const s = this.s, p = s.player;
       const it = s.offer.items.find(x => x.id === id);
       if (!it) return;
-      if (G.Hero.bagFull(p)) { s.bagMsg = 'Your bag is full. Equip or discard something to make space, or this item is lost.'; render(); return; }
-      p.bag.push(it);
-      this.completeRoom(`${it.name} went into your bag.${it.kind === 'gear' ? ' Click it there to equip it.' : ''}`);
+      const where = G.Hero.receive(p, it);
+      if (!where) { s.bagMsg = 'Your bag is full. Equip or discard something to make space, or this item is lost.'; render(); return; }
+      this.completeRoom(G.Hero.receivedText(it, where));
     },
-    // When time runs out: the best item goes into your bag if there's room, otherwise the gold
+    // When time runs out: the best item is taken if there's room, otherwise the gold
     autoTakeToBag(items, gold) {
       const p = this.s.player;
       const up = G.AI.bestUpgrade(p, items) || items.find(it => it.kind === 'consumable');
-      if (up && !G.Hero.bagFull(p)) { p.bag.push(up); return `${up.name} went into your bag.`; }
+      if (up && G.Hero.canReceive(p, up)) return G.Hero.receivedText(up, G.Hero.receive(p, up));
       if (gold) { p.gold += gold; return `You took ${gold} gold.`; }
       return up ? 'Your bag was full, so the item was lost.' : 'You took nothing.';
     },
@@ -318,8 +318,9 @@ window.G = window.G || {};
     // ---------- Wager ----------
     placeBet(amount) {
       const s = this.s, p = s.player;
+      // No walking away: you bet what you can, or fight for nothing if you can't afford the smallest bet
       if (s.phase !== 'wager' || (amount && p.gold < amount)) return;
-      if (!amount) { this.completeRoom('You walked away from the wager.'); return; }
+      if (!amount && p.gold >= CFG().wager.bets[0]) return;
       s.wagerBet = amount;
       this.startBattle(s.door, 'wager');
     },
@@ -346,21 +347,19 @@ window.G = window.G || {};
       const s = this.s, p = s.player, it = p.bag[i];
       if (!it || s.phase === 'battle') return;
       if (it.kind === 'gear') {
-        // Equipping swaps: what you were wearing goes into the bag in its place
+        // Equipping overwrites: what you were wearing is gone for good (no swapping back)
         p.bag.splice(i, 1);
         const old = G.Hero.equip(p, it);
-        if (old) p.bag.splice(i, 0, old);
-        s.bagMsg = old ? `Equipped ${it.name}. ${old.name} went into your bag.` : `Equipped ${it.name}.`;
+        s.bagMsg = old ? `Equipped ${it.name}. ${old.name} is gone.` : `Equipped ${it.name}.`;
       } else s.bagMsg = G.Dungeon.useItem(p, it);
-      if (s.phase === 'doors') for (const d of s.doors) if (d.monster) d.danger = G.Dungeon.danger(p, d, s.room);
+      if (s.phase === 'doors') for (const d of s.doors) if (d.monster && d.type !== 'wager') d.danger = G.Dungeon.danger(p, d, s.room);   // a wager's odds stay hidden
       render();
     },
     discardBag(i) {
       const s = this.s, p = s.player, it = p.bag[i];
       if (!it || s.phase === 'battle') return;
       p.bag.splice(i, 1);
-      if (it.kind === 'gear') { const g = CFG().salvage[it.rarity]; p.gold += g; s.bagMsg = `Scrapped ${it.name} for ${g} gold.`; }
-      else s.bagMsg = `Discarded ${it.name}.`;
+      s.bagMsg = `Discarded ${it.name}.`;
       render();
     },
 
@@ -526,11 +525,10 @@ window.G = window.G || {};
       if (!h || !h.isPlayer) return;
       const it = sh.table.find(x => x.id === id);
       if (!it) return;
-      if (G.Hero.bagFull(s.player)) return;
+      if (!G.Hero.canReceive(s.player, it)) return;
       sh.table = sh.table.filter(x => x !== it);
-      s.player.bag.push(it);
+      sh.msg = G.Hero.receivedText(it, G.Hero.receive(s.player, it));
       sh.picks[h.id] = it.name; sh.turn++; sh.turnStart = Date.now();
-      sh.msg = `${it.name} went into your bag.`;
       this.shopAfterPick(true);
     },
     playerShopPass() {
@@ -569,12 +567,12 @@ window.G = window.G || {};
         const it = m.stock.find(x => x.id === id);
         const price = it && G.Dungeon.merchantPrice(p, m, it);
         if (!it || m.bought.includes(id) || p.gold < price) return;
-        if (G.Hero.bagFull(p)) { m.msg = 'Your bag is full. Equip or discard something first.'; render(); return; }
+        if (!G.Hero.canReceive(p, it)) { m.msg = 'Your bag is full. Equip or discard something first.'; render(); return; }
         p.gold -= price;
         if (price === 0) m.freeUsed = true;
-        p.bag.push(it);
+        const where = G.Hero.receive(p, it);
         m.bought.push(id);
-        m.msg = price === 0 ? `Haggled ${it.name} for free. It's in your bag.` : `Bought ${it.name}. It's in your bag.`;
+        m.msg = `${price === 0 ? 'Haggled for free.' : 'Bought.'} ${G.Hero.receivedText(it, where)}`;
       } else if (kind === 'cons') {
         const c = G.CONSUMABLES[id];
         const price = id === 'potion' ? S.potionCost : c.price;

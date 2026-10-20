@@ -7,9 +7,9 @@ G.CONSUMABLES = {
   greater: { name: 'Greater Health Potion', heal: 60,  price: 54, weight: 12, minRoom: 15, desc: 'Heal 60.' },
   antidote:{ name: 'Antidote',              cure: true, price: 20, weight: 18, desc: 'Clear all poison.' },
   iron:    { name: 'Elixir of Iron',        buff: { armor: 6 }, price: 24, weight: 9, desc: '+6 Armor next fight.' },
-  salve:   { name: 'Ward Salve',            buff: { ward: 6 },  price: 24, weight: 9, desc: '+6 Ward next fight.' },
+  salve:   { name: 'Ward Salve',            buff: { ward: 6 },  price: 24, weight: 9, desc: '+6 Magic Resist next fight.' },
   fury:    { name: 'Elixir of Fury',        buff: { dmg: 6 },   price: 24, weight: 9, desc: '+6 Damage next fight.' },
-  tonic:   { name: 'Swift Tonic',           buff: { spd: 4 },   price: 24, weight: 9, desc: '+4 Speed next fight.' },
+  tonic:   { name: 'Swift Tonic',           buff: { spd: 4 },   price: 24, weight: 9, desc: '+4 Attack Speed next fight.' },
   draught: { name: 'Arcane Draught',        buff: { fullMana: 1 }, price: 24, weight: 6, desc: 'Start next fight at full mana (needs a spell).' },
 };
 G.BUFF_IDS = ['iron', 'salve', 'fury', 'tonic', 'draught'];

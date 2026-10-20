@@ -9,7 +9,7 @@ G.GEMS = {
   },
   stone: {
     name: 'Heart of Stone', color: '#a8a39a',
-    up: 'Every hit you take deals exactly 1, including bleed and poison.',
+    up: 'Each enemy’s hits on your health deal 1, then 2, then 3 (never more). Every attacker counts up separately.',
     cost: 'Max Health becomes 25 (gear Health ignored). Every heal restores exactly 1. Shields still take full hits.',
   },
   pure: {
@@ -19,7 +19,7 @@ G.GEMS = {
   },
   vulture: {
     name: 'Vulture’s Heart', color: '#b58a5a',
-    up: 'Heal 30 whenever a rival loses a heart.',
+    up: 'Whenever a rival loses a heart: +30 max health and heal 30.',
     cost: 'Campfires, potions, springs and the tournament heal restore half.',
   },
   devil: {

@@ -22,13 +22,13 @@ G.CLASSES = {
   },
   archer: {
     name: 'Archer', tint: 0x6fcf5a, color: '#86d873',
-    two:  { stats: { spd: 2 }, desc: '+2 Speed' },
-    four: { stats: { spd: 2, crit: 6 }, doubleShot: 4, desc: '+2 Speed, +6 Crit, every 4th attack is a double shot (two attacks at once)' },
+    two:  { stats: { spd: 2 }, desc: '+2 Attack Speed' },
+    four: { stats: { spd: 2, crit: 6 }, doubleShot: 4, desc: '+2 Attack Speed, +6 Crit, every 4th attack is a double shot (two attacks at once)' },
     six:  { name: 'Kiting', kite: 4, desc: 'When an enemy reaches melee range, you step back out of it (at most once every 4 seconds)' },
   },
   paladin: {
     name: 'Paladin', tint: 0xf0c84a, color: '#f0d27a',
-    two:  { stats: { ward: 2, holy: 2 }, desc: '+2 Ward, hits add 2 holy damage' },
+    two:  { stats: { ward: 2, holy: 2 }, desc: '+2 Magic Resist, hits add 2 holy damage' },
     four: { stats: { shield: 30, holy: 4 }, desc: 'Start fights with Shield 30, hits add 4 holy damage' },
     six:  { name: 'Consecration', consecrate: 1, desc: 'Holy damage you deal also heals you for the same amount' },
   },
@@ -50,7 +50,7 @@ G.HYBRIDS = {
   'mage+paladin':    { name: 'Templar',      spellHeal: 10, desc: 'Each spell you cast heals you 10' },
   'mage+archer':     { name: 'Arcane Archer', everyFourthMagic: 10, desc: 'Every 4th attack also deals 10 magic damage' },
   'mage+rogue':      { name: 'Spellthief',   critMana: 20, desc: 'Crits add 20 mana' },
-  'archer+paladin':  { name: 'Sentinel',     stats: { shield: 30 }, shieldSpd: 2, desc: 'Start fights with Shield 30; +2 Speed while it holds' },
+  'archer+paladin':  { name: 'Sentinel',     stats: { shield: 30 }, shieldSpd: 2, desc: 'Start fights with Shield 30; +2 Attack Speed while it holds' },
   'paladin+rogue':   { name: 'Inquisitor',   executeHoly: 6, desc: 'Hits on enemies below half health add 6 holy damage' },
   'archer+rogue':    { name: 'Stalker',      firstCrits: 3, desc: 'Your first 3 attacks each fight are crits' },
 };

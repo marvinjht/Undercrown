@@ -1,5 +1,5 @@
 // Weapon types at tier 1, common. dmg = damage per hit, spd = attacks per 10 seconds.
-// range: melee (1 step) | near (4) | far (6). type: phys (Armor blocks it) | magic (Ward blocks it).
+// range: melee (1 step) | near (4) | far (6). type: phys (Armor blocks it) | magic (Magic Resist blocks it).
 // bonus = built-in stats that grow with tier and rarity. spell = what full mana casts.
 // classes = the class tags an uncommon or legendary copy can roll (unique items can ignore this later).
 window.G = window.G || {};
@@ -43,7 +43,7 @@ G.WEAPONS = {
   greatHammer: {
     classes: ['warrior', 'paladin'],
     name: 'Great Hammer', range: 'melee', type: 'phys', dmg: 24, spd: 6, bonus: { stun: 20 },
-    trait: 'Crushing: hits can stun the target for 1 second.',
+    trait: 'Crushing: hits can stun the target for 1 second, or 2 seconds on a critical hit.',
     blurb: 'Slowest weapon, biggest hits, punches through armor.',
     bases: ['Stone Maul', 'Ironbound Warhammer', 'Mountainbreaker'],
   },
@@ -57,7 +57,7 @@ G.WEAPONS = {
   maceShield: {
     classes: ['paladin', 'warrior'],
     name: 'Mace & Shield', range: 'melee', type: 'phys', dmg: 8, spd: 10, bonus: { holy: 4, shield: 20, ward: 2 },
-    trait: 'Blessed: hits add holy damage. Shield and extra Ward.',
+    trait: 'Blessed: hits add holy damage. Shield and extra Magic Resist.',
     blurb: 'The sturdy holy option.',
     bases: ['Chapel Mace & Buckler', 'Templar Mace & Heater', 'Lightbearer & Sunshield'],
   },
@@ -79,7 +79,7 @@ G.WEAPONS = {
     classes: ['mage'],
     name: 'Wand & Focus', range: 'near', type: 'magic', dmg: 6, spd: 10, bonus: { manaGain: 20, spellDmg: 30, startMana: 40, ward: 4 },
     spell: { name: 'Firebolt', aoe: false },
-    trait: 'Starts fights with mana already charged, plus extra Ward. Casts Firebolt.',
+    trait: 'Starts fights with mana already charged, plus extra Magic Resist. Casts Firebolt.',
     blurb: 'The first spell comes fast.',
     bases: ['Wand & Glass Orb', 'Wand & Runed Focus', 'Starwand & Prism'],
   },

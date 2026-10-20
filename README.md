@@ -7,7 +7,7 @@ Every round is timed and ends as soon as everyone is ready; fights don't count a
 
 v5 adds:
 - The repeating room pattern, shown on the room counter with icons and tooltips.
-- A 6-slot bag: everything you take lands there first; equip or scrap it from the bag.
+- Gear for an empty slot equips itself; everything else lands in a 6-slot bag. Hold Equip to swap a bag item in (the old piece is destroyed) or discard it. Items have no sell value.
 - Player fights go to the death; past 60 seconds both players lose a heart. Duel losers come back at full health.
 - Monster fights that time out give half gold and XP and no items. Thieves steal but never run away.
 - Stuns can't chain (3 seconds of stun immunity after each). Level-ups give small stat bumps.
@@ -21,8 +21,8 @@ Earlier versions are kept in git as the tags `v1` to `v4`.
 
 ## Stats (all flat, even numbers)
 
-- Health, Damage (per hit), Speed (attacks per 10 seconds), Range (Melee 1 / Near 4 / Far 6 steps)
-- Armor: subtracted from physical hits. Ward: subtracted from magic hits (spells, wands, staffs, holy)
+- Health, Damage (per hit), Attack Speed (attacks per 10 seconds), Range (Melee 1 / Near 4 / Far 6 steps)
+- Armor: subtracted from physical hits. Magic Resist: subtracted from magic hits (spells, wands, staffs, holy)
 - Crit / Dodge / Stun: out of 100. Crits deal double damage plus Crit Damage
 - Shield: soaks damage at the start of each fight. Bleed: damage per second for 3 seconds
 - Mana fills per attack; at 100 you cast your spell

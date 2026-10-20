@@ -117,18 +117,20 @@ window.G = window.G || {};
   }
 
   // ---------- Stats in columns ----------
-  function statCols(hero, compact) {
-    const s = G.Stats.compute(hero);
+  // ov: { s, hp } to show stats other than the hero's own (a ghost's halved copy)
+  function statCols(hero, compact, ov) {
+    const s = ov ? ov.s : G.Stats.compute(hero);
+    const hp = ov ? ov.hp : hero.hp;
     const I = G.STAT_INFO;
     const cell = (label, val, info, extra = '') =>
       `<li ${tip(`<div class="tt-title">${label}</div><p>${esc(info)}</p>${extra ? `<p class="tt-extra">${extra}</p>` : ''}`)}><span>${label}</span><b>${val}</b></li>`;
     const def = [
-      cell('Health', `${hero.hp}/${s.maxHp}`, 'Health carries from room to room. Healing is limited, so spend it wisely.'),
-      cell('Armor', s.armor, I.armor.desc), cell('Ward', s.ward, I.ward.desc), cell('Dodge', s.dodge, I.dodge.desc),
+      cell('Health', `${hp}/${s.maxHp}`, 'Health carries from room to room. Healing is limited, so spend it wisely.'),
+      cell('Armor', s.armor, I.armor.desc), cell('Magic Resist', s.ward, I.ward.desc), cell('Dodge', s.dodge, I.dodge.desc),
     ];
     const off = [
-      cell('Damage', s.dmg, I.dmg.desc, s.type === 'magic' ? 'Your weapon deals magic damage, so Ward blocks it.' : 'Your weapon deals physical damage, so Armor blocks it.'),
-      cell('Speed', s.spd, I.spd.desc, `You attack every ${Math.round(100 / s.spd) / 10} seconds.`),
+      cell('Damage', s.dmg, I.dmg.desc, s.type === 'magic' ? 'Your weapon deals magic damage, so Magic Resist blocks it.' : 'Your weapon deals physical damage, so Armor blocks it.'),
+      cell('Attack Speed', s.spd, I.spd.desc, `You attack every ${Math.round(100 / s.spd) / 10} seconds.`),
       cell('Crit', s.crit, I.crit.desc, `Your crits hit for ${s.dmg * 2 + s.critDmg}.`),
       cell('Range', RANGE_NAMES[s.range].replace(' range', ''), 'Fights start 6 steps apart. Melee walks in first; Near shoots from 4 steps, Far from 6.'),
     ];
@@ -158,7 +160,7 @@ window.G = window.G || {};
     return `<div class="charblock" style="--pv:${col}">
       <div class="pv-left"><div id="preview-slot" class="preview-slot" aria-hidden="true"></div>
         <div class="pv-info"><b>You</b><span>${esc(buildLabel(p))}</span><small>Level ${p.level} · ${esc(spec)}${p.gem ? ' · ' + esc(G.GEMS[p.gem].name) : ''}</small></div></div>
-      ${statCols(p)}</div>`;
+      <div class="pv-right">${statCols(p)}${setBonus(p)}</div></div>`;
   }
 
   // ---------- Side panels ----------
@@ -171,7 +173,7 @@ window.G = window.G || {};
     }).join('')}</div></section>`;
   }
 
-  function supplyBlock(st) {
+  function supplyBlock() {
     const counts = G.Supply.counts(), per = CFG().supplyPerClass;
     const bars = G.CLASS_ORDER.map(c => `<i style="--set:${G.CLASSES[c].color};--fill:${Math.round(counts[c] / per * 100)}%" title="${G.CLASSES[c].name}: ${counts[c]} of ${per} left"></i>`).join('');
     let detail = '';
@@ -184,24 +186,86 @@ window.G = window.G || {};
     return `<div class="supply"><button class="supply-row" data-act="supply" aria-expanded="${supplyOpen}"><span>Set supply</span><span class="supply-bars">${bars}</span><span class="chev">${supplyOpen ? 'Hide' : 'Show'}</span></button>${detail}</div>`;
   }
 
-  function setsPanel(hero) {
+  // ---------- Set bonuses ----------
+  // Which tiers are switched on right now for a class with n pieces (the 4-piece bonus replaces the 2-piece one)
+  function tierOn(n) { return { two: n >= 2 && n < 4, four: n >= 4, six: n >= 6 }; }
+  const nextAt = n => (n < 2 ? 2 : n < 4 ? 4 : 6);
+
+  function classTiers(c, n) {
+    const C = G.CLASSES[c], on = tierOn(n);
+    const row = (k, label, text) => `<p class="tier ${on[k] ? 'on' : 'off'}"><b>${label}:</b> ${esc(text)}.${on[k] ? ' <span class="tier-tag">Active</span>' : ''}</p>`;
+    return row('two', '2 pieces', C.two.desc) + row('four', '4 pieces', C.four.desc + '. Your color and look change') + row('six', `6 pieces, ${C.six.name}`, C.six.desc);
+  }
+  function setTip(hero, c) {
+    const st = G.Stats.sets(hero), n = st.counts[c] || 0, C = G.CLASSES[c];
+    const left = G.Supply.counts()[c];
+    return `<div class="tt-title" style="color:${C.color}">${C.name} set <small>${n} of 6 worn</small></div>${classTiers(c, n)}
+      <p class="tt-extra">The 4-piece bonus replaces the 2-piece one. All 6 slots count, weapon included. ${left} of ${CFG().supplyPerClass} ${C.name} pieces are left in this match.</p>`;
+  }
+  function hybridTip(key, active) {
+    const h = G.HYBRIDS[key], [a, b] = key.split('+');
+    return `<div class="tt-title">${esc(h.name)} <small>hybrid</small></div><p class="tier ${active ? 'on' : 'off'}">${esc(h.desc)}.${active ? ' <span class="tier-tag">Active</span>' : ''}</p>
+      <p class="tt-extra">4 pieces of ${G.CLASSES[a].name} and 2 of ${G.CLASSES[b].name}, or the other way round.</p>`;
+  }
+
+  // Only the classes you're wearing, each with progress toward its next bonus. Hover for the tiers, ? for every set.
+  function setBonus(hero, guide = true) {
     const st = G.Stats.sets(hero);
-    const counts = G.Supply.counts();
-    const rows = G.CLASS_ORDER.map(c => {
-      const n = st.counts[c] || 0;
-      const C = G.CLASSES[c];
-      const act = st.active.find(a => a.cls === c);
-      return `<li class="${act ? 'on' : n ? '' : 'off'}" ${tip(`<div class="tt-title">${C.name} set</div><p><b>2 pieces:</b> ${esc(C.two.desc)}.</p><p><b>4 pieces:</b> ${esc(C.four.desc)}. Your color and look change.</p><p><b>6 pieces, ${esc(C.six.name)}:</b> ${esc(C.six.desc)}.</p><p class="tt-extra">All 6 slots count, weapon included. A single piece gives nothing. ${counts[c]} of ${CFG().supplyPerClass} pieces are left in this match.</p>`)}>
+    const worn = G.CLASS_ORDER.filter(c => st.counts[c]).sort((a, b) => st.counts[b] - st.counts[a]);
+    const rows = worn.map(c => {
+      const n = st.counts[c], C = G.CLASSES[c], on = tierOn(n);
+      const status = on.six ? `${C.six.name} active` : on.four ? '4-piece active' : on.two ? '2-piece active' : 'no bonus yet';
+      return `<li class="${on.two || on.four ? 'on' : ''}" ${tip(setTip(hero, c))}>
         <span class="set-name" style="--set:${C.color}">${C.name}</span>
-        <span class="pips5">${[0, 1, 2, 3, 4, 5].map(i => `<i class="${i < n ? 'f' : ''} ${i === 1 || i === 3 ? 'mark' : ''}" style="--set:${C.color}"></i>`).join('')}</span>
-        <b>${n}/6</b></li>`;
+        <b>${n}/${n >= 6 ? 6 : nextAt(n)}</b><small>${status}</small></li>`;
+    });
+    if (st.hybrid) {
+      const h = G.HYBRIDS[st.hybrid];
+      rows.push(`<li class="on hy" ${tip(hybridTip(st.hybrid, true))}><span class="set-name hy">${esc(h.name)}</span><b>4+2</b><small>hybrid active</small></li>`);
+    }
+    return `<div class="setbonus"><div class="sb-head"><h4>Set bonuses</h4>${guide ? '<button class="qmark" data-act="set-guide" aria-label="All sets and hybrids" title="All sets and hybrids">?</button>' : ''}</div>
+      ${rows.length ? `<ul class="sets">${rows.join('')}</ul>` : '<p class="hint">No set pieces yet. Items with a class tag count toward that set.</p>'}</div>`;
+  }
+
+  // The full reference: every class and hybrid, with what you have switched on highlighted
+  function setGuideHTML(hero) {
+    const st = G.Stats.sets(hero);
+    const classes = G.CLASS_ORDER.map(c => {
+      const C = G.CLASSES[c], n = st.counts[c] || 0;
+      return `<div class="sg-class" style="--set:${C.color}"><h4>${C.name} <small>${n}/6 worn</small></h4>${classTiers(c, n)}</div>`;
     }).join('');
-    const hy = st.hybrid ? G.HYBRIDS[st.hybrid] : null;
-    let hyRow;
-    if (st.full) { const C = G.CLASSES[st.look]; hyRow = `<p class="hybrid on">${esc(C.six.name)}: ${esc(C.six.desc)}</p>`; }
-    else if (hy) hyRow = `<p class="hybrid on">${esc(hy.name)}: ${esc(hy.desc)}</p>`;
-    else hyRow = `<p class="hybrid" ${tip('<div class="tt-title">Hybrid archetypes</div><p>Wear 4 pieces of one class and 2 of another to unlock that pair’s hybrid bonus, like Battle Mage (Warrior + Mage). 6 of one class gives its capstone instead.</p>')}>4 of one class + 2 of another unlocks a hybrid.</p>`;
-    return `<section class="panel"><h3>Sets</h3><ul class="sets">${rows}</ul>${hyRow}${supplyBlock(st)}</section>`;
+    const hy = Object.keys(G.HYBRIDS).map(k => {
+      const h = G.HYBRIDS[k], [a, b] = k.split('+'), on = st.hybrid === k;
+      return `<li class="tier ${on ? 'on' : 'off'}"><b>${esc(h.name)}</b> <small>${G.CLASSES[a].name} + ${G.CLASSES[b].name}</small><br>${esc(h.desc)}.${on ? ' <span class="tier-tag">Active</span>' : ''}</li>`;
+    }).join('');
+    return `<div class="sg-card" role="dialog" aria-modal="true" aria-label="Set guide">
+      <div class="sg-top"><h3>Set guide</h3><button class="ghost" data-act="set-guide-close">Close</button></div>
+      <p class="lede">Gear with a class tag counts toward that class. All 6 slots count, weapon included. 2 pieces give a small bonus; 4 replace it with a bigger one and change your look; 6 add the capstone. Wearing 4 of one class and 2 of another unlocks that pair's hybrid instead of a capstone. A single piece gives nothing. Every match shares ${CFG().supplyPerClass} pieces of each class.</p>
+      <div class="sg-grid">${classes}</div>
+      <h4 class="sg-h">Hybrids (4 of one + 2 of another)</h4><ul class="sg-hy">${hy}</ul></div>`;
+  }
+  function openSetGuide() {
+    closeSetGuide();
+    const el = document.createElement('div');
+    el.id = 'set-guide'; el.className = 'sg-back';
+    el.innerHTML = setGuideHTML(G.Game.s.player);
+    document.body.appendChild(el);
+    el.addEventListener('click', e => { if (e.target === el || e.target.closest('[data-act="set-guide-close"]')) closeSetGuide(); });
+    const b = el.querySelector('button'); if (b) b.focus();
+  }
+  function closeSetGuide() { const el = document.getElementById('set-guide'); if (el) el.remove(); }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSetGuide(); });
+
+  function supplyPanel() {
+    return `<section class="panel supply-panel">${supplyBlock()}</section>`;
+  }
+
+  // Equipping over a worn piece destroys it, so it takes a press and hold. An empty slot is a plain click.
+  function bagUseBtn(p, it, i) {
+    if (it.kind !== 'gear') return `<button data-act="bag-use" data-i="${i}">Use</button>`;
+    const eq = p.gear[it.slot];
+    if (!eq) return `<button data-act="bag-use" data-i="${i}">Equip</button>`;
+    return `<button class="hold" data-hold="bag-use" data-i="${i}" aria-label="Press and hold to equip, replacing ${esc(eq.name)}"><span class="hold-fill"></span><span class="hold-label">Hold to equip</span></button><small class="hold-note">Replaces ${esc(eq.name)}</small>`;
   }
 
   function bagPanel(st) {
@@ -214,12 +278,12 @@ window.G = window.G || {};
       slots.push(`<div class="bag-slot ${open ? 'open' : ''}">
         <button class="bag-item" data-act="bag-menu" data-i="${i}" ${tip(itemTip(it, p))} aria-label="${esc(it.name)}">
           <span class="ico-wrap ${it.kind === 'gear' ? 'r-' + it.rarity : ''}">${G.Art.icon(it.iconKey)}</span><small>${esc(it.name)}</small></button>
-        ${open ? `<div class="bag-menu"><button data-act="bag-use" data-i="${i}">${it.kind === 'gear' ? 'Equip' : 'Use'}</button><button class="ghost" data-act="bag-drop" data-i="${i}">${it.kind === 'gear' ? `Scrap +${CFG().salvage[it.rarity]}g` : 'Discard'}</button></div>` : ''}
+        ${open ? `<div class="bag-menu">${bagUseBtn(p, it, i)}<button class="ghost" data-act="bag-drop" data-i="${i}">Discard</button></div>` : ''}
       </div>`);
     }
     const buffs = Object.entries(p.buffs || {}).filter(([, v]) => v).map(([k, v]) => k === 'fullMana' ? 'Full mana' : `+${v} ${G.STAT_INFO[k].label}`);
     return `<section class="panel"><h3>Bag <span class="chip ${p.bag.length >= size ? 'full' : 'muted'}">${p.bag.length}/${size}</span></h3>
-      <p class="hint bag-hint">Items you take land here. Click one to equip or use it.</p>
+      <p class="hint bag-hint">New gear goes straight onto an empty slot; anything else lands here. To swap gear in, click it and hold Equip. The old piece is gone for good.</p>
       <div class="bag">${slots.join('')}</div>
       ${buffs.length ? `<p class="buffs">Next fight: ${buffs.join(', ')}</p>` : ''}
       ${st.bagMsg ? `<p class="bag-msg">${esc(st.bagMsg)}</p>` : ''}</section>`;
@@ -238,7 +302,7 @@ window.G = window.G || {};
   }
 
   function statsPanel(hero) {
-    return `<section class="panel"><h3>Stats <span class="chips">${specChip(hero)}${gemChip(hero)}</span></h3>${statCols(hero, true)}</section>`;
+    return `<section class="panel stats-panel"><h3>Stats <span class="chips">${specChip(hero)}${gemChip(hero)}</span></h3>${statCols(hero, true)}${setBonus(hero)}</section>`;
   }
 
   function rivalTip(r) {
@@ -246,7 +310,7 @@ window.G = window.G || {};
     return `<div class="tt-title">${esc(r.name)}</div>
       <div class="tt-sub">Level ${r.level} · ${r.spec ? G.SPECS[r.spec].name : 'No spec yet'}${r.gem ? ' · ' + G.GEMS[r.gem].name : ''} · ${r.gold} gold</div>
       <p class="tt-extra">${esc(buildLabel(r))}</p>
-      <p class="tt-extra">${s.dmg} Damage, ${s.spd} Speed, ${s.armor} Armor, ${s.ward} Ward, ${s.dodge} Dodge${r.poison ? `, ${r.poison} poison` : ''}</p>
+      <p class="tt-extra">${s.dmg} Damage, ${s.spd} Attack Speed, ${s.armor} Armor, ${s.ward} Magic Resist, ${s.dodge} Dodge${r.poison ? `, ${r.poison} poison` : ''}</p>
       ${r.lastText ? `<p>Last room: ${esc(r.lastText)}.</p>` : ''}<p class="tt-extra">Hover their gear squares to see each item.</p>`;
   }
 
@@ -372,12 +436,22 @@ window.G = window.G || {};
       <div class="cards three">${cards}</div></section>`;
   }
 
+  // What a Take button says: empty slot = it goes on you; otherwise into the bag (or not at all if the bag is full)
+  function takeLabel(p, it, verb = 'Take it') {
+    if (it.kind === 'gear' && !p.gear[it.slot]) return { ok: true, text: `${verb} and equip` };
+    if (G.Hero.bagFull(p)) return { ok: false, text: 'Bag full' };
+    return { ok: true, text: `${verb} (to bag)` };
+  }
+  const bagNote = full => full
+    ? '<p class="warn">Your bag is full. Gear for an empty slot still goes straight on you; for anything else, discard something from your bag first, or it’s lost.</p>'
+    : '<p class="hint">Gear for an empty slot is equipped right away. Anything else goes into your bag, where you hold Equip to swap it in.</p>';
+
   function rewardScreen(st) {
     const o = st.offer, p = st.player, full = G.Hero.bagFull(p);
-    const cards = o.items.map(it => itemCard(it, p, `<button data-act="take" data-id="${it.id}" ${full ? 'disabled' : ''}>${full ? 'Bag full' : 'Take it'}</button>`)).join('');
+    const cards = o.items.map(it => { const L = takeLabel(p, it); return itemCard(it, p, `<button data-act="take" data-id="${it.id}" ${L.ok ? '' : 'disabled'}>${L.text}</button>`); }).join('');
     return `<section class="screen">
       <h2>${esc(o.title)}</h2><p class="lede">${esc(o.text)}</p>
-      ${full ? '<p class="warn">Your bag is full. Equip or scrap something from your bag to make space, or whatever you leave here is lost.</p>' : '<p class="hint">What you take goes into your bag. Equip it from there.</p>'}
+      ${bagNote(full)}
       <div class="cards">${cards}</div>
       <div class="row-actions">${o.gold ? `<button class="ghost" data-act="gold">Leave the items, take ${o.gold} gold</button>` : `<button class="ghost" data-act="gold">Take nothing</button>`}</div>
       ${characterBlock(p)}
@@ -408,14 +482,14 @@ window.G = window.G || {};
       return `<li class="${now ? 'now' : ''} ${h.isPlayer ? 'me' : ''}"><span>${i + 1}</span><b>${esc(h.name)}</b><small>${heartsRow(h.hearts, 'sm')} ${Math.round(h.hp / G.Hero.maxHp(h) * 100)}%</small><em>${state}</em>${bar}</li>`;
     }).join('');
     const myNow = myTurn && !reviewing;
-    const table = sh.table.map(it => itemCard(it, p, myNow
-      ? `<button data-act="shop-pick" data-id="${it.id}" ${full ? 'disabled' : ''}>${full ? 'Bag full' : 'Take this'}</button>`
-      : `<button disabled>${picked ? 'Picked' : reviewing ? 'Picks start soon' : 'Wait for your turn'}</button>`)).join('');
+    const table = sh.table.map(it => { const L = takeLabel(p, it, 'Take this'); return itemCard(it, p, myNow
+      ? `<button data-act="shop-pick" data-id="${it.id}" ${L.ok ? '' : 'disabled'}>${L.text}</button>`
+      : `<button disabled>${picked ? 'Picked' : reviewing ? 'Picks start soon' : 'Wait for your turn'}</button>`); }).join('');
     const review = reviewing ? `<div class="review"><span>Look over the table. Picks start in <b id="review-num">${reviewLeft()}s</b></span><i class="turnbar"><span id="review-bar" style="width:${reviewPct()}%"></span></i></div>` : '';
     return `${review}<h3 class="sub">Pick order</h3>
       <ol class="pick-order">${order}</ol>
       <h3 class="sub">Free table ${myNow ? '<span class="chip">Your turn</span>' : ''}</h3>
-      ${myNow && full ? '<p class="warn">Your bag is full. Equip or scrap something from your bag to take an item, or pass.</p>' : ''}
+      ${myNow ? bagNote(full) : ''}
       <div class="cards">${table || '<p class="hint">The table is empty.</p>'}</div>
       ${myNow ? `<div class="pass-row bottom"><button data-act="shop-pass">Pass and take ${CFG().shop.passGold} gold</button><small>If your timer runs out, you pass.</small></div>` : ''}`;
   }
@@ -441,7 +515,8 @@ window.G = window.G || {};
     const full = G.Hero.bagFull(p);
     const stock = m.stock.map(it => {
       const price = G.Dungeon.merchantPrice(p, m, it), sold = m.bought.includes(it.id);
-      return itemCard(it, p, sold ? '<button disabled>Sold</button>' : `<button data-act="shop-buy" data-kind="gear" data-id="${it.id}" ${p.gold < price || full ? 'disabled' : ''}>${full ? 'Bag full' : price === 0 ? 'Take it free (Haggler)' : `Buy for ${price} gold`}</button>`);
+      const room = G.Hero.canReceive(p, it), where = it.kind === 'gear' && !p.gear[it.slot] ? ', equip' : '';
+      return itemCard(it, p, sold ? '<button disabled>Sold</button>' : `<button data-act="shop-buy" data-kind="gear" data-id="${it.id}" ${p.gold < price || !room ? 'disabled' : ''}>${!room ? 'Bag full' : price === 0 ? `Take it free${where} (Haggler)` : `Buy for ${price} gold${where}`}</button>`);
     }).join('');
     const consRow = (id, price, note, disabled, label) => {
       const c = G.CONSUMABLES[id];
@@ -485,13 +560,14 @@ window.G = window.G || {};
 
   function wagerScreen(st) {
     const p = st.player, d = st.door, B = CFG().wager.bets;
-    const dg = G.Dungeon.danger(p, d, st.room);
+    const broke = p.gold < B[0];
     return `<section class="screen"><h2>Wager</h2>
-      <p class="lede">A pit boss grins: "${esc(G.Dungeon.monsterName(d.monster, 'fight'))}, a tough one. Bet on yourself." Win and you double your bet, plus the usual rewards. Lose and the bet is gone, along with a heart.</p>
-      <p><span class="danger d-${dg.level.toLowerCase()}">${dg.level} danger · ~${dg.avgLoss} dmg</span></p>
-      <div class="row-actions">${B.map(b => `<button data-act="bet" data-v="${b}" ${p.gold < b ? 'disabled' : ''}>Bet ${b} gold</button>`).join('')}
-        <button class="ghost" data-act="bet" data-v="0">Walk away</button></div></section>`;
+      <p class="lede">A pit boss grins: "${esc(G.Dungeon.monsterName(d.monster, 'fight'))}. Bet on yourself." The door has shut behind you, so this fight is happening. Win and you double your bet, plus the usual rewards. Lose and the bet is gone, along with a heart.</p>
+      <div class="row-actions">${broke ? `<button data-act="bet" data-v="0">Fight with nothing on the line</button><small>You can't cover the smallest bet (${B[0]} gold).</small>`
+        : B.map(b => `<button data-act="bet" data-v="${b}" ${p.gold < b ? 'disabled' : ''}>Bet ${b} gold</button>`).join('')}</div>
+      ${characterBlock(p)}</section>`;
   }
+
 
   function turnRaw() {
     const sh = G.Game.s && G.Game.s.shop;
@@ -581,10 +657,25 @@ window.G = window.G || {};
     }).join('');
     const opp = m.a.hero && m.a.hero.isPlayer ? m.b : m.a;
     return `<section class="screen"><h2>Duel</h2>
+      ${rivalBlock(opp)}
       <p class="lede">Everyone still in is paired up. ${opp.ghost ? `You're the odd one out, so you face a ghost: a half-strength copy of ${esc(opp.of.name)}. Losing to it costs no heart.` : `You face <b>${esc(opp.hero.name)}</b>. The loser loses a heart.`} You fight at your current health. The winner's health goes back to what it was; the loser comes back at full. Past one minute, both lose a heart.</p>
       ${others ? `<div class="round"><h4>Other duels</h4><ul>${others}</ul></div>` : ''}
       <div class="row-actions"><button data-act="duel-go">Fight</button></div>
       <p class="waiting">Starts in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p></section>`;
+  }
+
+  // The rival you're about to fight, drawn and laid out like your own character block
+  function rivalBlock(opp) {
+    const h = opp.ghost ? opp.of : opp.hero;
+    const st = G.Stats.sets(h);
+    const col = st.look ? G.CLASSES[st.look].color : '#' + (h.tint || 0x9fdcff).toString(16).padStart(6, '0');
+    const name = opp.ghost ? opp.name : h.name;
+    const spec = h.spec ? G.SPECS[h.spec].name : 'No spec yet';
+    const ov = opp.ghost ? { s: opp.s, hp: opp.hp } : null;
+    return `<div class="charblock rival-block ${opp.ghost ? 'ghosted' : ''}" style="--pv:${col}">
+      <div class="pv-left"><div class="vs-tag">Your opponent</div><div id="rival-slot" class="preview-slot" aria-hidden="true"></div>
+        <div class="pv-info"><b>${esc(name)}</b>${opp.ghost ? '' : heartsRow(h.hearts, 'sm')}<span>${esc(buildLabel(h))}</span><small>Level ${h.level} · ${esc(spec)}${h.gem && !opp.ghost ? ' · ' + esc(G.GEMS[h.gem].name) : ''}</small></div></div>
+      <div class="pv-right">${statCols(h, false, ov)}${setBonus(h, false)}</div></div>`;
   }
 
   function deadScreen(st) {
@@ -659,14 +750,14 @@ window.G = window.G || {};
 
   function titleScreen() {
     return `<div class="title-screen">
-      <header class="hero-head"><div class="eyebrow">Prototype v5 · single player</div><h1>Thirty Doors</h1>
+      <header class="hero-head"><div class="eyebrow">Prototype v6 · single player</div><h1>Thirty Doors</h1>
         <p>Six warriors. Thirty rooms each. Three hearts. Health carries from room to room and healing is limited, so spend it wisely. Build an archetype, fight your rivals along the way, and be the last one standing.</p></header>
       <ul class="rules">
         <li><b>Hearts</b>Dying or losing a duel costs a heart. You come back at full health. Lose all three and you're out.</li>
         <li><b>Class sets</b>Some gear carries a class, and every match has a limited supply. 2, 4 or 6 pieces, or 4 + 2 for a hybrid.</li>
         <li><b>Levels</b>Fights give XP. Pick a spec at level ${CFG().levels.specLevel}, then skill tree choices at ${CFG().levels.treeLevels.join(', ')}.</li>
         <li><b>Every 10 rooms</b>Room 5 is a shop round, 7 a merchant, 8 a boss, and 10 a duel against a rival. Room 30 is the tournament.</li>
-        <li><b>Your bag</b>Everything you take goes into your 6-slot bag. Equip or scrap it from there.</li>
+        <li><b>Gear and your bag</b>New gear goes straight onto an empty slot. Anything else lands in your 6-slot bag; hold Equip to swap it in (the old piece is gone), or discard it.</li>
         <li><b>The tournament</b>After room 30, everyone with hearts fights round after round until one is left.</li>
       </ul>
       <div class="row-actions"><button class="enter" data-act="start">Enter the dungeon</button></div>
@@ -687,12 +778,17 @@ window.G = window.G || {};
     const prevPhase = app.dataset.phase;
     const notice = st.notice && !['dead', 'shop'].includes(st.phase) ? `<p class="notice">${esc(st.notice)}</p>` : '';
     app.innerHTML = `<div class="shell">${topbar(st)}<div class="cols"><aside class="left">${rivalsPanel(st)}</aside><main class="stage">${notice}${screens[st.phase](st)}</main>
-      <aside class="side">${bagPanel(st)}${statsPanel(st.player)}${gearPanel(st.player)}${setsPanel(st.player)}</aside></div></div>`;
+      <aside class="side">${bagPanel(st)}${statsPanel(st.player)}${gearPanel(st.player)}${supplyPanel()}</aside></div></div>`;
     if (st.phase !== prevPhase) window.scrollTo(0, 0);
     app.dataset.phase = st.phase;
     if (st.phase === 'battle') startBattleView(st);
     const pv = document.getElementById('preview-slot');
     if (pv) G.Preview.mount(pv, G.visualFor(st.player)); else G.Preview.park();
+    const rv = document.getElementById('rival-slot');
+    if (rv && st.duel && st.duel.mine) {
+      const m = st.duel.mine, opp = m.a.hero && m.a.hero.isPlayer ? m.b : m.a;
+      G.RivalPreview.mount(rv, G.visualFor(opp.ghost ? opp.of : opp.hero));
+    } else G.RivalPreview.park();
   }
 
   // Updates only clocks each tick, never the whole screen (a re-render would cut off a running fight)
@@ -726,7 +822,8 @@ window.G = window.G || {};
       case 'dodge': return `${subj(e.tgt)} ${verb(e.tgt, 'dodge', 'dodges')}`;
       case 'hidden': return `${subj(e.src)} ${verb(e.src, 'swing', 'swings')} at shadows`;
       case 'parry': return `${subj(e.tgt)} ${verb(e.tgt, 'parry', 'parries')}`;
-      case 'stun': return `${subj(e.tgt)} ${verb(e.tgt, 'are', 'is')} stunned`;
+      case 'stun': return `${subj(e.tgt)} ${verb(e.tgt, 'are', 'is')} stunned${e.secs > 1 ? ` for ${e.secs} seconds (critical)` : ''}`;
+      case 'smoke': return `${subj(e.src)} ${verb(e.src, 'throw', 'throws')} a smoke bomb`;
       case 'heal': return `${subj(e.src)} ${verb(e.src, 'heal', 'heals')} ${e.amount}${e.label ? ` (${e.label})` : ''}`;
       case 'stealth_on': return `${subj(e.src)} ${verb(e.src, 'vanish', 'vanishes')}${e.label ? ' (Vanish)' : ''}`;
       case 'kite': return `${subj(e.src)} ${verb(e.src, 'step', 'steps')} back (Kiting)`;
@@ -791,7 +888,8 @@ window.G = window.G || {};
       case 'forge': Gm.forgeAct(el.dataset.kind, el.dataset.slot); break;
       case 'forge-leave': Gm.leaveForge(); break;
       case 'duel-go': Gm.startDuelFight(); break;
-      case 'supply': supplyOpen = !supplyOpen; if (G.Game.s && G.Game.s.phase === 'battle') { const sp = el.closest('.panel'); if (sp) sp.outerHTML = setsPanel(G.Game.s.player); } else render(); break;
+      case 'set-guide': openSetGuide(); break;
+      case 'supply': supplyOpen = !supplyOpen; if (G.Game.s && G.Game.s.phase === 'battle') { const sp = el.closest('.panel'); if (sp) sp.outerHTML = supplyPanel(); } else render(); break;
       case 'bag-menu':
         if (G.Game.s && G.Game.s.phase === 'battle') { toast(el, 'Can’t use during combat!'); break; }
         bagOpen = bagOpen === +el.dataset.i ? -1 : +el.dataset.i; render(); break;
@@ -850,6 +948,23 @@ window.G = window.G || {};
 
   function init() {
     document.addEventListener('click', onClick);
+    // Press and hold: equipping over worn gear
+    const HOLD_MS = 800;
+    let hold = null;
+    const startHold = el => {
+      cancelHold();
+      el.classList.add('holding');
+      el.style.setProperty('--hold', HOLD_MS + 'ms');
+      hold = { el, timer: setTimeout(() => { const i = +el.dataset.i; hold = null; bagOpen = -1; G.Game.useBag(i); G.Sound && G.Sound.play('clang'); }, HOLD_MS) };
+    };
+    const cancelHold = () => { if (!hold) return; clearTimeout(hold.timer); hold.el.classList.remove('holding'); hold = null; };
+    document.addEventListener('pointerdown', e => { const el = e.target.closest('[data-hold]'); if (el) { e.preventDefault(); startHold(el); } });
+    document.addEventListener('pointerup', cancelHold);
+    document.addEventListener('pointercancel', cancelHold);
+    document.addEventListener('pointerout', e => { if (hold && e.target.closest('[data-hold]') === hold.el && !hold.el.contains(e.relatedTarget)) cancelHold(); });
+    document.addEventListener('keydown', e => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { const el = e.target.closest && e.target.closest('[data-hold]'); if (el) { e.preventDefault(); startHold(el); } } });
+    document.addEventListener('keyup', e => { if (e.key === ' ' || e.key === 'Enter') cancelHold(); });
+    document.addEventListener('contextmenu', e => { if (e.target.closest('[data-hold]')) e.preventDefault(); });
     bindTips();
     render();
     setInterval(tickClock, 200);

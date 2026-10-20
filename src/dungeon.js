@@ -95,7 +95,7 @@ window.G = window.G || {};
     merchant: { title: 'Merchant', text: () => 'No fight. Spend gold on gear and potions, or sell blood.' },
     forge:    { title: 'Forge',    text: () => `No fight. Strengthen an item (${CFG().forge.upgradeCost} gold) or reroll its bonus (${CFG().forge.rerollCost} gold).` },
     trainer:  { title: 'Trainer',  text: () => `No fight. Gain ${CFG().xp.trainer} XP.` },
-    wager:    { title: 'Wager',    text: d => `${monsterName(d.monster, 'fight')}, tougher than usual. Bet gold: win and you double it.` },
+    wager:    { title: 'Wager',    text: d => `${monsterName(d.monster, 'fight')}, tougher than usual. No backing out: bet gold, and win to double it.` },
   };
 
   // What kind of room this is in the repeating 10-room pattern
@@ -229,8 +229,8 @@ window.G = window.G || {};
     if (opt.gold) { hero.gold += opt.gold; return `took ${opt.gold} gold`; }
     if (opt.xp) { G.Hero.gainXp(hero, opt.xp); return `gained ${opt.xp} XP`; }
     if (opt.item) {
-      if (G.Hero.bagFull(hero)) { hero.gold += 10; return 'took 10 gold (bag full)'; }
-      hero.bag.push(opt.item); return `took ${opt.item.name}`;
+      if (!G.Hero.receive(hero, opt.item)) { hero.gold += 10; return 'took 10 gold (bag full)'; }
+      return `took ${opt.item.name}`;
     }
     if (opt.stat) {
       hero.bonus = hero.bonus || {};
@@ -255,9 +255,8 @@ window.G = window.G || {};
     if (i < 0) return '';
     if (item.kind === 'gear') {
       hero.bag.splice(i, 1);
-      const old = G.Hero.equip(hero, item);
-      if (old) hero.gold += CFG().salvage[old.rarity];
-      return `Equipped ${item.name}${old ? `, scrapped ${old.name}` : ''}.`;
+      const old = G.Hero.equip(hero, item);   // what you wore is gone for good
+      return `Equipped ${item.name}${old ? `, replacing ${old.name}` : ''}.`;
     }
     const c = G.CONSUMABLES[item.cid];
     hero.bag.splice(i, 1);
@@ -333,8 +332,7 @@ window.G = window.G || {};
 
   function take(hero, item) {
     if (item.kind === 'consumable') { hero.bag.push(item); return `took ${item.name}`; }
-    const old = G.Hero.equip(hero, item);
-    if (old) hero.gold += CFG().salvage[old.rarity];
+    G.Hero.equip(hero, item);
     return `took ${item.name}`;
   }
 
