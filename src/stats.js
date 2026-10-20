@@ -99,8 +99,8 @@ window.G = window.G || {};
     t.hp += Math.max(0, lv - 1) * LV.hpPerLevel;
     t.dmg += Math.floor((lv + 2) / 4) * LV.bump;
     t.armor += Math.floor(lv / 4) * LV.bump;
-    // Midas: +2 Damage and +8 Health for every 50 gold you hold
-    if (fx.midas) { const n = Math.floor((hero.gold || 0) / fx.midas); t.dmg += 5 * n; t.hp += 8 * n; }
+    // Midas: +10 Damage and +15 Health for every 50 gold you hold
+    if (fx.midas) { const n = Math.floor((hero.gold || 0) / fx.midas); t.dmg += 10 * n; t.hp += 15 * n; }
 
     if (fx.firstCrits) fx.firstCrits = Math.min(C().combat.firstCritCap, fx.firstCrits);
     const s = {
