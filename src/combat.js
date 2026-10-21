@@ -380,7 +380,12 @@ window.G = window.G || {};
           push({ type: 'sear', src: f.id, tgt: d.id });
         }
         // Exile: Banish knocks the target back and roots it (it can still attack, it just can't move)
-        if (sp.banish && !ccBlocked(d)) {
+        // A Twincast repeat doesn't knock back again: it extends the root by its length instead (2 seconds in all)
+        if (sp.banish && recastSp && !(d.s.fx && d.s.fx.ccImmune)) {
+          const add = sp.banish.root;
+          d.rootUntil = d.rootUntil > t ? d.rootUntil + add : t + add;
+          push({ type: 'root', src: f.id, tgt: d.id, secs: Math.round((d.rootUntil - t) * 10) / 10, delay: 0, extend: true });
+        } else if (sp.banish && !ccBlocked(d)) {
           const dir = Math.sign(d.pos - f.pos) || (f.side === 'a' ? 1 : -1);
           const before = d.pos, wall = displace(d, d.pos + dir * sp.banish.push);
           const travel = Math.abs((d.dashTo != null ? d.dashTo : before) - before) / 10;   // knockbacks move 10 steps a second

@@ -236,7 +236,8 @@ window.G = window.G || {};
         case 'sear': if (def) this.float(def, 'SEARED', '#ff9a3c', 12); break;
         case 'root': if (def) {
           // Exile's Banish: a violet hex circle under the target while it's rooted
-          this.float(def, e.slam ? 'BANISHED' : 'ROOTED', '#c08cff', 15);
+          this.float(def, e.extend ? 'ROOTED ' + e.secs + 's' : e.slam ? 'BANISHED' : 'ROOTED', '#c08cff', 15);
+          if (def.hexRing && def.hexRing.scene) def.hexRing.destroy();
           const delay = (e.delay || 0) * 1000 / this.speed, life = (e.secs || 1) * 1000 / this.speed;
           const hex = this.add.graphics();
           hex.lineStyle(3, 0xb07cff, 0.95);
@@ -245,7 +246,7 @@ window.G = window.G || {};
           hex.lineStyle(1.5, 0xe2ccff, 0.8).strokeEllipse(0, 22, 44, 16);
           hex.fillStyle(0x8a5cff, 0.25).fillPoints(pts, true);
           hex.setAlpha(0);
-          def.cont.addAt(hex, 0);
+          def.cont.addAt(hex, 0); def.hexRing = hex;
           this.tweens.add({ targets: hex, alpha: 1, delay, duration: 120 / this.speed });
           this.tweens.add({ targets: hex, alpha: 0.45, yoyo: true, repeat: -1, delay: delay + 120 / this.speed, duration: 220 / this.speed });
           this.time.delayedCall(delay + life, () => { if (hex.scene) hex.destroy(); });
