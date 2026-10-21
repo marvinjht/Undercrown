@@ -2,7 +2,7 @@
 // All stats are flat whole numbers. Chance stats (Crit, Dodge, Stun) mean "out of 100".
 window.G = window.G || {};
 
-G.VERSION = '0.33';   // players in one room must all run the same version
+G.VERSION = '0.34';   // players in one room must all run the same version
 
 G.CONFIG = {
   // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
@@ -59,6 +59,7 @@ G.CONFIG = {
 
   shop: {
     reviewSeconds: 10,  // everyone looks over the table before picks start
+    tourReviewSeconds: 3,   // the same, for the Tournament Plunder between rounds
     turnSeconds: 20,    // each player's turn to pick
     aiPickDelay: 1.4,
     passGold: 30,       // gold for passing on the free table (also what happens if your turn runs out)
@@ -75,7 +76,9 @@ G.CONFIG = {
   doorMinRoom: { fight: 2, elite: 4, trash: 3, vault: 6, rest: 4, mystery: 3, venom: 5, purify: 5, forge: 5, trainer: 3, wager: 6 },
   purifyWeightPoisoned: 18,
 
-  wager: { bets: [20, 40], monsterMult: 1.25, eliteChance: 33 },   // eliteChance: out of 100, the wager turns out to be an elite
+  // Wager: the door never says what's behind it. Out of 100: jesterChance = a Jester (it explodes for jesterBlast when hit; no XP or gold,
+  // the bet is lost), bossChance = a boss (a win pays bossPayout times the bet), then eliteChance of the rest = an elite
+  wager: { bets: [20, 40], monsterMult: 1.25, eliteChance: 33, jesterChance: 20, bossChance: 10, bossPayout: 3, jesterBlast: 20 },
 
   gold: { fight: [8, 12], elite: [16, 24], boss: [40, 50], trash: [8, 14], skipItemBase: 10, treasureHunterBonus: 4 },
 

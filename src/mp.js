@@ -705,7 +705,7 @@ window.G = window.G || {};
       const order = ents.slice().sort((a, b) => th(a) - th(b) || a.hero.hearts - b.hero.hearts || a.hp / a.maxHp - b.hp / b.maxHp).map(e => e.hero.slot);
       const S = CFG().shop;
       H.plunder = { room: H.room, tour: n, table: G.Loot.shopTable(30, ents.length + 1, H.rng, { tome: true }), order, turn: 0, picks: {},
-        reviewEnds: now() + S.reviewSeconds * 1000, turnEnds: 0, seq: 0, last: null, done: false };
+        reviewEnds: now() + S.tourReviewSeconds * 1000, turnEnds: 0, seq: 0, last: null, done: false };
       this.hostPlunderCast();
       clearInterval(H.plunderTimer);
       H.plunderTimer = setInterval(() => this.hostPlunderTick(), 250);

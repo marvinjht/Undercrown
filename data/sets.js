@@ -1,8 +1,8 @@
 // Class sets. Uncommon and artifact gear carries one class tag. Six slots count: 5 armor + weapon.
 // 2 of a class = "two" bonus (no look change).
-// 4 or 5 = "four" bonus (replaces "two"), and your color and look change.
-// 6 = "four" bonus + the "six" capstone, and the full class look.
-// 4 + 2 = the main class's "four" bonus + the other's "two" bonus + that pair's hybrid bonus.
+// 4 or 5 = "two" + "four" bonuses (they stack), and your color and look change.
+// 6 = "two" + "four" + the "six" capstone, and the full class look.
+// 4 + 2 = the main class's "two" and "four" bonuses + the other's "two" bonus + that pair's hybrid bonus.
 // A single piece of a class gives nothing.
 // stats = flat stats added. Other keys are effects the combat sim reads (see src/combat.js).
 window.G = window.G || {};

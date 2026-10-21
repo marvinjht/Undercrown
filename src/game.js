@@ -63,7 +63,7 @@ window.G = window.G || {};
       for (const k in m.picks) picks['h' + k] = m.picks[k];
       s.roundKind = 'shop'; s.phase = 'shop'; s.roundEnds = 0;
       s.shop = { table: m.table, order: m.order.map(sl => 'h' + sl), turn: m.turn, picks, mp: true, tour: m.tour || 0,
-        reviewUntil: t + m.reviewMs, reviewDone: m.reviewMs <= 0,
+        reviewUntil: t + m.reviewMs, reviewDone: m.reviewMs <= 0, reviewSecs: m.tour ? S.tourReviewSeconds : S.reviewSeconds,
         turnStart: m.turnMs ? t - (S.turnSeconds * 1000 - m.turnMs) : t, msg: s.shopMsg || null, turnSlot };
       if (m.done && !s.shopEnded) { s.shopEnded = true; this.endShop(); return; }
       if (!m.done) s.shopEnded = false;
@@ -372,7 +372,7 @@ window.G = window.G || {};
       const foes = G.Dungeon.doorFoes(door, s.room);
       const res = G.simulateFight(G.Stats.compute(p, { buffs: true }), foes, G.Dungeon.fightOpts(p, s.rng.int(0, 1e9)));
       s.battle = {
-        kind, door, res, title: G.Dungeon.monsterName(door.monster, kind === 'wager' ? (door.wagerElite ? 'elite' : 'fight') : kind, door.trait),
+        kind, door, res, title: G.Dungeon.doorTitle(door),
         visual: { a: visualFor(p) },
         done: false, onDone: () => this.battleDone(false),
       };
@@ -401,7 +401,13 @@ window.G = window.G || {};
         this.completeRoom([...notes, `${b.title} took a heart. You have ${p.hearts} left and come back at full health, but get nothing from this room.${bet ? ` You lost your ${bet} gold bet.` : ''}`].join(' '));
         return;
       }
-      const k = b.kind === 'wager' ? 'fight' : b.kind;
+      // The Jester: a prank, not a fight. It blew up in your face; no XP or gold, and the bet is gone
+      if (b.door && b.door.wagerKind === 'jester') {
+        if (bet) p.gold = Math.max(0, p.gold - bet);
+        this.completeRoom([...notes, `It was a Jester! It exploded the moment you hit it: ${CFG().wager.jesterBlast} damage, no XP or gold.${bet ? ` The pit boss pockets your ${bet} gold bet, still laughing.` : ''}`].join(' '));
+        return;
+      }
+      const k = b.kind === 'wager' ? G.Dungeon.fightKind(b.door) : b.kind;
       const fullXp = CFG().xp[k] || CFG().xp.fight;
       const lv = G.Hero.gainXp(p, out === 'timeout' ? Math.round(fullXp / 2) : fullXp);
       const xpNote = `+${CFG().xp[k] || CFG().xp.fight} XP${lv.length ? ` (you reached level ${p.level})` : ''}`;
@@ -414,7 +420,7 @@ window.G = window.G || {};
         this.completeRoom([...notes, `Time ran out before either side fell. Half rewards: ${g} gold, +${halfXp} XP, no items.${bet ? ' The bet is lost.' : ''}`].join(' '));
         return;
       }
-      if (bet) { p.gold += bet; notes.push(`You won the wager: +${bet} gold.`); }
+      if (bet) { const boss = b.door && b.door.wagerKind === 'boss', won = bet * (boss ? CFG().wager.bossPayout - 1 : 1); p.gold += won; notes.push(boss ? `You beat a boss on a wager: triple your bet, +${won} gold.` : `You won the wager: +${won} gold.`); }
       const gold = G.Dungeon.goldFor(k, p, s.rng);
       p.gold += gold;
       if (G.Dungeon.gearDrops(p, k, s.rng)) {
@@ -729,12 +735,13 @@ window.G = window.G || {};
       const order = alive.slice().sort((a, b) => th(a) - th(b) || a.hearts - b.hearts || tpct(a) - tpct(b) || G.Hero.power(a) - G.Hero.power(b));
       s.roundKind = 'shop';
       s.phase = 'shop';
+      const rs = tour ? CFG().shop.tourReviewSeconds : CFG().shop.reviewSeconds;   // the Tournament Plunder looks over the table for less time
       s.shop = {
         tour: !!tour,
         table: tour ? G.Loot.shopTable(30, alive.length + 1, s.rng, { tome: true }) : G.Loot.shopTable(s.room, alive.length + CFG().shop.extraTableItems, s.rng),
-        order: order.map(h => h.id), turn: 0, reviewUntil: now() + CFG().shop.reviewSeconds * 1000, reviewDone: false,
-        turnStart: now() + CFG().shop.reviewSeconds * 1000, picks: {},
-        totalSeconds: CFG().shop.reviewSeconds + CFG().shop.turnSeconds * order.length, msg: null,
+        order: order.map(h => h.id), turn: 0, reviewUntil: now() + rs * 1000, reviewDone: false, reviewSecs: rs,
+        turnStart: now() + rs * 1000, picks: {},
+        totalSeconds: rs + CFG().shop.turnSeconds * order.length, msg: null,
       };
       this.startTimer(s.shop.totalSeconds);
       render();

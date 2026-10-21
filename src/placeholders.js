@@ -184,6 +184,11 @@ window.G = window.G || {};
     mire: g => { g.fillStyle(0x3a3020, 0.4).fillEllipse(48, 52, 90, 80); blob(g, 48, 48, 72, 70, 0x5a4a2e, 0xc8e05a); g.fillStyle(0x4a3c24).fillCircle(26, 26, 7).fillCircle(30, 72, 9).fillCircle(64, 20, 5); g.fillStyle(0x6a8a3a).fillCircle(56, 70, 4).fillCircle(22, 50, 3); },
     boneKing: g => { blob(g, 48, 48, 60, 72, 0xe9e0c8, 0xff3b30); g.fillStyle(0xd8b13a).fillTriangle(30, 30, 24, 18, 36, 28).fillTriangle(30, 48, 18, 48, 30, 42).fillTriangle(30, 66, 24, 78, 36, 68); },
     gorehorn: g => { blob(g, 48, 48, 66, 76, 0x7a3a2a, 0xffd23f); g.fillStyle(0xeee3c8).fillTriangle(66, 30, 90, 20, 70, 38).fillTriangle(66, 66, 90, 76, 70, 58); },
+    jester: g => {
+      g.fillStyle(0x8c2a8c).fillTriangle(22, 14, 34, 4, 40, 20).fillTriangle(22, 50, 34, 60, 40, 44); g.fillStyle(0xf2c14a).fillCircle(34, 4, 3).fillCircle(34, 60, 3);
+      blob(g, 32, 32, 30, 34, 0xe9dccb, 0x1b1410); g.lineStyle(2, 0xc0392b).beginPath().arc(38, 32, 7, -0.9, 0.9).strokePath();
+      g.fillStyle(0x2a8c8c).fillRect(16, 26, 6, 12);
+    },
     occultist: g => {
       g.fillStyle(0x6a4fc0, 0.3).fillCircle(48, 48, 44); g.fillStyle(0x1e1830).fillTriangle(10, 48, 70, 8, 70, 88);
       blob(g, 54, 48, 40, 48, 0x3a2f5e, 0xd8ccff); g.lineStyle(3, 0xb39cff).strokeCircle(80, 48, 10); g.fillStyle(0xd8ccff).fillCircle(80, 48, 4);

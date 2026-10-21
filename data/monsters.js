@@ -33,6 +33,9 @@ G.MONSTERS = [
   { id: 'cultist',  name: 'Blood Cultist',    minRoom: 20, maxRoom: 30, hp: 1.0, hit: 0.9, spd: 12, leech: 4, ward: 4 },
 ];
 
+// The Jester: only ever behind a Wager door. One hit pops it, and it explodes on you (CONFIG.wager.jesterBlast).
+G.JESTER = { id: 'jester', name: 'The Jester', hp: 0.01, hit: 0, spd: 1, scale: 0.9, fx: { noAttack: 1 } };
+
 // Bosses. Each match draws three of these for rooms 8, 18 and 28 (everyone in a room meets the same ones).
 // minions = weak helpers that fight alongside; fx = boss mechanics read by combat.js.
 G.BOSSES = {

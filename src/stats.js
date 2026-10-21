@@ -46,7 +46,7 @@ window.G = window.G || {};
     return { counts, active, hybrid, main, look, full, trim, maxTier };
   }
   // Which bonus tiers a class tier turns on (6 = the 4-piece bonus plus the capstone)
-  const TIERS = { two: ['two'], four: ['four'], six: ['four', 'six'] };
+  const TIERS = { two: ['two'], four: ['two', 'four'], six: ['two', 'four', 'six'] };   // bonuses stack
 
   // The weapon's own attack speed (what the Attack Speed cap counts bonuses on top of)
   function weaponSpd(hero, W) {

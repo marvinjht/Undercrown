@@ -65,7 +65,7 @@ window.G = window.G || {};
         riposte: false, rend: 0, fpoison: 0, nextPoison: Infinity, nightInvis: !!(s.fx && s.fx.nightLord), markUsed: false,
         shield0: s.shield || 0, aegisRebuildAt: -1, aegisRebuilt: false, palBurstUsed: false, palBurstPending: false, bladePoison: 0,
         // v0.32: legendary affixes, Exile's root
-        hitStacks: 0, stunBlockReady: 0, stunUntil: -1, rootUntil: -1,
+        hitStacks: 0, stunBlockReady: 0, stunUntil: -1, rootUntil: -1, slowUntil: -1, slowSpd: 0,
         ...extra,
       };
       fighters.push(f);
@@ -267,6 +267,12 @@ window.G = window.G || {};
       }
       def.alive = false;
       push({ type: 'death', tgt: def.id, src: att ? att.id : null }, def);
+      // The Jester: explodes in your face when it dies
+      if (def.s.fx && def.s.fx.deathBlast && A.alive) {
+        const r = damage(A, def.s.fx.deathBlast, null);
+        push({ type: 'jester', src: def.id, tgt: A.id, amount: r.dealt }, A);
+        afterDamage(A, def);
+      }
       // Warrior 6: Bloodrage
       const afx = att && att.s.fx;
       if (afx && afx.bloodrage && att.alive) {
@@ -470,7 +476,12 @@ window.G = window.G || {};
         }
       }
       let crit = false, ambush = false;
-      if (att.cheapShot) { crit = true; att.cheapShot = false; ambush = true; if (fx.smokeDodge) { att.smokeUntil = t + 2; push({ type: 'smoke', src: att.id, dur: 2 }); } }
+      if (att.cheapShot) {
+        crit = true; att.cheapShot = false; ambush = true;
+        if (fx.smokeDodge) { att.smokeUntil = t + 2; push({ type: 'smoke', src: att.id, dur: 2 }); }
+        // Dirty Fighting: a Cheap Shot also slows the target's attacks for a moment (Unbound shrugs it off)
+        if (fx.cheapSlow && !(dfx.ccImmune && ccBlocked(def))) { def.slowUntil = t + fx.cheapSlow.secs; def.slowSpd = fx.cheapSlow.spd; push({ type: 'slowed', src: att.id, tgt: def.id }); }
+      }
       else if (att.firstCrits > 0) { crit = true; att.firstCrits--; }
       else if (counter && fx.counterCrit) crit = true;
       else crit = roll(att.s.crit);
@@ -601,7 +612,7 @@ window.G = window.G || {};
           def.burn = Math.max(def.burnUntil >= t ? def.burn : 0, fx.burnHit.dmg); def.burnUntil = Math.max(def.burnUntil, t + fx.burnHit.secs + 0.01);
         }
         // Gale: every few shots knock the target back; into the wall = stunned
-        if (def.alive && fx.gale && att.atkCount % fx.gale.every === 0 && !counter) {
+        if (def.alive && fx.gale && !counter && (fx.gale.chance ? roll(fx.gale.chance) : att.atkCount % fx.gale.every === 0)) {
           if (!ccBlocked(def)) {
             const dir = Math.sign(def.pos - att.pos) || (att.side === 'a' ? 1 : -1);
             const slam = displace(def, def.pos + dir * fx.gale.push);
@@ -847,9 +858,11 @@ window.G = window.G || {};
         const tg = target(f);
         if (!tg || Math.abs(tg.pos - f.pos) > f.range + 1e-6) continue;
         const fx = f.s.fx || {};
+        if (fx.noAttack) { f.nextAtk = Infinity; continue; }   // the Jester never attacks
         let spd = f.s.spd + (fx.shieldSpd && f.shield > 0 ? fx.shieldSpd : 0) + (fx.lowSpd && f.hp < f.maxHp / 2 ? fx.lowSpd : 0);
         if (fx.dodgeHaste) { f.haste = f.haste.filter(x => x > t); spd += f.haste.length * fx.dodgeHaste.spd; }
         spd += f.hitStacks;   // Relentless: counts past the Attack Speed cap
+        if (f.slowUntil > t) spd = Math.max(CB.minSpd, spd - f.slowSpd);   // Dirty Fighting
         if (f.frenzyUntil >= t) spd = (spd - f.s.spd + (f.s.spdUncapped || f.s.spd)) * 2;   // Hummingbird: ignores the Attack Speed cap while active
         if (f.sunderUntil >= t && f.sunderFx) spd *= 1 - f.sunderFx.slow;
         if (f.mired) spd *= 1 - f.mired * (f.mirePct || 8) / 100;   // Mire Beast

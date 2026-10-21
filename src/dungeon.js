@@ -152,7 +152,7 @@ window.G = window.G || {};
     merchant: { title: 'Merchant', text: () => 'No fight. Spend gold on gear and potions, or sell blood.' },
     forge:    { title: 'Forge',    text: () => `No fight. Strengthen an item (${CFG().forge.upgradeCost} gold) or add a random affix to one (${CFG().forge.affixCost} gold).` },
     trainer:  { title: 'Study',    text: () => `No fight. Study old battle journals: +${CFG().xp.trainer} XP.` },
-    wager:    { title: 'Wager',    text: d => `${monsterName(d.monster, 'fight')}, tougher than usual. A risky event: it may be worse than it looks. +${CFG().xp.fight} XP. No backing out: bet gold, and win to double it.` },
+    wager:    { title: 'Wager',    text: () => `Something waits behind a curtain. A risky event: you won't know what it is until the fight starts. No backing out: bet gold, and win to double it.` },
   };
 
   // What kind of room this is in the repeating 10-room pattern
@@ -185,10 +185,17 @@ window.G = window.G || {};
       if (type === 'fight' || type === 'elite' || type === 'wager') d.monster = monsterFor(room, type === 'elite' ? 'elite' : 'fight', rng);
       if (type === 'elite') d.trait = rng.pick(G.ELITE_TRAIT_ORDER);
       // A wager is risky: 1 in 3 turns out to be an elite (the door doesn't say)
-      if (type === 'wager' && rng.int(1, 100) <= CFG().wager.eliteChance) { d.wagerElite = true; d.trait = rng.pick(G.ELITE_TRAIT_ORDER); }
+      // A wager is a gamble the door never reveals: sometimes a Jester, sometimes a boss, often an elite
+      if (type === 'wager') {
+        const W = CFG().wager, r = rng.int(1, 100);
+        if (r <= W.jesterChance) { d.wagerKind = 'jester'; d.monster = G.JESTER; }
+        else if (r <= W.jesterChance + W.bossChance) { d.wagerKind = 'boss'; d.monster = G.BOSSES[rng.pick(G.BOSS_ORDER)]; }
+        else if (rng.int(1, 100) <= W.eliteChance) { d.wagerKind = 'elite'; d.wagerElite = true; d.trait = rng.pick(G.ELITE_TRAIT_ORDER); }
+        else d.wagerKind = 'fight';
+      }
       return d;
     });
-    for (let i = 0; i < 6 && doors[1].monster && doors[0].monster && doors[0].monster.id === doors[1].monster.id; i++) {
+    for (let i = 0; i < 6 && doors[1].monster && doors[0].monster && doors[0].monster.id === doors[1].monster.id && !['jester', 'boss'].includes(doors[1].wagerKind); i++) {
       doors[1].monster = monsterFor(room, 'fight', rng);
     }
     return doors;
@@ -199,10 +206,21 @@ window.G = window.G || {};
   function fightOpts(hero, seed) {
     return { seed, aHp: hero.hp, aName: hero.isPlayer ? 'You' : hero.name };
   }
-  function doorFoes(door, room) {
-    const kind = door.type === 'wager' ? (door.wagerElite ? 'elite' : 'fight') : door.type;
-    return buildEnemies(door.monster, room, kind, door.trait, door.type === 'wager' ? CFG().wager.monsterMult : null);
+  // What a door's fight counts as: a wager can hide an elite, a boss or the Jester
+  function fightKind(door) {
+    if (door.type !== 'wager') return door.type;
+    return door.wagerKind === 'boss' ? 'boss' : door.wagerElite || door.wagerKind === 'elite' ? 'elite' : 'fight';
   }
+  function doorFoes(door, room) {
+    if (door.wagerKind === 'jester') {
+      const foes = buildEnemies(G.JESTER, room, 'fight');
+      for (const f of foes) f.s.fx = { ...f.s.fx, deathBlast: CFG().wager.jesterBlast };
+      return foes;
+    }
+    const kind = fightKind(door);
+    return buildEnemies(door.monster, room, kind, door.trait, door.type === 'wager' && kind !== 'boss' ? CFG().wager.monsterMult : null);
+  }
+  const doorTitle = door => monsterName(door.monster, fightKind(door), door.trait);
 
   function danger(hero, door, room) {
     if (!door.monster) return null;
@@ -403,7 +421,7 @@ window.G = window.G || {};
   G.Dungeon = {
     monsterFor, planBosses, sharedRng, logHeart, bossDesc, buildEnemies, monsterName, makeDoors, doorInfo, danger, goldFor, itemPrice, sellPrice, doorFoes,
     specOptions, gemOptions, rollMystery, fight, applyFight, tickPoison, useItem, fightOpts, roomKind, merchantStock, merchantPrice,
-    gearDrops, spoilsOptions, takeSpoils, forgeStrengthen, forgeAffix, strengthenGains, canStrengthen,
+    gearDrops, spoilsOptions, takeSpoils, forgeStrengthen, forgeAffix, strengthenGains, canStrengthen, fightKind, doorTitle,
   };
 
   // ---------------- AI rivals ----------------
@@ -528,7 +546,7 @@ window.G = window.G || {};
     const doFight = (door, kind) => {
       const bet = kind === 'wager' ? wagerBet(hero) : 0;
       const res = fight(hero, door, room, rng);
-      const nm = monsterName(door.monster, kind === 'wager' ? (door.wagerElite ? 'elite' : 'fight') : kind, door.trait);
+      const nm = doorTitle(door);
       const out = applyFight(hero, res, room, nm);
       if (out === 'dead') { hero.gold = Math.max(0, hero.gold - bet); return `fell to ${nm} and is out`; }
       if (out === 'heart') { hero.gold = Math.max(0, hero.gold - bet); return `lost a heart to ${nm}`; }
@@ -540,8 +558,9 @@ window.G = window.G || {};
         hero.gold += 2 * Math.round(goldFor(k, hero, rng) / 4);
         return `ran out of time against ${nm}`;
       }
-      if (bet) hero.gold += bet;
-      return `beat ${nm}, ${autoReward(hero, kind, room, rng)}`;
+      if (door.wagerKind === 'jester') { hero.gold = Math.max(0, hero.gold - bet); return 'popped a Jester at a wager, lost the bet and got singed'; }
+      if (bet) hero.gold += bet * (door.wagerKind === 'boss' ? CFG().wager.bossPayout - 1 : 1);
+      return `beat ${nm}, ${autoReward(hero, kind === 'wager' ? fightKind(door) : kind, room, rng)}`;
     };
     switch (d.type) {
       case 'armory': { const it = rng.pick(G.Loot.armory(rng)); G.Hero.equip(hero, it); return `took ${it.name}`; }

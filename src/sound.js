@@ -88,6 +88,8 @@ window.G = window.G || {};
     kite:   () => { noise({ type: 'bandpass', f0: 800, f1: 300, dur: 0.15, vol: 0.12 }); },
     bleed:  () => { tone({ type: 'sine', f0: 300, f1: 200, dur: 0.06, vol: 0.05 }); },
     explode: () => { noise({ type: 'lowpass', f0: 2000, f1: 80, dur: 0.9, vol: 0.7, a: 0.01 }); tone({ type: 'sine', f0: 70, f1: 25, dur: 0.9, vol: 0.7 }); },
+    // The Jester: three squeaky "ha"s going down
+    haha:   () => { [0, 1, 2].forEach(i => { tone({ type: 'square', f0: 620 - i * 60, f1: 470 - i * 60, dur: 0.12, vol: 0.09, delay: i * 0.16 }); noise({ type: 'bandpass', f0: 1800 - i * 150, f1: 1200, dur: 0.1, vol: 0.06, delay: i * 0.16 }); }); },
     revive: () => { [392, 523, 659, 784].forEach((f, i) => tone({ type: 'triangle', f0: f, dur: 0.3, vol: 0.1, delay: i * 0.07 })); },
     death:  () => { tone({ type: 'sawtooth', f0: 220, f1: 55, dur: 0.45, vol: 0.12 }); noise({ type: 'lowpass', f0: 600, f1: 100, dur: 0.35, vol: 0.2 }); },
     levelup: () => { [523, 659, 784, 1046, 1318].forEach((f, i) => tone({ type: 'triangle', f0: f, dur: i === 4 ? 0.6 : 0.18, vol: 0.14, delay: i * 0.09 })); tone({ type: 'sine', f0: 1568, dur: 0.6, vol: 0.06, delay: 0.45 }); },

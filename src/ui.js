@@ -241,8 +241,8 @@ window.G = window.G || {};
   }
 
   // ---------- Set bonuses ----------
-  // Which tiers are switched on right now for a class with n pieces (the 4-piece bonus replaces the 2-piece one)
-  function tierOn(n) { return { two: n >= 2 && n < 4, four: n >= 4, six: n >= 6 }; }
+  // Which tiers are switched on right now for a class with n pieces (they stack: 4 pieces = the 2- and 4-piece bonuses)
+  function tierOn(n) { return { two: n >= 2, four: n >= 4, six: n >= 6 }; }
   const nextAt = n => (n < 2 ? 2 : n < 4 ? 4 : 6);
 
   function classTiers(c, n) {
@@ -254,7 +254,7 @@ window.G = window.G || {};
     const st = G.Stats.sets(hero), n = st.counts[c] || 0, C = G.CLASSES[c];
     const left = G.Supply.counts()[c];
     return `<div class="tt-title" style="color:${C.color}">${C.name} set <small>${n} of 6 worn</small></div>${classTiers(c, n)}
-      <p class="tt-extra">The 4-piece bonus replaces the 2-piece one. All 6 slots count, weapon included. ${left} of ${CFG().supplyPerClass} ${C.name} pieces are left in this match.</p>`;
+      <p class="tt-extra">Bonuses stack: 4 pieces give the 2- and 4-piece bonuses, 6 give all three. All 6 slots count, weapon included. ${left} of ${CFG().supplyPerClass} ${C.name} pieces are left in this match.</p>`;
   }
   function hybridTip(key, active) {
     const h = G.HYBRIDS[key], [a, b] = key.split('+');
@@ -294,7 +294,7 @@ window.G = window.G || {};
     }).join('');
     return `<div class="sg-card" role="dialog" aria-modal="true" aria-label="Set guide">
       <div class="sg-top"><h3>Set guide</h3><button class="ghost" data-act="set-guide-close">Close</button></div>
-      <p class="lede">Gear with a class tag counts toward that class. All 6 slots count, weapon included. 2 pieces give a small bonus; 4 replace it with a bigger one and change your look; 6 add the capstone. Wearing 4 of one class and 2 of another unlocks that pair's hybrid instead of a capstone. A single piece gives nothing. Every match shares ${CFG().supplyPerClass} pieces of each class.</p>
+      <p class="lede">Gear with a class tag counts toward that class. All 6 slots count, weapon included. 2 pieces give a small bonus; 4 add a bigger one and change your look; 6 add the capstone (bonuses stack). Wearing 4 of one class and 2 of another unlocks that pair's hybrid instead of a capstone. A single piece gives nothing. Every match shares ${CFG().supplyPerClass} pieces of each class.</p>
       <div class="sg-grid">${classes}</div>
       <h4 class="sg-h">Hybrids (4 of one + 2 of another)</h4><ul class="sg-hy">${hy}</ul></div>`;
   }
@@ -723,7 +723,7 @@ window.G = window.G || {};
     const p = st.player, d = st.door, B = CFG().wager.bets;
     const broke = p.gold < B[0];
     return `<section class="screen"><h2>Wager</h2>
-      <p class="lede">A pit boss grins: "${esc(G.Dungeon.monsterName(d.monster, 'fight'))}. Bet on yourself." The door has shut behind you, so this fight is happening. Win and you double your bet, plus the usual rewards. Lose and the bet is gone, along with a heart.</p>
+      <p class="lede">A pit boss grins and pulls a curtain halfway: "Bet on yourself." You can't see what's behind it, and the door has shut, so this fight is happening. Win and you double your bet, plus the usual rewards. Lose and the bet is gone, along with a heart.</p>
       <div class="row-actions">${broke ? `<button data-act="bet" data-v="0">Fight with nothing on the line</button><small>You can't cover the smallest bet (${B[0]} gold).</small>`
         : B.map(b => `<button data-act="bet" data-v="${b}" ${p.gold < b ? 'disabled' : ''}>Bet ${b} gold</button>`).join('')}</div>
       ${characterBlock(p)}</section>`;
@@ -739,7 +739,7 @@ window.G = window.G || {};
   const turnPct = () => (turnRaw() / CFG().shop.turnSeconds) * 100;
   function reviewRaw() { const sh = G.Game.s && G.Game.s.shop; return sh ? Math.max(0, (sh.reviewUntil - Date.now()) / 1000) : 0; }
   const reviewLeft = () => Math.ceil(reviewRaw());
-  const reviewPct = () => (reviewRaw() / CFG().shop.reviewSeconds) * 100;
+  const reviewPct = () => (reviewRaw() / ((G.Game.s && G.Game.s.shop && G.Game.s.shop.reviewSecs) || CFG().shop.reviewSeconds)) * 100;
 
   function mysteryScreen(st) {
     const m = st.mystery, p = st.player;

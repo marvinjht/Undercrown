@@ -231,6 +231,7 @@ window.G = window.G || {};
         case 'stun': if (def) this.float(def, e.secs > 1 ? 'STUNNED ' + e.secs + 's' : 'STUNNED', '#ffd34d', e.secs > 1 ? 15 : 13); break;
         case 'smoke': if (att) this.smoke(att, e.dur || 2); break;
         case 'double': if (att) this.float(att, e.twin ? 'TWIN STRIKE' : 'DOUBLE SHOT', '#8fcf78', 12); break;
+        case 'slowed': if (def) this.float(def, 'SLOWED', '#a9c6e0', 12); break;
         case 'stunblock': if (att) this.float(att, 'STEADFAST', '#ffd84a', 13); break;
         case 'critguard': if (att) this.float(att, 'GUARDED', '#ffd84a', 12); break;
         case 'sear': if (def) this.float(def, 'SEARED', '#ff9a3c', 12); break;
@@ -324,6 +325,17 @@ window.G = window.G || {};
         case 'shrug': if (att) this.float(att, 'UNBOUND +' + e.amount, '#f0d27a', 13); break;
         case 'sentinel': if (att) { this.float(att, 'SHIELD BURST', '#9fc4ff', 14); this.cameras.main.shake(100 / this.speed, 0.004); } break;
         case 'shieldup': if (att) this.float(att, 'SHIELD +' + e.amount, '#9fc4ff', 12); break;
+        case 'jester': {
+          if (def) { this.flash(def); this.float(def, String(e.amount), '#ff7a66', 20, 10); }
+          const src = this.F && this.F[e.src];
+          const at = src || def;
+          if (at) {
+            this.float(at, 'HA HA HA!', '#f2c14a', 18);
+            const ring = this.track(this.add.image(at.cont.x, at.cont.y, 'fx_ring').setTint(0xff6a3d).setScale(0.3));
+            this.tweens.add({ targets: ring, scale: 2.6, alpha: 0, duration: 480 / this.speed, onComplete: () => ring.destroy() });
+          }
+          this.cameras.main.shake(180 / this.speed, 0.008);
+        } break;
       }
       if (this.cfg.onEvent) this.cfg.onEvent(e);
     }
@@ -373,6 +385,7 @@ window.G = window.G || {};
         case 'raise': S.play('arcane', 0.4); break;
         case 'undying': S.play('revive'); break;
         case 'death': S.play('death', 0.12); break;
+        case 'jester': S.play('explode'); S.play('haha'); break;
         case 'bleed': case 'burn': S.play('bleed', 0.3); break;
         case 'steal': S.play('coin', 0.2); break;
       }

@@ -29,7 +29,7 @@ G.ASSETS = {
     monster_ogre: null, monster_cultist: null,
     monster_boneKing: null, monster_gorehorn: null, monster_warden: null,
     monster_snake: null, monster_skeletonArcher: null, monster_hydra: null, monster_ghoul: null,
-    monster_yeti: null, monster_wraithKing: null, monster_alphaWolf: null, monster_mire: null, monster_occultist: null, monster_disciple: null,
+    monster_yeti: null, monster_wraithKing: null, monster_alphaWolf: null, monster_mire: null, monster_occultist: null, monster_disciple: null, monster_jester: null,
   },
 
   icons: {
@@ -53,6 +53,6 @@ G.ASSETS = {
     slash: null, chop: null, thud: null, clang: null, bow: null, zap: null, claw: null, hurt: null, crit: null,
     firebolt: null, meteor: null, arcane: null, heal: null, shield: null, dodge: null, parry: null, stun: null,
     cheap: null, stealth: null, double: null, kite: null, bleed: null, explode: null, revive: null, death: null,
-    levelup: null, coin: null, heart: null,
+    levelup: null, coin: null, heart: null, haha: null,
   },
 };

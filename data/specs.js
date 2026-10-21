@@ -49,10 +49,10 @@ G.SPECS = {
 G.SPEC_TREES = {
   shadow: {
     t10: [{ id: 'quick', name: 'Quick Hands', fx: { cheapEvery: 4 }, desc: 'Cheap Shot every 4 seconds instead of 6' },
-          { id: 'dirty', name: 'Dirty Fighting', fx: { cheapDmg: 10 }, desc: 'Cheap Shots deal +10' }],
+          { id: 'dirty', name: 'Dirty Fighting', fx: { cheapDmg: 10, cheapSlow: { spd: 3, secs: 2 } }, desc: 'Cheap Shots deal +10 and lower the target’s Attack Speed by 3 for 2 seconds' }],
     t15: [{ id: 'poison', name: 'Poisoned Blade', fx: { bladePoison: { cap: 25 } }, desc: 'Every hit adds 1 poison, up to 25. Poisoned enemies take damage equal to their poison every 2 seconds, and in duels it stays with them' },
           { id: 'smoke', name: 'Smoke Bomb', fx: { smokeDodge: 20 }, desc: 'After a Cheap Shot, +20 Dodge for 2 seconds' }],
-    t20: { id: 'nightlord', name: 'Night Lord', fx: { openInvis: 5, nightLord: 1 }, desc: 'Start every fight invisible for up to 5 seconds (your first hit reveals you). That hit marks the target for 3 seconds, then it bursts for half the damage it took' },
+    t20: { id: 'nightlord', name: 'Night Lord', fx: { openInvis: 3, nightLord: 1 }, desc: 'Start every fight invisible for up to 3 seconds (your first hit reveals you). That hit marks the target for 3 seconds, then it bursts for half the damage it took' },
   },
   bloodthirst: {
     t10: [{ id: 'gorge', name: 'Gorge', fx: { overhealShield: 40 }, desc: 'Healing past full health becomes Shield, up to 40' },
