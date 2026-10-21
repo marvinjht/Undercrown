@@ -39,7 +39,7 @@ window.G = window.G || {};
       ward: def.ward ? even(def.ward * (1 + (room - 1) / 20)) : 0,
       dodge: def.dodge || 0, crit: def.crit || 0, critDmg: 0, stun: def.stun || 0, leech: def.leech || 0,
       bleed: def.bleed || 0, shield: 0, holy: 0, pierce: 0, manaGain: 0, startMana: 0, poison: def.poison || 0,
-      spec: null, gem: null, spell: null, fx: { ...(def.fx || {}) }, type: 'phys', range: def.range || 'melee',
+      spec: null, gem: null, spell: null, fx: { ...(def.fx || {}) }, type: def.type || 'phys', range: def.range || 'melee',
     };
   }
   // Trait stats grow with depth: about a third early, full strength by the last rooms
@@ -288,18 +288,21 @@ window.G = window.G || {};
     const all = [
       { id: 'gold', title: 'Gold pouch', text: `+${gold} gold`, gold },
       { id: 'xp', title: 'Lessons learned', text: `+${CFG().xp.spoils} XP`, xp: CFG().xp.spoils },
-      { id: 'cons', title: 'Supplies', text: 'A random bag item', item: G.Items.rollConsumable(room, rng) },
       { id: 'dmg', title: 'Whetstone', text: `+${S.statDmg} Damage, permanently`, stat: { dmg: S.statDmg } },
       { id: 'hp', title: 'Hearty meal', text: `+${S.statHp} max Health, permanently`, stat: { hp: S.statHp } },
-      { id: 'gear', title: 'Spoils of war', text: 'A random gear piece for this depth. Usually ordinary, sometimes great, very rarely legendary', item: spoilsGear(hero, room, rng), hidden: true },
+      { id: 'gear', title: 'Spoils of war', text: `A random item: gear, a relic or a bag item. Rarely a legendary${room < CFG().legendary.spoilsLateRoom ? ' (more often after room ' + CFG().legendary.spoilsLateRoom + ')' : ''}.`, item: spoilsItem(hero, room, rng), hidden: true },
     ];
     const n = G.Stats.treeFx(hero).fx.spoils4 ? 4 : 3;
     return pickN(all, n, rng);
   }
-  // Victory screen: a random piece of gear for this depth, with a small (growing) chance of a legendary
-  function spoilsGear(hero, room, rng) {
-    const L = CFG().legendary;
-    if (rng.float() * 100 < L.spoilsBase + room * L.spoilsPerRoom) { const lg = G.Items.rollLegendary(rng); if (lg) return lg; }
+  // Spoils of war: any kind of item (gear, relic or bag item), with a small chance of a legendary that grows after room 20
+  function spoilsItem(hero, room, rng) {
+    const L = CFG().legendary, late = room >= L.spoilsLateRoom;
+    const pct = late ? L.spoilsLate + (room - L.spoilsLateRoom) * L.spoilsLatePerRoom : L.spoilsEarly;
+    if (rng.float() * 100 < pct) { const lg = G.Items.rollLegendary(rng); if (lg) return lg; }
+    const M = CFG().spoils.mix, kind = rng.weighted([['gear', M.gear], ['bag', M.bag], ['relic', M.relic]]);
+    if (kind === 'relic') { const r = G.Items.rollRelic(hero, rng); if (r) return r; }
+    if (kind === 'bag') return G.Items.rollConsumable(room, rng);
     const rarity = G.Loot.rollRarity(hero, room, rng.int(1, 100) <= 15 ? 1 : 0, rng);
     const slot = rng.pick(G.SLOTS);
     return G.Items.generate(rng, { slot, rarity, room, hero, weaponType: slot === 'weapon' ? rng.pick(G.WEAPON_ORDER) : null });
@@ -308,7 +311,7 @@ window.G = window.G || {};
     if (opt.gold) { hero.gold += opt.gold; return `took ${opt.gold} gold`; }
     if (opt.xp) { G.Hero.gainXp(hero, opt.xp); return `gained ${opt.xp} XP`; }
     if (opt.item) {
-      if (!G.Hero.receive(hero, opt.item)) { hero.gold += 10; return 'took 10 gold (bag full)'; }
+      if (!G.Hero.receive(hero, opt.item)) { hero.gold += 10; return `took 10 gold (no room for ${opt.item.name})`; }
       return `took ${opt.item.name}`;
     }
     if (opt.stat) {
@@ -365,14 +368,15 @@ window.G = window.G || {};
   }
 
   // ---------- Forge ----------
-  // Strengthen: base stats grow by one tier step (not on legendaries: their stats are fixed).
+  // Strengthen: base stats grow by one tier step, once per piece (legendaries too).
   // Add an affix: one random bonus stat, once per piece.
+  const canStrengthen = item => !!item && !item.forged;
   function strengthenGains(item) {
     const out = {};
-    if (item.rarity === 'legendary') return out;
     for (const k in item.base) {
       if (k === 'spd' && item.slot === 'weapon') continue;
-      const growth = G.STAT_INFO[k].growth;
+      const growth = G.STAT_INFO[k] && G.STAT_INFO[k].growth;
+      if (!growth) continue;
       if (growth === 'fixed') continue;
       const g = growth === 'flat' ? CFG().loot.tierGrowth : CFG().loot.chanceTierGrowth;
       out[k] = Math.max(2, 2 * Math.round(item.base[k] * g / 2));
@@ -380,6 +384,7 @@ window.G = window.G || {};
     return out;
   }
   function forgeStrengthen(item) {
+    if (!canStrengthen(item)) return;
     const add = strengthenGains(item);
     for (const k in add) { item.base[k] += add[k]; item.stats[k] = (item.stats[k] || 0) + add[k]; }
     item.forged = (item.forged || 0) + 1;
@@ -393,7 +398,7 @@ window.G = window.G || {};
   G.Dungeon = {
     monsterFor, planBosses, sharedRng, logHeart, bossDesc, buildEnemies, monsterName, makeDoors, doorInfo, danger, goldFor, itemPrice, sellPrice, doorFoes,
     specOptions, gemOptions, rollMystery, fight, applyFight, tickPoison, useItem, fightOpts, roomKind, merchantStock, merchantPrice,
-    gearDrops, spoilsOptions, takeSpoils, forgeStrengthen, forgeAffix, strengthenGains,
+    gearDrops, spoilsOptions, takeSpoils, forgeStrengthen, forgeAffix, strengthenGains, canStrengthen,
   };
 
   // ---------------- AI rivals ----------------
@@ -426,7 +431,7 @@ window.G = window.G || {};
     return 'took nothing';
   }
   function autoSpoils(hero, opts) {
-    const pref = ['dmg', 'hp', 'xp', 'gold', 'cons'];
+    const pref = ['dmg', 'hp', 'xp', 'gold', 'gear'];
     const pick = pref.map(id => opts.find(o => o.id === id)).find(Boolean) || opts[0];
     return takeSpoils(hero, pick);
   }
@@ -542,13 +547,12 @@ window.G = window.G || {};
       case 'trainer': G.Hero.gainXp(hero, CFG().xp.trainer); return `studied (+${CFG().xp.trainer} XP)`;
       case 'forge': {
         const F = CFG().forge;
-        const it = ['weapon', ...G.SLOTS].map(sl => hero.gear[sl]).find(x => x && x.rarity !== 'legendary');
-        if (hero.gold < F.upgradeCost || !it) return 'looked at the forge';
-        hero.gold -= F.upgradeCost; forgeStrengthen(it);
-        let txt = `strengthened ${it.name}`;
+        const it = ['weapon', ...G.SLOTS].map(sl => hero.gear[sl]).find(x => canStrengthen(x));
+        let txt = '';
+        if (it && hero.gold >= F.upgradeCost) { hero.gold -= F.upgradeCost; forgeStrengthen(it); txt = `strengthened ${it.name}`; }
         const af = G.SLOTS.map(sl => hero.gear[sl]).find(x => x && !x.affixed);
-        if (af && hero.gold >= F.affixCost + 20) { hero.gold -= F.affixCost; forgeAffix(af, rng); txt += ` and forged a bonus onto ${af.name}`; }
-        return txt;
+        if (af && hero.gold >= F.affixCost + 20) { hero.gold -= F.affixCost; forgeAffix(af, rng); txt += `${txt ? ' and ' : ''}forged a bonus onto ${af.name}`; }
+        return txt || 'looked at the forge';
       }
       case 'venom': {
         hero.poison += CFG().poison.venomStacks;

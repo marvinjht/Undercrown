@@ -139,7 +139,8 @@ window.G = window.G || {};
     if (W) for (const k of ['dmg', 'spellDmg', 'holy', 'bleed']) if (st[k]) st[k] = value(k, st[k], G.RARITY.rare, G.CONFIG.legendary.tier);
     return { id: G.uid('item'), kind: 'gear', slot: D.slot, rarity: 'legendary', legendary: id, room: 0, tier: G.CONFIG.legendary.tier,
       weaponType: D.weaponType || null, set: D.cls, name: D.name, base: { ...st }, stats: { ...st },
-      affixStats: {}, affixes: [], tradeoff: null, trait: D.desc, baseTrait: W ? W.trait : null, iconKey: D.weaponType || D.slot };
+      affixStats: {}, affixes: [], tradeoff: null, trait: D.desc, baseTrait: W && !(D.fx && D.fx.meleeStaff) ? W.trait : null,   // Inferno replaces the Staff's own trait
+      iconKey: D.weaponType || D.slot };
   }
   function rollLegendary(rng) {
     const taken = Supply.legendTaken();
@@ -212,7 +213,13 @@ window.G = window.G || {};
   }
   function rollConsumable(room, rng, pool) {
     const ids = (pool || Object.keys(G.CONSUMABLES)).filter(k => !G.CONSUMABLES[k].minRoom || room >= G.CONSUMABLES[k].minRoom);
-    return consumable(rng.weighted(ids.map(k => [k, G.CONSUMABLES[k].weight])));
+    return consumable(rng.weighted(ids.map(k => [k, consumableWeight(k, room)])));
+  }
+  function consumableWeight(k, room) {
+    const c = G.CONSUMABLES[k], R = c.ramp;
+    if (!R) return c.weight;
+    const from = c.minRoom || 1, f = Math.max(0, Math.min(1, (room - from) / Math.max(1, R.room - from)));
+    return c.weight + (R.weight - c.weight) * f;
   }
 
   G.Items = { generate, fmtStat, statLines, effectText, compare, tierFor, consumable, rollConsumable, rollSet, legendary, rollLegendary, relic, rollRelic, addAffix };

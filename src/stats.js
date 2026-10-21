@@ -102,7 +102,7 @@ window.G = window.G || {};
     t.dmg += Math.floor((lv + 2) / 4) * LV.bump;
     t.armor += Math.floor(lv / 4) * LV.bump;
     // Midas: +10 Damage and +15 Health for every 50 gold you hold
-    if (fx.midas) { const n = Math.floor((hero.gold || 0) / fx.midas); t.dmg += 10 * n; t.hp += 15 * n; }
+    if (fx.midas) { const M = fx.midas, n = Math.floor((hero.gold || 0) / M.per); t.dmg += M.dmg * n; t.hp += M.hp * n; }
 
     if (fx.firstCrits) fx.firstCrits = Math.min(C().combat.firstCritCap, fx.firstCrits);
     const s = {
@@ -114,7 +114,7 @@ window.G = window.G || {};
       holy: t.holy, pierce: t.pierce,
       manaGain: t.manaGain, startMana: t.startMana,
       spec: hero.spec || null, gem: hero.gem || null, weaponType: wt,
-      type: W ? W.type : 'phys', range: W ? (fx.meleeStaff ? 'melee' : W.range) : 'melee',
+      type: W && !fx.physical ? W.type : 'phys', range: W ? (fx.meleeStaff ? 'melee' : W.range) : 'melee',
       legendary: leg ? leg.legendary : null,
       cleave: !!(W && W.cleave), healEvery: W && W.healEvery ? W.healEvery : null,
       spell: null, fx, sets: st,
@@ -154,14 +154,15 @@ window.G = window.G || {};
     s.dmg = Math.max(2, s.dmg);
     // Attack Speed cap: bonus speed on top of the weapon counts fully up to the cap, then half
     const SC = CB.spdSoftCap, baseSpd = weaponSpd(hero, W);
-    s.spdUncapped = Math.max(CB.minSpd, s.spd);
+    s.spdUncapped = Math.max(CB.minSpd, s.spd); s.spdBase = baseSpd;
     if (SC && s.spd - baseSpd > SC) s.spd = baseSpd + SC + Math.floor((s.spd - baseSpd - SC) / 2);
     s.spd = Math.max(CB.minSpd, s.spd);
     if (fx.hpShieldPct) s.shield += even(s.maxHp * fx.hpShieldPct / 100);   // Tortoise Shell
     if (fx.armorShield) s.shield += fx.armorShield * s.armor;
     // Monolith: damage from max health
-    if (fx.hpDmg) s.dmg += Math.floor(s.maxHp / fx.hpDmg);
+    if (fx.hpDmg) s.dmg += fx.hpDmg.dmg * Math.floor(s.maxHp / fx.hpDmg.per);
     if (fx.openingSpell && s.spell) s.startMana = CB.manaMax;
+    s.dodgeRaw = s.dodge; s.critRaw = s.crit;
     s.dodge = Math.min(CB.dodgeCap, s.dodge);
     s.crit = Math.min(CB.critCap, s.crit);
     s.atkSpd = s.spd / 10;

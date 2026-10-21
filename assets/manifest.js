@@ -29,7 +29,7 @@ G.ASSETS = {
     monster_ogre: null, monster_cultist: null,
     monster_boneKing: null, monster_gorehorn: null, monster_warden: null,
     monster_snake: null, monster_skeletonArcher: null, monster_hydra: null, monster_ghoul: null,
-    monster_yeti: null, monster_wraithKing: null, monster_alphaWolf: null, monster_mire: null,
+    monster_yeti: null, monster_wraithKing: null, monster_alphaWolf: null, monster_mire: null, monster_occultist: null, monster_disciple: null,
   },
 
   icons: {

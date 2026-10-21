@@ -100,6 +100,9 @@ window.G = window.G || {};
     // Sunder lowers Armor and Magic Resist for a few seconds
     const sunderShred = f => (f.sunderUntil >= t && f.sunderFx ? f.sunderFx.shred : 0);
     const wardOf = f => (f.egg ? 0 : Math.max(0, (f.s.ward || 0) - sunderShred(f)));
+    const armorOf = f => (f.egg ? 0 : Math.max(0, (f.s.armor || 0) - (f.shredUntil >= t ? f.shred : 0) - sunderShred(f)));
+    // Spell damage: Magic Resist cuts it, unless the caster deals physical damage (Inferno), then Armor does
+    const spellCut = (f, d) => (f.s.fx && f.s.fx.physical ? Math.max(0, armorOf(d) - (f.s.pierce || 0)) : wardOf(d));
     // A Phoenix egg has none of its owner's stats or effects
     const fxOf = f => (f.egg ? {} : (f.s.fx || {}));
     // Unbound: crowd control just bounces off and makes you angrier
@@ -344,7 +347,7 @@ window.G = window.G || {};
       for (const d of tgts) {
         if (!d.alive) continue;
         const raw = sp.dmg * (scrit ? 2 : 1);
-        const r = damage(d, Math.max(CB.minHit, raw - wardOf(d)), f);
+        const r = damage(d, Math.max(CB.minHit, raw - spellCut(f, d)), f);
         push({ type: 'spellhit', src: f.id, tgt: d.id, amount: r.dealt, absorbed: r.absorbed, name: sp.name, crit: !!scrit }, d);
         afterDamage(d, f);
         if (!d.alive) continue;
@@ -381,7 +384,7 @@ window.G = window.G || {};
       push({ type: 'cast', src: f.id, name: sp.name + ' (Echo)', aoe: sp.aoe, tgts: tgts.map(x => x.id), echo: true }, f);
       for (const d of tgts) {
         if (!d.alive) continue;
-        const r = damage(d, Math.max(CB.minHit, half - wardOf(d)), f);
+        const r = damage(d, Math.max(CB.minHit, half - spellCut(f, d)), f);
         push({ type: 'spellhit', src: f.id, tgt: d.id, amount: r.dealt, absorbed: r.absorbed, name: sp.name }, d);
         afterDamage(d, f);
       }

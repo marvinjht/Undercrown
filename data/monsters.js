@@ -3,7 +3,7 @@
 // pack = how many show up together (each with the listed hp/hit).
 // split = on death, spawns `count` copies of the next stage (Splitting Slime).
 // steal = gold taken per hit (thieves keep fighting; they never run off).
-// Sprite key = 'monster_' + (sprite || id). All monsters are melee in v2.
+// Sprite key = 'monster_' + (sprite || id). range = 'near'/'far' shoots from a distance; type: 'magic' hits are cut by Magic Resist, not Armor.
 window.G = window.G || {};
 
 G.MONSTERS = [
@@ -12,7 +12,7 @@ G.MONSTERS = [
     split: { count: 2, hp: 0.25, hit: 0.55, scale: 0.85 } },
   { id: 'slimeElite', name: 'Elite Slime',    minRoom: 15, maxRoom: 30, hp: 0.6, hit: 0.85, spd: 8, scale: 1.35,
     split: { count: 2, hp: 0.3, hit: 0.6, scale: 0.95, next: { count: 2, hp: 0.15, hit: 0.45, scale: 0.65 } } },
-  { id: 'wolf',     name: 'Wolf Pack',        minRoom: 3,  maxRoom: 14, pack: 3, memberName: 'Wolf', hp: 0.45, hit: 0.5, spd: 14, bleed: 2 },
+  { id: 'wolf',     name: 'Wolf Pack',        minRoom: 3,  maxRoom: 14, pack: 3, memberName: 'Wolf', hp: 0.4, hit: 0.5, spd: 12, bleed: 2 },
   { id: 'snake',    name: 'Snake Nest',       minRoom: 4,  maxRoom: 22, pack: 3, memberName: 'Snake', hp: 0.35, hit: 0.4, spd: 10, poison: 1, crit: 30,
     note: 'Critical bites add 1 poison.',
     // Elite version: a Hydra leads the nest and every bite poisons twice as much
@@ -20,6 +20,8 @@ G.MONSTERS = [
       note: 'A Hydra and 3 snakes. Critical bites add 2 poison.' } },
   { id: 'skeletonArcher', name: 'Skeleton Archers', minRoom: 6, maxRoom: 26, pack: 2, memberName: 'Skeleton Archer', hp: 0.45, hit: 0.55, spd: 8, armor: 2, range: 'near',
     note: 'They shoot from a few steps away.' },
+  { id: 'disciple', name: 'Disciples',       minRoom: 9, maxRoom: 28, pack: 2, memberName: 'Disciple', hp: 0.45, hit: 0.55, spd: 8, ward: 2, range: 'near', type: 'magic',
+    note: 'They cast magic bolts from a few steps away (Magic Resist blocks them, Armor doesn’t).' },
   { id: 'skeleton', name: 'Skeleton',         minRoom: 3,  maxRoom: 14, hp: 1.0, hit: 1.0, spd: 10, armor: 2 },
   { id: 'goblin',   name: 'Goblin Cutthroat', minRoom: 4,  maxRoom: 16, hp: 0.8, hit: 0.75, spd: 16, dodge: 12, crit: 10 },
   { id: 'thief',    name: 'Thieves',          minRoom: 5,  maxRoom: 20, pack: 2, memberName: 'Thief', hp: 0.65, hit: 0.55, spd: 14, dodge: 10, steal: 2 },
@@ -39,7 +41,7 @@ G.BOSSES = {
   warden:   { id: 'warden',   name: 'The Warden',    hp: 0.8, hit: 0.85, spd: 10, armor: 6, ward: 4, crit: 8, trait: 'spellward' },
   yeti:     { id: 'yeti',     name: 'The Frost Yeti', hp: 0.9, hit: 1.0, spd: 8, armor: 2, early: { hit: 1.2 },
     fx: { chill: { stacks: 3, secs: 2, cooldown: 6 } },
-    desc: 'Every hit Chills you. At 3 Chill you freeze solid for 2 seconds (at most once every 6). Kill it fast or dodge.' },
+    desc: 'Every hit Chills you. At 3 Chill you freeze solid for 2 seconds (at most once every 6). Stubborn: the freeze ignores the stun limit. Kill it fast or dodge.' },
   wraithKing: { id: 'wraithKing', name: 'The Wraith King', hp: 0.75, hit: 0.8, spd: 8, ward: 4, early: { hp: 0.75, hit: 0.7 },
     minions: { count: 5, id: 'ghoul', name: 'Ghoul', hp: 0.1, hit: 0.16, spd: 10 },
     fx: { raise: { count: 3, manaGain: 14 } },
@@ -47,6 +49,9 @@ G.BOSSES = {
   alphaWolf: { id: 'alphaWolf', name: 'The Alpha Wolf', hp: 0.7, hit: 0.85, spd: 10, bleed: 2, early: { hp: 0.8, hit: 0.75 },
     minions: { count: 3, id: 'wolf', name: 'Shadow Wolf', hp: 0.2, hit: 0.24, spd: 12, fx: { packFade: { every: 6, secs: 3 } } },
     desc: 'Leads 3 wolves that vanish for 3 seconds every 6. While they hide, hit the Alpha.' },
+  occultist: { id: 'occultist', name: 'The Occultist', hp: 0.75, hit: 0.6, spd: 8, ward: 4, range: 'near', type: 'magic', early: { hp: 0.8, hit: 0.75 },
+    minions: { count: 2, id: 'disciple', name: 'Disciple', hp: 0.25, hit: 0.35, spd: 8, range: 'near', type: 'magic' },
+    desc: 'Casts magic bolts from range with 2 Disciples whose bolts hit harder than usual. Magic Resist blocks them; Armor doesn’t.' },
   mire:     { id: 'mire',     name: 'The Mire Beast', hp: 1.0, hit: 1.35, spd: 5, armor: 2, early: { hit: 1.15 },
     fx: { mire: { pct: 8, max: 5 } },
     desc: 'Slow, crushing blows. Each hit cuts your Attack Speed by 8%, stacking 5 times.' },

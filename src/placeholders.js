@@ -166,6 +166,7 @@ window.G = window.G || {};
     troll: g => { blob(g, 32, 32, 52, 58, 0x6f7f72, 0xffe066); g.fillStyle(0x56645a).fillCircle(22, 14, 6).fillCircle(22, 50, 6); },
     ogre: g => { blob(g, 32, 32, 54, 58, 0x9a7a5a, 0xff7a3b); g.fillStyle(0x5b4636).fillRect(46, 20, 14, 24); },
     cultist: g => { g.fillStyle(0x5a1820).fillTriangle(10, 32, 46, 8, 46, 56); blob(g, 36, 32, 26, 30, 0x8c2a34, 0xff3040); },
+    disciple: g => { g.fillStyle(0x2a2440).fillTriangle(8, 32, 44, 8, 44, 56); blob(g, 36, 32, 24, 28, 0x463a6e, 0xb39cff); g.fillStyle(0xb39cff, 0.7).fillCircle(54, 32, 5); },
     skeletonArcher: g => { g.lineStyle(3, 0x8a6a48).beginPath().arc(40, 32, 18, -1.2, 1.2).strokePath(); g.lineStyle(1, 0xe8e8e8).lineBetween(46, 15, 46, 49); blob(g, 28, 32, 30, 40, 0xe4dccb, 0x1b1410); g.lineStyle(2, 0x9c917f).lineBetween(22, 18, 22, 46); },
     snake: g => { g.lineStyle(7, 0x4f7a3a).beginPath().moveTo(4, 40).lineTo(14, 28).lineTo(24, 40).lineTo(34, 30).strokePath(); blob(g, 42, 30, 20, 16, 0x5f9444, 0xffe066); g.lineStyle(2, 0xd04040).lineBetween(52, 30, 58, 30); },
     hydra: g => {
@@ -183,6 +184,10 @@ window.G = window.G || {};
     mire: g => { g.fillStyle(0x3a3020, 0.4).fillEllipse(48, 52, 90, 80); blob(g, 48, 48, 72, 70, 0x5a4a2e, 0xc8e05a); g.fillStyle(0x4a3c24).fillCircle(26, 26, 7).fillCircle(30, 72, 9).fillCircle(64, 20, 5); g.fillStyle(0x6a8a3a).fillCircle(56, 70, 4).fillCircle(22, 50, 3); },
     boneKing: g => { blob(g, 48, 48, 60, 72, 0xe9e0c8, 0xff3b30); g.fillStyle(0xd8b13a).fillTriangle(30, 30, 24, 18, 36, 28).fillTriangle(30, 48, 18, 48, 30, 42).fillTriangle(30, 66, 24, 78, 36, 68); },
     gorehorn: g => { blob(g, 48, 48, 66, 76, 0x7a3a2a, 0xffd23f); g.fillStyle(0xeee3c8).fillTriangle(66, 30, 90, 20, 70, 38).fillTriangle(66, 66, 90, 76, 70, 58); },
+    occultist: g => {
+      g.fillStyle(0x6a4fc0, 0.3).fillCircle(48, 48, 44); g.fillStyle(0x1e1830).fillTriangle(10, 48, 70, 8, 70, 88);
+      blob(g, 54, 48, 40, 48, 0x3a2f5e, 0xd8ccff); g.lineStyle(3, 0xb39cff).strokeCircle(80, 48, 10); g.fillStyle(0xd8ccff).fillCircle(80, 48, 4);
+    },
     warden: g => { g.fillStyle(0x3a4250).fillRect(14, 10, 64, 76); g.lineStyle(3, 0x9aa7b8).strokeRect(14, 10, 64, 76); blob(g, 50, 48, 48, 58, 0x5d6b80, 0x7fe0ff); },
   };
 

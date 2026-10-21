@@ -16,7 +16,7 @@ const C = G.CONFIG;
 const stats = { heroes: 0, noHeartLost: 0, reachedEnd: 0, heartsAtEnd: {}, levelAt: { 10: [], 20: [], 30: [] }, outBy: {},
   heartLossRoom: {}, duelLen: [], tourLen: [], tourRounds: [], specWins: {}, gemWins: {}, buildWins: {}, sets: {}, hybrids: {}, full: {},
   supplyLow: 0, fightLen: [], gear: [], rarity: { grey: 0, green: 0, rare: 0, legendary: 0 }, tagged: 0, effects: 0, tradeoffs: 0,
-  legendHeld: {}, legendWins: {}, relicsAtEnd: [], hybridWins: {} };
+  legendHeld: {}, legendWins: {}, relicsAtEnd: [], hybridWins: {}, lostTo: {} };
 G._fightLog = stats.fightLen;
 
 for (let mi = 0; mi < MATCHES; mi++) {
@@ -42,6 +42,7 @@ for (let mi = 0; mi < MATCHES; mi++) {
   }
   for (const h of heroes) {
     stats.heroes++;
+    for (const x of h.heartLog || []) if (x.room < 30) { const k = String(x.by || '?').replace(/^(Elite |Ironclad |Spellward |Swarm |Evasive |Thorns |Shieldbreaker )+/, ''); stats.lostTo[k] = (stats.lostTo[k] || 0) + 1; }
     if (!lostAny.has(h) && h.alive) stats.noHeartLost++;
     if (h.alive) {
       stats.reachedEnd++;
@@ -80,6 +81,7 @@ console.log(`${MATCHES} matches, ${stats.heroes} heroes`);
 console.log(`Reached room 30 without losing a heart: ${pct(stats.noHeartLost, stats.heroes)}  (target about 60%)`);
 console.log(`Reached the tournament at all: ${pct(stats.reachedEnd, stats.heroes)}  hearts left at the end:`, stats.heartsAtEnd, ' knocked out in:', stats.outBy);
 console.log('Hearts lost in the dungeon by rooms:', stats.heartLossRoom);
+console.log('Hearts lost to (top 12):', Object.entries(stats.lostTo).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => k + ' ' + v).join(', '));
 console.log(`Average level at room 10: ${avg(stats.levelAt[10])}, room 20: ${avg(stats.levelAt[20])}, room 30: ${avg(stats.levelAt[30])}`);
 console.log(`Monster fight length median ${med(stats.fightLen).toFixed(1)}s | duel median ${med(stats.duelLen).toFixed(1)}s | tournament fight median ${med(stats.tourLen).toFixed(1)}s, rounds per tournament ${avg(stats.tourRounds)}`);
 console.log('End gear rarity:', stats.rarity, 'tagged pieces:', stats.tagged, 'with trade-off:', stats.tradeoffs);

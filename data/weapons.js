@@ -21,8 +21,8 @@ G.WEAPONS = {
   },
   swordShield: {
     classes: ['warrior', 'paladin'],
-    name: 'Sword & Shield', range: 'melee', type: 'phys', dmg: 10, spd: 10, bonus: { armor: 2, shield: 30 }, fx: { bash: 5 },
-    trait: 'Shield: extra Armor, and a Shield that soaks up damage at the start of every fight. Shield Bash: every 5th hit stuns for 1 second (ignores the stun limit).',
+    name: 'Sword & Shield', range: 'melee', type: 'phys', dmg: 10, spd: 10, bonus: { armor: 2, shield: 30 }, fx: { bash: 5 }, stubborn: true,
+    trait: 'Shield: extra Armor, and a Shield that soaks up damage at the start of every fight. Shield Bash: every 5th hit stuns for 1 second.',
     blurb: 'Steady damage, hard to wear down.',
     bases: ['Militia Sword & Board', 'Knight’s Blade & Kite Shield', 'Aegis Blade & Bulwark'],
   },

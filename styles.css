@@ -779,3 +779,11 @@ table.tour { width: 100%; border-collapse: collapse; font-size: 15px; font-varia
 .watch-pop.docked .wp-head { cursor: default; }
 .watch-pop.docked .wp-screen { zoom: 0.75; max-height: 560px; }
 .tour-view-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 4px; }
+
+/* v0.31: class tag in tooltips, Stubborn affix */
+.tt-tags { margin: 4px 0 2px; }
+.tt-tags .set-chip { margin-top: 0; }
+.stat-list .affix.stubborn, .tt-stats .affix.stubborn { color: #f0d27a; }
+.tt-cap { color: var(--muted); font: 12px var(--f-mono); margin-top: 4px; }
+.tt-cap.at { color: #f0d27a; }
+.statcols li.capped b { color: #f0d27a; }

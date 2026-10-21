@@ -476,7 +476,7 @@ window.G = window.G || {};
       const s = this.s, p = s.player, f = s.forge, F = CFG().forge;
       const it = p.gear[slot];
       if (s.phase !== 'forge' || !it) return;
-      if (kind === 'strengthen' && !f.strengthened && p.gold >= F.upgradeCost) {
+      if (kind === 'strengthen' && !f.strengthened && G.Dungeon.canStrengthen(it) && p.gold >= F.upgradeCost) {
         p.gold -= F.upgradeCost; G.Dungeon.forgeStrengthen(it); f.strengthened = true;
         f.msg = `The smith hammers your ${it.name} stronger.`;
       } else if (kind === 'affix' && !f.affixed && !it.affixed && p.gold >= F.affixCost) {
@@ -538,7 +538,7 @@ window.G = window.G || {};
     // Turncoat's Dye: change a piece's class tag
     dyeTargets() {
       const p = this.s.player;
-      return [...G.SLOTS.map(sl => p.gear[sl]), ...p.bag].filter(it => it && it.kind === 'gear' && it.set && it.rarity !== 'legendary');
+      return [...G.SLOTS.map(sl => p.gear[sl]), ...p.bag].filter(it => it && it.kind === 'gear' && it.set);
     },
     dyeItem(id) { const s = this.s; if (!s.dye) return; s.dye.item = id; s.bagMsg = 'Turncoat’s Dye: pick the new class.'; render(); },
     dyeCancel() { const s = this.s; s.dye = null; s.bagMsg = null; render(); },
@@ -862,7 +862,8 @@ window.G = window.G || {};
       } else if (kind === 'blood') {
         // A gamble: always the same health, a random handful of gold
         const cost = p.gem === 'stone' ? 1 : S.bloodHealth;
-        if (p.hp <= cost) return;
+        if (p.hp <= cost || (m.bled || 0) >= S.bloodMax) return;
+        m.bled = (m.bled || 0) + 1;
         const gold = s.rng.int(S.bloodGold[0], S.bloodGold[1]);
         p.hp -= cost; p.gold += gold;
         m.bloodPop = { gold, seq: (m.bloodPop ? m.bloodPop.seq : 0) + 1 };

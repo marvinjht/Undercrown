@@ -2,7 +2,7 @@
 // All stats are flat whole numbers. Chance stats (Crit, Dodge, Stun) mean "out of 100".
 window.G = window.G || {};
 
-G.VERSION = '0.3';   // players in one room must all run the same version
+G.VERSION = '0.31';   // players in one room must all run the same version
 
 G.CONFIG = {
   // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
@@ -66,7 +66,7 @@ G.CONFIG = {
     // Everything below is the merchant door
     potionCost: 30, stock: [1, 3],   // a merchant has 1 to 3 of each potion and elixir
     gearCount: 4, restockCosts: [10, 30],  // two restocks per visit
-    bloodHealth: 10, bloodGold: [5, 50],   // sell blood: lose this much health for a random amount of gold
+    bloodHealth: 15, bloodGold: [5, 40], bloodMax: 3,   // sell blood: lose this much health for a random amount of gold, at most bloodMax times per visit
     itemCost: { grey: 8, green: 44, rare: 90 }, itemCostPerRoom: { grey: 1, green: 2, rare: 2 },
   },
 
@@ -81,13 +81,13 @@ G.CONFIG = {
 
   // Gear pacing: normal fights give gear 1 in 3 times (otherwise Spoils), elites and bosses always do
   gearChance: { fight: 33, lucky: 50 },
-  spoils: { gold: 24, statDmg: 2, statHp: 8 },
+  spoils: { gold: 24, statDmg: 2, statHp: 8, mix: { gear: 50, bag: 30, relic: 20 } },   // mix: what Spoils of war turns out to be (out of 100), when it isn't a legendary
 
   // Out of 100, how often a relic joins the reward choices (Plunder always has one)
   relicChance: { fight: 8, elite: 35, boss: 100, vault: 100 },
   // Legendaries: these bosses always offer one; elites past eliteFromRoom offer one this often (out of 100)
   legendary: { bossRooms: [18, 28], eliteFromRoom: 15, eliteChance: 10, tier: 6,
-    spoilsBase: 0.5, spoilsPerRoom: 0.1,   // the victory screen's random gear: 0.5% + 0.1% per room to be a legendary
+    spoilsEarly: 1, spoilsLateRoom: 20, spoilsLate: 5, spoilsLatePerRoom: 0.5,   // Spoils of war: 1% to be a legendary before room 20, then 5% + 0.5% per room past it
     eventChance: { vault: 2, shrine: 1 } },   // vaults, venom caches and blood shrines: a very rare legendary (out of 100)   // tier: weapon damage matches a rare of this tier
   forge: { upgradeCost: 40, affixCost: 50 },
 

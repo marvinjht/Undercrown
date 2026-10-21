@@ -41,6 +41,17 @@ window.G = window.G || {};
     return `<span class="set-chip" style="--set:${C.color}">${C.name}</span>`;
   }
 
+  // Weapon line: type · range · damage type (legendaries can change range or damage type, e.g. Inferno)
+  function weaponLine(item) {
+    const W = item.slot === 'weapon' ? G.WEAPONS[item.weaponType] : null;
+    if (!W) return null;
+    const L = item.legendary ? G.LEGENDARIES[item.legendary].fx || {} : {};
+    const range = L.meleeStaff ? 'melee' : W.range, type = L.physical ? 'phys' : W.type;
+    return W.name + ' · ' + RANGE_NAMES[range] + ' · ' + (type === 'magic' ? 'Magic' : 'Physical');
+  }
+  // Stubborn: the item has a stun that ignores the stun limit
+  const isStubborn = item => !!((item.legendary && G.LEGENDARIES[item.legendary].stubborn) || (item.slot === 'weapon' && G.WEAPONS[item.weaponType] && G.WEAPONS[item.weaponType].stubborn));
+
   function consumableTip(item) {
     const c = G.CONSUMABLES[item.cid];
     return `<div class="tt-title">${esc(c.name)}</div><p>${esc(c.desc)}</p><p class="tt-extra">Goes in your bag. Tap it there to use or discard.</p>`;
@@ -52,6 +63,7 @@ window.G = window.G || {};
     const base = lines.filter(l => !l.affix).map(l => `<li>${esc(l.text)}</li>`).join('');
     const bonus = lines.filter(l => l.affix);
     let extra = bonus.length ? `<li class="affix-h">Bonus</li>${bonus.map(l => `<li class="affix ${l.cost ? 'cost' : ''}">${esc(l.text)} <small>${esc(l.suffix)}</small></li>`).join('')}` : '';
+    if (isStubborn(item)) extra += `<li class="affix stubborn">Stubborn <small>its stun ignores the stun limit</small></li>`;
     if (item.rarity === 'legendary') extra += `<li class="affix-h legend-h">Legendary effect</li><li class="effect legend">${esc(G.LEGENDARIES[item.legendary].desc)}</li>`;
     return `<ul class="${cls}">${base}${extra}</ul>`;
   }
@@ -69,12 +81,12 @@ window.G = window.G || {};
           diffs.map(d => `<li class="${d.d > 0 ? 'up' : 'down'}">${esc(d.text)}</li>`).join('') || '<li>Same stats</li>'}</ul></div>`;
       }
     }
-    const W = item.slot === 'weapon' ? G.WEAPONS[item.weaponType] : null;
-    const set = item.set ? `<p class="tt-extra">Counts toward the ${G.CLASSES[item.set].name} set.</p>` : '';
+    const wl = weaponLine(item);
     return `<div class="tt-title r-${item.rarity}">${esc(item.name)}</div>
-      <div class="tt-sub">${R.name} ${W ? W.name + ' · ' + RANGE_NAMES[W.range] + ' · ' + (W.type === 'magic' ? 'Magic' : 'Physical') : G.SLOT_NAMES[item.slot]} ${item.rarity === 'legendary' ? '' : ' · Tier ' + item.tier}</div>
+      <div class="tt-sub">${R.name} ${wl || G.SLOT_NAMES[item.slot]} ${item.rarity === 'legendary' ? '' : ' · Tier ' + item.tier}</div>
+      ${item.set ? `<div class="tt-tags">${setChip(item.set)}</div>` : ''}
       ${statList(item, 'tt-stats')}
-      ${item.rarity === 'legendary' ? (item.baseTrait ? `<div class="tt-trait">${esc(item.baseTrait)}</div>` : '') : item.trait ? `<div class="tt-trait">${esc(item.trait)}</div>` : ''}${set}
+      ${item.rarity === 'legendary' ? (item.baseTrait ? `<div class="tt-trait">${esc(item.baseTrait)}</div>` : '') : item.trait ? `<div class="tt-trait">${esc(item.trait)}</div>` : ''}
       ${item.rarity === 'legendary' ? '<p class="tt-extra">Legendary: you can wear only one. Fixed stats, one of a kind in this match.</p>' : ''}${item.affixed ? '<p class="tt-extra">Forged: already has its added bonus.</p>' : ''}${cmp}`;
   }
 
@@ -113,12 +125,12 @@ window.G = window.G || {};
     const v = verdict(hero, item);
     const eq = hero.gear[item.slot];
     const diffs = eq ? G.Items.compare(item, eq) : [];
-    const W = item.slot === 'weapon' ? G.WEAPONS[item.weaponType] : null;
+    const wl = weaponLine(item);
     return `<article class="card item r-${item.rarity}">
       <div class="item-head">
         <span class="ico-wrap r-${item.rarity}">${G.Art.icon(item.iconKey)}</span>
         <div class="item-name"><b class="r-${item.rarity}">${esc(item.name)}</b>
-          <small>${G.RARITY[item.rarity].name} ${W ? esc(W.name) + ' · ' + RANGE_NAMES[W.range] + ' · ' + (W.type === 'magic' ? 'Magic' : 'Physical') : G.SLOT_NAMES[item.slot]}</small>
+          <small>${G.RARITY[item.rarity].name} ${wl ? esc(wl) : G.SLOT_NAMES[item.slot]}</small>
           <span class="tags">${setChip(item.set)}${v ? `<span class="verdict ${v.cls}">${v.text}</span>` : ''}</span></div>
       </div>
       ${statList(item, 'stat-list')}
@@ -135,21 +147,28 @@ window.G = window.G || {};
     const s = ov ? ov.s : G.Stats.compute(hero);
     const hp = ov ? ov.hp : hero.hp;
     const I = G.STAT_INFO;
-    const cell = (label, val, info, extra = '') =>
-      `<li ${tip(`<div class="tt-title">${label}</div><p>${esc(info)}</p>${extra ? `<p class="tt-extra">${extra}</p>` : ''}`)}><span>${label}</span><b>${val}</b></li>`;
+    const CB = CFG().combat;
+    const cell = (label, val, info, extra = '', cap = null) =>
+      `<li ${tip(`<div class="tt-title">${label}</div><p>${esc(info)}</p>${extra ? `<p class="tt-extra">${extra}</p>` : ''}${cap ? `<p class="tt-cap ${cap.at ? 'at' : ''}">${cap.text}</p>` : ''}`)} class="${cap && cap.at ? 'capped' : ''}"><span>${label}</span><b>${val}</b></li>`;
+    // Hard caps: show the cap, your value, and whether you're at it
+    const hardCap = (raw, max) => ({ at: raw >= max, text: `Cap: ${max}. Yours: ${raw}${raw > max ? ` (${raw - max} over, wasted)` : raw === max ? ' (capped)' : ''}.` });
+    const bonusSpd = (s.spdUncapped || s.spd) - (s.spdBase || s.spd);
+    const spdCap = { at: bonusSpd >= CB.spdSoftCap, text: `Cap: bonus Attack Speed above your weapon's ${s.spdBase} counts in full up to +${CB.spdSoftCap}, then half. Yours: +${Math.max(0, bonusSpd)}${bonusSpd > CB.spdSoftCap ? ` (past the cap; ${bonusSpd - CB.spdSoftCap} counts as ${Math.floor((bonusSpd - CB.spdSoftCap) / 2)})` : bonusSpd === CB.spdSoftCap ? ' (at the cap)' : ''}.` };
     const def = [
       cell('Health', `${hp}/${s.maxHp}`, 'Health carries from room to room. Healing is limited, so spend it wisely.'),
-      cell('Armor', s.armor, I.armor.desc), cell('Magic Resist', s.ward, I.ward.desc), cell('Dodge', s.dodge, I.dodge.desc),
+      cell('Armor', s.armor, I.armor.desc), cell('Magic Resist', s.ward, I.ward.desc), cell('Dodge', s.dodge, I.dodge.desc, '', hardCap(s.dodgeRaw != null ? s.dodgeRaw : s.dodge, CB.dodgeCap)),
     ];
     const off = [
-      cell('Damage', s.dmg, I.dmg.desc, s.type === 'magic' ? 'Your weapon deals magic damage, so Magic Resist blocks it.' : 'Your weapon deals physical damage, so Armor blocks it.'),
-      cell('Attack Speed', s.spd, I.spd.desc, `You attack every ${Math.round(100 / s.spd) / 10} seconds.`),
-      cell('Crit', s.crit, I.crit.desc, `Your crits hit for ${s.dmg * 2 + s.critDmg}.`),
+      cell('Damage', s.dmg, I.dmg.desc, s.type === 'magic' ? 'Your weapon deals magic damage, so Magic Resist blocks it.' : 'Your weapon deals physical damage, so Armor blocks it.',
+        s.spec === 'berserker' ? { at: false, text: `Cap: Berserker's missing-health bonus adds at most +${(s.fx && s.fx.berserkCap) || CB.berserkCap} Damage.` } : null),
+      cell('Attack Speed', s.spd, I.spd.desc, `You attack every ${Math.round(100 / s.spd) / 10} seconds.`, ov ? null : spdCap),
+      cell('Crit', s.crit, I.crit.desc, `Your crits hit for ${s.dmg * 2 + s.critDmg}.`, hardCap(s.critRaw != null ? s.critRaw : s.crit, CB.critCap)),
       cell('Range', RANGE_NAMES[s.range].replace(' range', ''), 'Fights start 6 steps apart. Melee walks in first; the Longsword reaches 2 steps; Near shoots from 4 steps, Far from 6.'),
     ];
     const ext = [];
     if (s.critDmg) ext.push(cell('Crit Dmg', s.critDmg, I.critDmg.desc));
-    for (const k of ['shield', 'holy', 'pierce', 'leech', 'bleed', 'stun']) if (s[k] > 0) ext.push(cell(I[k].label, s[k], I[k].desc));
+    for (const k of ['shield', 'holy', 'pierce', 'leech', 'bleed', 'stun']) if (s[k] > 0) ext.push(cell(I[k].label, s[k], I[k].desc, '',
+      k === 'stun' ? { at: false, text: `Stun limit: after a stun, the target can't be stunned again for ${CB.stunImmune} seconds. Stubborn stuns ignore it.` } : null));
     if (s.spell && s.manaGain > 0) ext.push(cell('Spell', `${s.spell.dmg}`, `At 100 mana you cast ${s.spell.name}: ${s.spell.dmg} magic damage to ${s.spell.aoe ? 'every enemy' : 'one enemy'}.`, `${s.manaGain} mana per attack${s.startMana ? `, start fights at ${s.startMana}` : ''}.`));
     return `<div class="statcols ${compact ? 'compact' : ''}">
       <div><h4>Defense</h4><ul>${def.join('')}</ul></div>
@@ -657,7 +676,7 @@ window.G = window.G || {};
     const restockCost = S.restockCosts[m.restocks];
     const bloodCost = p.gem === 'stone' ? 1 : S.bloodHealth;
     const bloodNote = `Lose ${bloodCost} health${p.gem === 'stone' ? ' (Heart of Stone)' : ''}`;
-    const tooWeak = p.hp <= bloodCost;
+    const tooWeak = p.hp <= bloodCost, bledOut = (m.bled || 0) >= S.bloodMax, bloodLeft = S.bloodMax - (m.bled || 0);
     const pop = m.bloodPop && m.bloodPop.seq !== m.bloodShown ? m.bloodPop : null;
     if (pop) m.bloodShown = pop.seq;
     return `<section class="screen shop">
@@ -669,8 +688,8 @@ window.G = window.G || {};
         ${consRow('antidote', G.CONSUMABLES.antidote.price, `${m.cstock.antidote} in stock.`, m.cstock.antidote <= 0)}
         ${m.cstock.tome != null ? consRow('tome', G.CONSUMABLES.tome.price, `${m.cstock.tome} in stock.`, m.cstock.tome <= 0) : ''}
         ${m.buffs.map(id => consRow(id, G.CONSUMABLES[id].price, `${m.cstock[id]} in stock.`, m.cstock[id] <= 0)).join('')}
-        <div class="potion card blood-card"><span class="flask blood"></span><div><b>Sell blood</b><small>${bloodNote} for a random ${S.bloodGold[0]} to ${S.bloodGold[1]} gold.</small></div>
-          <button data-act="shop-buy" data-kind="blood" ${tooWeak ? 'disabled' : ''}>${tooWeak ? 'Too weak' : 'Bleed for gold'}</button>${pop ? `<span class="gold-pop ${pop.gold >= 35 ? 'big' : ''}">+${pop.gold} gold</span>` : ''}</div>
+        <div class="potion card blood-card"><span class="flask blood"></span><div><b>Sell blood</b><small>${bloodNote} for a random ${S.bloodGold[0]} to ${S.bloodGold[1]} gold. ${bloodLeft} of ${S.bloodMax} left this visit.</small></div>
+          <button data-act="shop-buy" data-kind="blood" ${tooWeak || bledOut ? 'disabled' : ''}>${bledOut ? 'No more' : tooWeak ? 'Too weak' : 'Bleed for gold'}</button>${pop ? `<span class="gold-pop ${pop.gold >= 30 ? 'big' : ''}">+${pop.gold} gold</span>` : ''}</div>
       </div>
       <div class="cards">${stock}</div>
       <div class="row-actions">
@@ -685,13 +704,13 @@ window.G = window.G || {};
       const it = p.gear[sl];
       const gains = G.Dungeon.strengthenGains(it);
       const preview = Object.keys(gains).map(k => `<li class="up">${esc(G.STAT_INFO[k].label)}: ${it.base[k]} → ${it.base[k] + gains[k]}</li>`).join('');
-      const legend = it.rarity === 'legendary';
-      return itemCard(it, p, `<div class="forge-opt"><ul class="forge-preview">${legend ? '<li>Legendary stats are fixed.</li>' : preview}</ul>
-          <button data-act="forge" data-kind="strengthen" data-slot="${sl}" ${legend || f.strengthened || p.gold < F.upgradeCost ? 'disabled' : ''}>${legend ? 'Can’t strengthen' : `Strengthen (${F.upgradeCost})`}</button></div>
+      const done = !G.Dungeon.canStrengthen(it);
+      return itemCard(it, p, `<div class="forge-opt"><ul class="forge-preview">${done ? '<li>Already strengthened.</li>' : preview}</ul>
+          <button data-act="forge" data-kind="strengthen" data-slot="${sl}" ${done || f.strengthened || p.gold < F.upgradeCost ? 'disabled' : ''}>${done ? 'Already strengthened' : `Strengthen (${F.upgradeCost})`}</button></div>
         <button class="ghost" data-act="forge" data-kind="affix" data-slot="${sl}" ${it.affixed || f.affixed || p.gold < F.affixCost ? 'disabled' : ''}>${it.affixed ? 'Already forged' : `Add a random affix (${F.affixCost})`}</button>`);
     }).join('');
     return `<section class="screen"><h2>Forge</h2>
-      <p class="lede">The smith can strengthen one item (its base stats grow by one tier; the card shows exactly how) and add one random affix to one item. Each piece can only take one added affix. You have ${p.gold} gold.</p>
+      <p class="lede">The smith can strengthen one item (its base stats grow by one tier; the card shows exactly how) and add one random affix to one item. Each piece can be strengthened once and take one added affix, ever. Legendaries too. You have ${p.gold} gold.</p>
       ${f.msg ? `<p class="notice">${esc(f.msg)}</p>` : ''}
       <div class="cards">${cards}</div>
       <div class="row-actions"><button data-act="forge-leave">Leave the forge</button></div></section>`;
@@ -1492,5 +1511,5 @@ window.G = window.G || {};
     if (st && left) left.innerHTML = rivalsPanel(st) + youPanel(st);
     renderWatchPop();
   }
-  G.UI = { render, init, refreshShopPicks, update, playSpectate, watchBadge, watchChanged, refreshWatchPop };
+  G.UI = { render, init, refreshShopPicks, update, playSpectate, watchBadge, watchChanged, refreshWatchPop, itemTip, statCols };   // itemTip, statCols: also used by tests
 })(window.G);
