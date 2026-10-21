@@ -225,11 +225,11 @@ window.G = window.G || {};
     for (const e of alive(T)) {
       if (e.hero === victim || e.hero.gem !== 'vulture') continue;
       // +max health and a heal of the same amount; the entrant tracks both
-      const n = CFG().vultureHeal;
+      const n = CFG().vultureMax;
       e.hero.bonus = e.hero.bonus || {};
       e.hero.bonus.hp = (e.hero.bonus.hp || 0) + n;
       e.maxHp += n;
-      e.hp = Math.min(e.maxHp, e.hp + n);
+      e.hp = Math.min(e.maxHp, e.hp + CFG().vultureHeal);
     }
   }
 

@@ -2,7 +2,7 @@
 // All stats are flat whole numbers. Chance stats (Crit, Dodge, Stun) mean "out of 100".
 window.G = window.G || {};
 
-G.VERSION = '0.28';   // players in one room must all run the same version
+G.VERSION = '0.29';   // players in one room must all run the same version
 
 G.CONFIG = {
   // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
@@ -38,13 +38,15 @@ G.CONFIG = {
 
   phoenix: { burst: 100, burn: 20, burnSeconds: 5, selfBurn: 1, standUp: 25, eggSeconds: 5, eggHpPct: 50 },   // explode, burn them, hide in an egg
   stoneHp: 25,
-  stoneGrace: 5,           // Heart of Stone: for this many seconds at the start of a fight, every hit deals 1
+  stoneGrace: 5,           // Heart of Stone: hits deal 1 for this many seconds, at most 2 for the same again, then at most stoneCrack
   stoneCrack: 3,
   stoneSlow: 15,           // Heart of Stone: enemies attack this % slower
   devilTaken: 1.5,         // Devil's Tooth: damage taken multiplier
-  pureBlood: { hp: 100, dmg: 2, heal: 100 },           // Heart of Stone: each hit deals 1 more than the last, up to this
+  pureBlood: { hp: 50, dmg: 2, heal: 50 },           // Heart of Stone: each hit deals 1 more than the last, up to this
   gaiaShield: 100,
-  vultureHeal: 10,         // Vulture's Heart: heal this much and gain this much max health whenever a rival loses a heart
+  vultureHeal: 30,         // Vulture's Heart: heal this much whenever a rival loses a heart...
+  vultureMax: 10,          // ...and gain this much max health
+  gaiaRegen: 5,            // Gaia's Embrace: heal per second while a Shield holds (ignores its no-healing rule)
 
   // PvP (duels and the tournament): every hit deals half damage so fights last longer
   arena: { damageMult: 0.25, maxTime: 60 },   // past 60 seconds, both players lose a heart

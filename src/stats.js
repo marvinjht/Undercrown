@@ -154,6 +154,7 @@ window.G = window.G || {};
     s.dmg = Math.max(2, s.dmg);
     // Attack Speed cap: bonus speed on top of the weapon counts fully up to the cap, then half
     const SC = CB.spdSoftCap, baseSpd = weaponSpd(hero, W);
+    s.spdUncapped = Math.max(CB.minSpd, s.spd);
     if (SC && s.spd - baseSpd > SC) s.spd = baseSpd + SC + Math.floor((s.spd - baseSpd - SC) / 2);
     s.spd = Math.max(CB.minSpd, s.spd);
     if (fx.hpShieldPct) s.shield += even(s.maxHp * fx.hpShieldPct / 100);   // Tortoise Shell
@@ -289,11 +290,11 @@ window.G = window.G || {};
     },
     // Vulture's Heart: a rival lost a heart. Gain max health and heal the same amount (not reduced).
     vultureFeed(hero, times = 1) {
-      const n = C().vultureHeal * times;
+      const n = C().vultureMax * times, hh = C().vultureHeal * times;
       hero.bonus = hero.bonus || {};
       hero.bonus.hp = (hero.bonus.hp || 0) + n;
       const max = compute(hero).maxHp, before = hero.hp;
-      hero.hp = Math.min(max, hero.hp + n);
+      hero.hp = Math.min(max, hero.hp + hh);
       return hero.hp - before;
     },
     // How much a heal would restore before the max-health cap (heart gems change it)

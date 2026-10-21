@@ -51,7 +51,7 @@ window.G = window.G || {};
         range: CB.ranges[s.range || 'melee'] || 1,
         // v0.1: hybrids, relics and legendaries
         empower: 0, haste: [], sureHits: (s.fx && s.fx.sureHits) || 0, healCutUntil: -1, sentinelUsed: false, sentinelPending: false,
-        shoveNext: 0, beamSec: 0, nextBeam: s.fx && s.fx.beam ? 1 : Infinity,
+        shoveNext: 0, beamSec: 0, nextBeam: s.fx && s.fx.beam ? (s.fx.beam.every || 1) : Infinity, beamTarget: null, bleedBy: null,
         nextStomp: s.fx && s.fx.stomp ? s.fx.stomp.every : Infinity, nextPulse: 1, drained: 0,
         butcher: 0, charge: 0, blockCount: 0, frenzyUntil: -1, nextFrenzy: s.fx && s.fx.frenzy ? s.fx.frenzy.every : Infinity,
         wallStunNext: 0, hex: 0, hexUntil: -1, sunderUntil: -1, sunderFx: null, primedUsed: false,
@@ -177,8 +177,9 @@ window.G = window.G || {};
       // Heart of Stone: each attacker's hits to health deal 1 more than that attacker's last, up to the cap
       // (and for the first few seconds of a fight, every hit deals just 1)
       if (amt > 0 && def.s.gem === 'stone' && !def.egg) {
-        if (t < G.CONFIG.stoneGrace) amt = 1;
-        else { const k = att ? att.id : '_'; def.crack[k] = Math.min(G.CONFIG.stoneCrack, (def.crack[k] || 0) + 1); amt = def.crack[k]; }
+        // 1 per hit for the first 5 seconds, 2 for the next 5, then 3 for the rest of the fight
+        const SG = G.CONFIG.stoneGrace;
+        amt = t < SG ? 1 : t < 2 * SG ? Math.min(amt, 2) : Math.min(amt, G.CONFIG.stoneCrack);
       }
       def.hp -= amt;
       // Penitent: damage you take charges your next hit
@@ -288,15 +289,15 @@ window.G = window.G || {};
     }
 
     // True damage (Phoenix Heart): ignores Shields, Heart of Stone and every reduction. Player fights still quarter it.
+    // True damage (Phoenix Heart): ignores Armor and Magic Resist only. Shields take it at its raw number,
+    // and Heart of Stone still applies (that's part of damage())
     function trueDamage(def, amt) {
-      if (PVP !== 1) amt = Math.max(1, 2 * Math.round(amt * PVP / 2));
-      def.hp -= amt;
-      if (def.hp <= 0 && def.undyingUntil >= t && !def.egg) def.hp = 1;
-      return amt;
+      return damage(def, amt, null).dealt;
     }
     function applyBleed(def, amount, att) {
       if (amount <= 0 || !def.alive) return;
       if (def.bleedUntil < t) def.nextBleed = t + 1;
+      if (amount >= def.bleed || def.bleedUntil < t) def.bleedBy = att || null;
       def.bleed = Math.max(def.bleed, amount);
       def.bleedUntil = t + 3;
       // Rending: bleeding lowers Armor
@@ -501,7 +502,8 @@ window.G = window.G || {};
       // Night Lord: your first hit out of hiding marks the target; the mark bursts for half the damage it took
       if (att.nightInvis) {
         att.nightInvis = false;
-        if (att.invis) { att.invis = false; att.invisUntil = -1; push({ type: 'stealth_off', src: att.id }); }
+        // Blinkfang's attacks don't break invisibility
+        if (att.invis && !fx.stealthHits) { att.invis = false; att.invisUntil = -1; push({ type: 'stealth_off', src: att.id }); }
         if (!att.markUsed && def.alive) { att.markUsed = true; def.mark = { by: att, dmg: 0, until: t + 3 }; push({ type: 'mark', src: att.id, tgt: def.id }); }
       }
       // Snakes: only critical bites poison
@@ -536,7 +538,7 @@ window.G = window.G || {};
         if (fx.butcher) {
           def.butcher++;
           if (def.bleedUntil < t) def.nextBleed = t + 1;
-          def.bleed = Math.max(def.bleed, fx.butcher.perStack * def.butcher); def.bleedUntil = t + 3;
+          def.bleed = Math.max(def.bleed, fx.butcher.perStack * def.butcher); def.bleedUntil = t + 3; def.bleedBy = att;
           if (def.butcher >= fx.butcher.pop) {
             const left = def.bleed * Math.max(1, Math.ceil(def.bleedUntil - t)) * (fx.butcher.popMult || 1);
             def.butcher = 0; def.bleed = 0; def.bleedUntil = -1;
@@ -555,7 +557,7 @@ window.G = window.G || {};
             const dir = Math.sign(def.pos - att.pos) || (att.side === 'a' ? 1 : -1);
             const slam = displace(def, def.pos + dir * fx.gale.push);
             push({ type: 'knock', src: att.id, tgt: def.id, slam });
-            if (slam && t >= def.wallStunNext) { def.wallStunNext = t + fx.gale.cooldown; stun(att, def, fx.gale.stun, true); }
+            if (slam && fx.gale.stun && t >= def.wallStunNext) { def.wallStunNext = t + fx.gale.cooldown; stun(att, def, fx.gale.stun, true); }
           }
         }
       }
@@ -663,6 +665,12 @@ window.G = window.G || {};
           continue;
         }
         const ffx = f.s.fx || {};
+        // Gaia's Embrace: heal 5 a second while any Shield holds (this ignores Gaia's no-healing rule)
+        if (f.s.gem === 'gaia' && f.shield > 0 && !f.egg && t >= (f.gaiaNext || 1)) {
+          f.gaiaNext = t + 1;
+          const a = Math.min(f.maxHp - f.hp, G.CONFIG.gaiaRegen || 5);
+          if (a > 0) { f.hp += a; push({ type: 'heal', src: f.id, amount: a, label: 'Gaia' }, f); }
+        }
         // Aegis rebuilds its shield once
         if (f.aegisRebuildAt >= 0 && t >= f.aegisRebuildAt && !f.aegisRebuilt) {
           f.aegisRebuilt = true; f.aegisRebuildAt = -1;
@@ -690,7 +698,10 @@ window.G = window.G || {};
         }
         // Heartlight: a beam that grows each second
         if (t >= f.nextBeam) {
-          f.nextBeam = t + 1; f.beamSec++;
+          f.nextBeam = t + (ffx.beam.every || 1);
+          const bt = target(f);
+          if (bt !== f.beamTarget) { f.beamTarget = bt; f.beamSec = 0; }   // a new target starts the ramp over
+          f.beamSec++;
           const tg = target(f);
           if (tg && !tg.invis) { const B = ffx.beam; const d = Math.min(B.cap, B.start + B.step * (f.beamSec - 1)); push({ type: 'beam', src: f.id, tgt: tg.id, power: d }); fxHit(f, tg, d, 'Heartlight'); }
         }
@@ -767,6 +778,9 @@ window.G = window.G || {};
           f.nextBleed = t + 1;
           const r = damage(f, f.bleed, null);
           push({ type: 'bleed', tgt: f.id, amount: r.dealt }, f);
+          // Hemorrhage: your bleed heals you for the damage it deals
+          const by = f.bleedBy;
+          if (by && by.alive && by.s.fx && by.s.fx.bleedHeal && r.dealt > 0) { const h = heal(by, r.dealt); if (h) push({ type: 'heal', src: by.id, amount: h }, by); }
           afterDamage(f, null);
         }
       }
@@ -779,7 +793,7 @@ window.G = window.G || {};
         const fx = f.s.fx || {};
         let spd = f.s.spd + (fx.shieldSpd && f.shield > 0 ? fx.shieldSpd : 0) + (fx.lowSpd && f.hp < f.maxHp / 2 ? fx.lowSpd : 0);
         if (fx.dodgeHaste) { f.haste = f.haste.filter(x => x > t); spd += f.haste.length * fx.dodgeHaste.spd; }
-        if (f.frenzyUntil >= t) spd *= 2;
+        if (f.frenzyUntil >= t) spd = (spd - f.s.spd + (f.s.spdUncapped || f.s.spd)) * 2;   // Hummingbird: ignores the Attack Speed cap while active
         if (f.sunderUntil >= t && f.sunderFx) spd *= 1 - f.sunderFx.slow;
         if (f.mired) spd *= 1 - f.mired * (f.mirePct || 8) / 100;   // Mire Beast
         // Point blank: Longbow and Staff slow down with an enemy right next to them

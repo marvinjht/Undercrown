@@ -186,7 +186,7 @@ window.G = window.G || {};
         for (const v of this.all()) {
           if (v === h || !v.alive || v.gem !== 'vulture') continue;
           const got = G.Hero.vultureFeed(v, lost);
-          if (v.isPlayer) say(s, `${h.name} lost a heart. Vulture’s Heart: +${CFG().vultureHeal * lost} max health${got ? `, healed ${got}` : ''}.`);
+          if (v.isPlayer) say(s, `${h.name} lost a heart. Vulture’s Heart: +${CFG().vultureMax * lost} max health${got ? `, healed ${got}` : ''}.`);
         }
       }
     },

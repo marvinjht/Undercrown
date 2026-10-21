@@ -12,8 +12,8 @@ G.SPECS = {
   },
   bloodthirst: {
     name: 'Bloodthirst', role: 'Reaver',
-    params: { leech: 2, pct: 20 },
-    desc: 'Heal 20% of the damage you deal, plus 2 every time you hit. The healing stays with you after the fight.',
+    params: { leech: 4, pct: 10 },
+    desc: 'Heal 10% of the damage you deal, plus 4 every time you hit. The healing stays with you after the fight.',
     tip: 'Fast weapons heal the most.',
     affinity: ['greatAxe', 'daggers'],
   },
@@ -55,10 +55,10 @@ G.SPEC_TREES = {
     t20: { id: 'nightlord', name: 'Night Lord', fx: { openInvis: 5, nightLord: 1 }, desc: 'Start every fight invisible for up to 5 seconds (your first hit reveals you). That hit marks the target for 3 seconds, then it bursts for half the damage it took' },
   },
   bloodthirst: {
-    t10: [{ id: 'gorge', name: 'Gorge', fx: { overhealShield: 20 }, desc: 'Healing past full health becomes Shield, up to 20' },
-          { id: 'frenzy', name: 'Frenzy', fx: { lowSpd: 2 }, desc: '+2 Attack Speed below half health' }],
-    t15: [{ id: 'pact', name: 'Blood Pact', stats: { leech: 2, hp: -10 }, desc: '+2 more Life on Hit, −10 max Health' },
-          { id: 'hemorrhage', name: 'Hemorrhage', stats: { bleed: 2 }, desc: 'Your hits cause Bleed 2' }],
+    t10: [{ id: 'gorge', name: 'Gorge', fx: { overhealShield: 40 }, desc: 'Healing past full health becomes Shield, up to 40' },
+          { id: 'frenzy', name: 'Frenzy', fx: { lowSpd: 4 }, desc: '+4 Attack Speed below half health' }],
+    t15: [{ id: 'pact', name: 'Blood Pact', stats: { leech: 4, hp: -10 }, desc: '+4 more Life on Hit, −10 max Health' },
+          { id: 'hemorrhage', name: 'Hemorrhage', stats: { bleed: 2 }, fx: { bleedHeal: 1 }, desc: 'Your hits cause Bleed 2, and all bleed you cause heals you for the damage it deals' }],
     t20: { id: 'sanguine', name: 'Sanguine', fx: { lowLeechDouble: 1 }, desc: 'Life on Hit heals double below half health' },
   },
   juggernaut: {

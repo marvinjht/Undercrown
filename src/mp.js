@@ -302,7 +302,7 @@ window.G = window.G || {};
       if (old && me && me.alive && me.gem === 'vulture' && h.hearts < old.hearts) {
         const n = old.hearts - h.hearts, got = G.Hero.vultureFeed(me, n);
         const s = G.Game.s;
-        if (s) s.notice = [s.notice, `${h.name} lost a heart. Vulture’s Heart: +${CFG().vultureHeal * n} max health${got ? `, healed ${got}` : ''}.`].filter(Boolean).join(' ');
+        if (s) s.notice = [s.notice, `${h.name} lost a heart. Vulture’s Heart: +${CFG().vultureMax * n} max health${got ? `, healed ${got}` : ''}.`].filter(Boolean).join(' ');
       }
       this.heroes[slot] = h;
       this.syncRivals();
