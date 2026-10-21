@@ -2,7 +2,7 @@
 // All stats are flat whole numbers. Chance stats (Crit, Dodge, Stun) mean "out of 100".
 window.G = window.G || {};
 
-G.VERSION = '0.29';   // players in one room must all run the same version
+G.VERSION = '0.3';   // players in one room must all run the same version
 
 G.CONFIG = {
   // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
@@ -75,7 +75,7 @@ G.CONFIG = {
   doorMinRoom: { fight: 2, elite: 4, trash: 3, vault: 6, rest: 4, mystery: 3, venom: 5, purify: 5, forge: 5, trainer: 3, wager: 6 },
   purifyWeightPoisoned: 18,
 
-  wager: { bets: [20, 40], monsterMult: 1.25 },
+  wager: { bets: [20, 40], monsterMult: 1.25, eliteChance: 33 },   // eliteChance: out of 100, the wager turns out to be an elite
 
   gold: { fight: [8, 12], elite: [16, 24], boss: [40, 50], trash: [8, 14], skipItemBase: 10, treasureHunterBonus: 4 },
 
@@ -114,8 +114,8 @@ G.CONFIG = {
   supplyPerClass: 12,
 
   monster: {
-    hpBase: 56, hpGrowth: 1.099,
-    hitBase: 7, hitGrowth: 1.084,
+    hpBase: 56, hpGrowth: 1.097,
+    hitBase: 7, hitGrowth: 1.082,
     elite: { hp: 1.35, hit: 1.15, packExtra: 1 },
     boss:  { hp: 1.6, hit: 1.1 },
     swarmCopy: { hp: 0.35, hit: 0.5 },

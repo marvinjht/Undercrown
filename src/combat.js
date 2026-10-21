@@ -132,9 +132,13 @@ window.G = window.G || {};
       const fs = foes(f); return fs.find(x => !x.invis) || fs[0] || null;
     };
 
+    // Grave Salt: the strongest one among your enemies cuts your healing by its %
+    const healCutPct = f => { let p = 0; for (const x of fighters) if (x.alive && x.side !== f.side && x.s.fx && x.s.fx.antiHeal) p = Math.max(p, x.s.fx.antiHeal); return p; };
     function heal(f, amount) {
       if (!f.alive || f.egg || amount <= 0 || f.s.gem === 'gaia') return 0;
       if (f.healCutUntil >= t) amount = Math.floor(amount / 2);
+      const cut = healCutPct(f);
+      if (cut) amount = Math.round(amount * (1 - cut / 100));
       const a = f.s.gem === 'stone' ? 1 : amount;
       const h = Math.min(f.maxHp - f.hp, a);
       if (h > 0) f.hp += h;
@@ -668,7 +672,7 @@ window.G = window.G || {};
         // Gaia's Embrace: heal 5 a second while any Shield holds (this ignores Gaia's no-healing rule)
         if (f.s.gem === 'gaia' && f.shield > 0 && !f.egg && t >= (f.gaiaNext || 1)) {
           f.gaiaNext = t + 1;
-          const a = Math.min(f.maxHp - f.hp, G.CONFIG.gaiaRegen || 5);
+          const a = Math.min(f.maxHp - f.hp, Math.floor((G.CONFIG.gaiaRegen || 5) * (1 - healCutPct(f) / 100)));
           if (a > 0) { f.hp += a; push({ type: 'heal', src: f.id, amount: a, label: 'Gaia' }, f); }
         }
         // Aegis rebuilds its shield once
@@ -780,7 +784,7 @@ window.G = window.G || {};
           push({ type: 'bleed', tgt: f.id, amount: r.dealt }, f);
           // Hemorrhage: your bleed heals you for the damage it deals
           const by = f.bleedBy;
-          if (by && by.alive && by.s.fx && by.s.fx.bleedHeal && r.dealt > 0) { const h = heal(by, r.dealt); if (h) push({ type: 'heal', src: by.id, amount: h }, by); }
+          if (by && by.alive && by.s.fx && by.s.fx.bleedHeal && r.dealt > 0) { const h = heal(by, Math.ceil(r.dealt * by.s.fx.bleedHeal / 100)); if (h) push({ type: 'heal', src: by.id, amount: h }, by); }
           afterDamage(f, null);
         }
       }

@@ -371,7 +371,7 @@ window.G = window.G || {};
       const foes = G.Dungeon.doorFoes(door, s.room);
       const res = G.simulateFight(G.Stats.compute(p, { buffs: true }), foes, G.Dungeon.fightOpts(p, s.rng.int(0, 1e9)));
       s.battle = {
-        kind, door, res, title: G.Dungeon.monsterName(door.monster, kind === 'wager' ? 'fight' : kind, door.trait),
+        kind, door, res, title: G.Dungeon.monsterName(door.monster, kind === 'wager' ? (door.wagerElite ? 'elite' : 'fight') : kind, door.trait),
         visual: { a: visualFor(p) },
         done: false, onDone: () => this.battleDone(false),
       };
@@ -666,7 +666,7 @@ window.G = window.G || {};
           const X = CFG().xp;
           if (pair.ghost) s.notice = res.draw ? `Time ran out against the ${oppName}. No heart lost.` : won ? `You beat the ${oppName}. +${X.duelWin} XP.` : `The ${oppName} got the better of you. You lose a heart (${s.player.hearts} left). +${X.duelLoss} XP.`;
           else if (res.draw) s.notice = `A full minute and nobody fell: you and ${oppName} both lose a heart. You come back at full health (${s.player.hearts} left).`;
-          else s.notice = won ? `You beat ${oppName}! +${CFG().duel.winGold} gold, +${X.duelWin} XP. Your health goes back to what it was.`
+          else s.notice = won ? `You beat ${oppName}! +${CFG().duel.winGold} gold, +${X.duelWin} XP. You keep the health you finished with.`
             : `${oppName} won the duel. You lose a heart (${s.player.hearts} left) and come back at full health. +${X.duelLoss} XP.`;
           s.duel.mine = null;
           s.roundKind = 'after';
@@ -702,7 +702,7 @@ window.G = window.G || {};
           const X = CFG().xp;
           if (m.ghost) s.notice = res.draw ? `Time ran out against the ${oppName}. No heart lost.` : won ? `You beat the ${oppName}. +${X.duelWin} XP.` : `The ${oppName} got the better of you. You lose a heart (${s.player.hearts} left). +${X.duelLoss} XP.`;
           else if (res.draw) s.notice = `A full minute and nobody fell: you and ${oppName} both lose a heart. You come back at full health (${s.player.hearts} left).`;
-          else s.notice = won ? `You beat ${oppName}! +${CFG().duel.winGold} gold, +${X.duelWin} XP. Your health goes back to what it was.`
+          else s.notice = won ? `You beat ${oppName}! +${CFG().duel.winGold} gold, +${X.duelWin} XP. You keep the health you finished with.`
             : `${oppName} won the duel. You lose a heart (${s.player.hearts} left) and come back at full health. +${X.duelLoss} XP.`;
           s.duel.mine = null;
           s.roundKind = 'after';

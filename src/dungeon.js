@@ -152,7 +152,7 @@ window.G = window.G || {};
     merchant: { title: 'Merchant', text: () => 'No fight. Spend gold on gear and potions, or sell blood.' },
     forge:    { title: 'Forge',    text: () => `No fight. Strengthen an item (${CFG().forge.upgradeCost} gold) or add a random affix to one (${CFG().forge.affixCost} gold).` },
     trainer:  { title: 'Study',    text: () => `No fight. Study old battle journals: +${CFG().xp.trainer} XP.` },
-    wager:    { title: 'Wager',    text: d => `${monsterName(d.monster, 'fight')}, tougher than usual. +${CFG().xp.fight} XP. No backing out: bet gold, and win to double it.` },
+    wager:    { title: 'Wager',    text: d => `${monsterName(d.monster, 'fight')}, tougher than usual. A risky event: it may be worse than it looks. +${CFG().xp.fight} XP. No backing out: bet gold, and win to double it.` },
   };
 
   // What kind of room this is in the repeating 10-room pattern
@@ -184,6 +184,8 @@ window.G = window.G || {};
       const d = { type };
       if (type === 'fight' || type === 'elite' || type === 'wager') d.monster = monsterFor(room, type === 'elite' ? 'elite' : 'fight', rng);
       if (type === 'elite') d.trait = rng.pick(G.ELITE_TRAIT_ORDER);
+      // A wager is risky: 1 in 3 turns out to be an elite (the door doesn't say)
+      if (type === 'wager' && rng.int(1, 100) <= CFG().wager.eliteChance) { d.wagerElite = true; d.trait = rng.pick(G.ELITE_TRAIT_ORDER); }
       return d;
     });
     for (let i = 0; i < 6 && doors[1].monster && doors[0].monster && doors[0].monster.id === doors[1].monster.id; i++) {
@@ -198,7 +200,7 @@ window.G = window.G || {};
     return { seed, aHp: hero.hp, aName: hero.isPlayer ? 'You' : hero.name };
   }
   function doorFoes(door, room) {
-    const kind = door.type === 'wager' ? 'fight' : door.type;
+    const kind = door.type === 'wager' ? (door.wagerElite ? 'elite' : 'fight') : door.type;
     return buildEnemies(door.monster, room, kind, door.trait, door.type === 'wager' ? CFG().wager.monsterMult : null);
   }
 
@@ -516,7 +518,7 @@ window.G = window.G || {};
     const doFight = (door, kind) => {
       const bet = kind === 'wager' ? wagerBet(hero) : 0;
       const res = fight(hero, door, room, rng);
-      const nm = monsterName(door.monster, kind === 'wager' ? 'fight' : kind, door.trait);
+      const nm = monsterName(door.monster, kind === 'wager' ? (door.wagerElite ? 'elite' : 'fight') : kind, door.trait);
       const out = applyFight(hero, res, room, nm);
       if (out === 'dead') { hero.gold = Math.max(0, hero.gold - bet); return `fell to ${nm} and is out`; }
       if (out === 'heart') { hero.gold = Math.max(0, hero.gold - bet); return `lost a heart to ${nm}`; }

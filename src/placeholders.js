@@ -57,6 +57,7 @@ window.G = window.G || {};
     relic_bastion: P('M5 4h14v7c0 5-3 8-7 10-4-2-7-5-7-10zM12 8v8M8 12h8'),
     relic_ratpaw: P('M6 20l5-6M11 14c0-3 1-5 3-6M14 8l1-4M14 8l3-2M14 8l3 1M11 14l4-1'),
     relic_tortoise: P('M3 15a9 7 0 0 1 18 0zM8 15l2-5h4l2 5M3 15l-1 3M21 15l1 3'),
+    relic_salt: P('M8 3h8l1 4H7zM6 7h12l-1 13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1zM10 12h.01M14 14h.01M11 16h.01'),
     relic_journal: P('M6 3h11a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6zM9 3v18M12 8h4M12 11h4M13 16a1.5 1.5 0 1 0 0.01 0'),
   };
   const POTION_COLORS = { potion: '#d0473a', greater: '#ff6b5a', antidote: '#7fd67a', iron: '#b8b8c8', salve: '#8fb4ff', fury: '#ff9a3c', tonic: '#f2e28c', draught: '#b39cff', dye: '#c76bd6' };

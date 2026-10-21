@@ -800,7 +800,7 @@ window.G = window.G || {};
     const opp = m.a.hero && m.a.hero.isPlayer ? m.b : m.a;
     return `<section class="screen"><h2>Duel</h2>
       ${rivalBlock(opp)}
-      <p class="lede">Everyone still in is paired up. ${opp.ghost ? `You're the odd one out, so you face a ghost: a half-strength copy of ${esc(opp.of.name)}. Losing to it still costs a heart.` : `You face <b>${esc(opp.hero.name)}</b>. The loser loses a heart.`} You fight at your current health. The winner's health goes back to what it was; the loser comes back at full. Past one minute, both lose a heart.</p>
+      <p class="lede">Everyone still in is paired up. ${opp.ghost ? `You're the odd one out, so you face a ghost: a half-strength copy of ${esc(opp.of.name)}. Losing to it still costs a heart.` : `You face <b>${esc(opp.hero.name)}</b>. The loser loses a heart.`} You fight at your current health and keep what you finish with; the loser comes back at full. Past one minute, both lose a heart.</p>
       ${others ? `<div class="round"><h4>Other duels</h4><ul>${others}</ul></div>` : ''}
       <p class="hint">You can drink potions and elixirs now, before the fight. Not once it starts.</p>
       ${d.goSent ? `<p class="waiting">Locked in. The fight is starting…</p>`

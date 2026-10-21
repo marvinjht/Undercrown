@@ -28,6 +28,8 @@ G.RELICS = {
     text: n => `+${2 * n} Attack Speed (counts toward the Attack Speed cap)` },
   tortoise: { name: 'Tortoise Shell',      color: '#7fb07a', fx: n => ({ hpShieldPct: 5 * n }),
     text: n => `Start each fight with a Shield equal to ${5 * n}% of your max health` },
+  salt:     { name: 'Grave Salt',          color: '#d8d2c4', fx: n => ({ antiHeal: 2 * n }),
+    text: n => `Enemies you fight heal ${2 * n}% less` },
   journal:  { name: 'Dead Man’s Journal',  color: '#c8b48a', fx: n => ({ xpBonus: 4 * n }),
     text: n => `Whenever you gain XP, gain ${4 * n} more` },
 };

@@ -12,8 +12,8 @@ G.SPECS = {
   },
   bloodthirst: {
     name: 'Bloodthirst', role: 'Reaver',
-    params: { leech: 4, pct: 10 },
-    desc: 'Heal 10% of the damage you deal, plus 4 every time you hit. The healing stays with you after the fight.',
+    params: { leech: 0, pct: 5 },
+    desc: 'Heal 5% of the damage you deal. The healing stays with you after the fight.',
     tip: 'Fast weapons heal the most.',
     affinity: ['greatAxe', 'daggers'],
   },
@@ -58,7 +58,7 @@ G.SPEC_TREES = {
     t10: [{ id: 'gorge', name: 'Gorge', fx: { overhealShield: 40 }, desc: 'Healing past full health becomes Shield, up to 40' },
           { id: 'frenzy', name: 'Frenzy', fx: { lowSpd: 4 }, desc: '+4 Attack Speed below half health' }],
     t15: [{ id: 'pact', name: 'Blood Pact', stats: { leech: 4, hp: -10 }, desc: '+4 more Life on Hit, −10 max Health' },
-          { id: 'hemorrhage', name: 'Hemorrhage', stats: { bleed: 2 }, fx: { bleedHeal: 1 }, desc: 'Your hits cause Bleed 2, and all bleed you cause heals you for the damage it deals' }],
+          { id: 'hemorrhage', name: 'Hemorrhage', stats: { bleed: 1 }, fx: { bleedHeal: 50 }, desc: 'Your hits cause Bleed 1, and all bleed you cause heals you for half its damage (rounded up)' }],
     t20: { id: 'sanguine', name: 'Sanguine', fx: { lowLeechDouble: 1 }, desc: 'Life on Hit heals double below half health' },
   },
   juggernaut: {

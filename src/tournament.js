@@ -66,7 +66,7 @@ window.G = window.G || {};
   }
 
   // ---------- Duels (rooms 10 and 20) ----------
-  // Fight at current health. The winner's health goes back to what it was; the loser loses a heart and comes
+  // Fight at current health. The winner keeps the health they finish with; the loser loses a heart and comes
   // back at full health. Past the time limit, both lose a heart.
   const Duel = {
     pairs(heroes, rng) {
@@ -86,7 +86,8 @@ window.G = window.G || {};
         if (e.ghost) continue;
         e.hero.buffs = {};   // elixirs last one fight
         const h = e.hero, won = i === winnerSide && !res.draw;
-        h.hp = e.hp;                                      // the winner's health goes back to what it was
+        // You keep the health you finish with (only the tournament heals you to full); the loser comes back at full
+        h.hp = Math.max(1, Math.min(e.hp, i === 0 ? res.aHp : res.bHp));
         if (!pair.ghost) h.opponents.push(sides[1 - i].hero.id);
         G.Hero.gainXp(h, won ? X.duelWin : X.duelLoss);
         if (won && !pair.ghost) h.gold += CFG().duel.winGold;
