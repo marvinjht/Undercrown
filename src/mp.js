@@ -756,13 +756,13 @@ window.G = window.G || {};
     buildOf(h) {
       if (!h) return null;
       const st = G.Stats.sets(h), s = G.Stats.compute(h);
-      const item = it => it && { name: it.name, rarity: it.rarity, set: it.set || null, legendary: it.legendary || null, tier: it.tier || null,
+      const item = it => it && { name: it.name, rarity: it.rarity, set: it.set || null, artifact: it.artifact || null, tier: it.tier || null,
         weaponType: it.weaponType || null, forged: it.forged || 0, affixes: it.affixes || [], tradeoff: it.tradeoff ? it.tradeoff.id : null };
       const gear = {};
       for (const sl of G.SLOTS) gear[sl] = item(h.gear[sl]);
-      const lg = G.SLOTS.map(sl => h.gear[sl]).find(it => it && it.legendary);
+      const lg = G.SLOTS.map(sl => h.gear[sl]).find(it => it && it.artifact);
       return { slot: h.slot, name: h.name, bot: !!this.isBot(h.slot), botWas: h.botWas || null, alive: !!h.alive, hearts: h.hearts, level: h.level, gold: h.gold,
-        spec: h.spec || null, tree: h.treePicks || {}, gem: h.gem || null, weapon: h.gear.weapon ? h.gear.weapon.weaponType : null, legendary: lg ? lg.legendary : null,
+        spec: h.spec || null, tree: h.treePicks || {}, gem: h.gem || null, weapon: h.gear.weapon ? h.gear.weapon.weaponType : null, artifact: lg ? lg.artifact : null,
         sets: st.counts, hybrid: st.hybrid, look: st.look, full: st.full, relics: h.relics || {}, gear, poison: h.poison || 0, diedRoom: h.diedRoom || null,
         heartLog: h.heartLog || [], stats: { maxHp: s.maxHp, dmg: s.dmg, spd: s.spd, armor: s.armor, ward: s.ward, crit: s.crit, critDmg: s.critDmg, dodge: s.dodge,
           shield: s.shield, holy: s.holy, pierce: s.pierce, leech: s.leech, bleed: s.bleed, stun: s.stun, range: s.range, type: s.type } };
@@ -771,7 +771,7 @@ window.G = window.G || {};
     recFight(kind, who, res, spec) {
       const R = this.H && this.H.rec;
       if (!R || !res) return;
-      const st = x => x && { maxHp: x.maxHp, dmg: x.dmg, spd: x.spd, armor: x.armor, ward: x.ward, crit: x.crit, dodge: x.dodge, shield: x.shield, spec: x.spec, gem: x.gem, legendary: x.legendary, weaponType: x.weaponType };
+      const st = x => x && { maxHp: x.maxHp, dmg: x.dmg, spd: x.spd, armor: x.armor, ward: x.ward, crit: x.crit, dodge: x.dodge, shield: x.shield, spec: x.spec, gem: x.gem, artifact: x.artifact, weaponType: x.weaponType };
       R[kind].push({ ...who, winner: res.draw ? 'draw' : res.winner, duration: res.duration,
         aHp: spec ? spec.aHp : null, bHp: spec ? spec.b.hp : null, aStats: spec ? st(spec.sa) : null, bStats: spec ? st(spec.b.s) : null });
     },

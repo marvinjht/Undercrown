@@ -5,7 +5,7 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const root = path.join(__dirname, '..');
 const ctx = { console, Math }; ctx.window = ctx; vm.createContext(ctx);
-for (const f of ['data/config.js', 'data/weapons.js', 'data/armor.js', 'data/relics.js', 'data/legendaries.js', 'data/sets.js', 'data/gems.js', 'data/consumables.js', 'data/specs.js', 'data/monsters.js',
+for (const f of ['data/config.js', 'data/weapons.js', 'data/armor.js', 'data/relics.js', 'data/artifacts.js', 'data/sets.js', 'data/gems.js', 'data/consumables.js', 'data/specs.js', 'data/monsters.js',
   'src/rng.js', 'src/stats.js', 'src/items.js', 'src/combat.js', 'src/dungeon.js', 'src/tournament.js']) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 const G = ctx.G, C = G.CONFIG;
 const MATCHES = +process.argv[2] || 400;
@@ -25,9 +25,9 @@ function classLabel(h) {
   return a ? `${a.cls} ${st.counts[a.cls]}` : 'no set';
 }
 const mainClass = h => { const st = G.Stats.sets(h); const a = st.active.slice().sort((x, y) => (st.counts[y.cls] || 0) - (st.counts[x.cls] || 0))[0]; return a ? a.cls : 'no set'; };
-const weapon = h => (h.gear.weapon ? (h.gear.weapon.legendary ? G.LEGENDARIES[h.gear.weapon.legendary].name + ' (' + G.WEAPONS[h.gear.weapon.weaponType].name + ')' : G.WEAPONS[h.gear.weapon.weaponType].name) : 'none');
+const weapon = h => (h.gear.weapon ? (h.gear.weapon.artifact ? G.ARTIFACTS[h.gear.weapon.artifact].name + ' (' + G.WEAPONS[h.gear.weapon.weaponType].name + ')' : G.WEAPONS[h.gear.weapon.weaponType].name) : 'none');
 const wtype = h => (h.gear.weapon ? G.WEAPONS[h.gear.weapon.weaponType].name : 'none');
-const legend = h => { const it = G.SLOTS.map(s => h.gear[s]).find(x => x && x.legendary); return it ? G.LEGENDARIES[it.legendary].name : 'none'; };
+const legend = h => { const it = G.SLOTS.map(s => h.gear[s]).find(x => x && x.artifact); return it ? G.ARTIFACTS[it.artifact].name : 'none'; };
 
 for (let mi = 0; mi < MATCHES; mi++) {
   const heroes = [];
@@ -56,7 +56,7 @@ for (let mi = 0; mi < MATCHES; mi++) {
   for (const e of TT.entrants) {
     const h = e.hero, won = TT.champion === e;
     const keys = { spec: h.spec || 'none', gem: h.gem || 'none', class: mainClass(h), build: classLabel(h), weapon: wtype(h),
-      'weapon + class': `${wtype(h)} + ${classLabel(h)}`, legendary: legend(h) };
+      'weapon + class': `${wtype(h)} + ${classLabel(h)}`, artifact: legend(h) };
     for (const cat in keys) tally(cat, keys[cat], r => { r.picks++; r.fair += fair; if (won) r.wins++; r.place += e.place || 1; });
   }
 }
@@ -93,12 +93,12 @@ const specCtl = controlled('spec', G.SPEC_ORDER);
 const gemCtl = controlled('gem', G.GEM_ORDER);
 
 const report = { matches: MATCHES, spec: rows('spec'), gem: rows('gem'), class: rows('class'), build: rows('build', 15), weapon: rows('weapon', 15),
-  combo: rows('weapon + class', 12), legendary: rows('legendary', 8), specControlled: specCtl, gemControlled: gemCtl };
+  combo: rows('weapon + class', 12), artifact: rows('artifact', 8), specControlled: specCtl, gemControlled: gemCtl };
 const f = x => (x == null ? '-' : x.toFixed(2));
 const show = (title, list) => { console.log('\n' + title); for (const r of list) console.log(`  ${r.key.padEnd(34)} picks ${String(r.picks).padStart(5)}  wins ${String(r.wins).padStart(4)}  x${f(r.ratio)} fair  avg place ${f(r.avgPlace)}${r.reach != null ? `  reached tournament ${Math.round(r.reach * 100)}%` : ''}`); };
 console.log(`${MATCHES} matches. "x1.00 fair" = won exactly its share of tournaments; above 1 = stronger.`);
 show('SPECS', report.spec); show('HEART GEMS', report.gem); show('MAIN CLASS', report.class); show('SET BUILDS (15+ picks)', report.build);
-show('WEAPONS (15+ picks)', report.weapon); show('WEAPON + BUILD (12+ picks)', report.combo); show('LEGENDARIES (8+ picks)', report.legendary);
+show('WEAPONS (15+ picks)', report.weapon); show('WEAPON + BUILD (12+ picks)', report.combo); show('ARTIFACTS (8+ picks)', report.artifact);
 console.log('\nCONTROLLED: same gear, only the spec changes (win % in player fights vs other late heroes)');
 for (const [k, v] of specCtl) console.log(`  ${k.padEnd(16)} ${(v.winPct * 100).toFixed(1)}%`);
 console.log('\nCONTROLLED: same gear, only the heart gem changes');

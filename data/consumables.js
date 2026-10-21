@@ -13,7 +13,7 @@ G.CONSUMABLES = {
   tonic:   { name: 'Swift Tonic',           buff: { spd: 4 },   price: 24, weight: 9, desc: '+4 Attack Speed next fight.' },
   tome:    { name: 'Tome of Knowledge',     xp: 15, price: 30, weight: 10, desc: 'Gain 15 XP.' },
   dye:     { name: 'Turncoat’s Dye',        dye: true, price: 40, weight: 2.5, minRoom: 10, ramp: { weight: 13, room: 25 },
-    desc: 'Change the class tag on one piece of your gear, legendaries included.' },   // weight grows from 2.5 at room 10 to 13 at room 25 (about 2% → 10% of rolls)
+    desc: 'Change the class tag on one piece of your gear, artifacts included.' },   // weight grows from 2.5 at room 10 to 13 at room 25 (about 2% → 10% of rolls)
   draught: { name: 'Arcane Draught',        buff: { fullMana: 1 }, price: 24, weight: 6, desc: 'Start next fight at full mana (needs a spell).' },
 };
 G.BUFF_IDS = ['iron', 'salve', 'fury', 'tonic', 'draught'];

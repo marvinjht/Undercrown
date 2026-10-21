@@ -41,16 +41,16 @@ window.G = window.G || {};
     return `<span class="set-chip" style="--set:${C.color}">${C.name}</span>`;
   }
 
-  // Weapon line: type · range · damage type (legendaries can change range or damage type, e.g. Inferno)
+  // Weapon line: type · range · damage type (artifacts can change range or damage type, e.g. Inferno)
   function weaponLine(item) {
     const W = item.slot === 'weapon' ? G.WEAPONS[item.weaponType] : null;
     if (!W) return null;
-    const L = item.legendary ? G.LEGENDARIES[item.legendary].fx || {} : {};
+    const L = item.artifact ? G.ARTIFACTS[item.artifact].fx || {} : {};
     const range = L.meleeStaff ? 'melee' : W.range, type = L.physical ? 'phys' : W.type;
     return W.name + ' · ' + RANGE_NAMES[range] + ' · ' + (type === 'magic' ? 'Magic' : 'Physical');
   }
   // Stubborn: the item has a stun that ignores the stun limit
-  const isStubborn = item => !!((item.legendary && G.LEGENDARIES[item.legendary].stubborn) || (item.slot === 'weapon' && G.WEAPONS[item.weaponType] && G.WEAPONS[item.weaponType].stubborn));
+  const isStubborn = item => !!((item.artifact && G.ARTIFACTS[item.artifact].stubborn) || (item.slot === 'weapon' && G.WEAPONS[item.weaponType] && G.WEAPONS[item.weaponType].stubborn));
 
   function consumableTip(item) {
     const c = G.CONSUMABLES[item.cid];
@@ -63,8 +63,10 @@ window.G = window.G || {};
     const base = lines.filter(l => !l.affix).map(l => `<li>${esc(l.text)}</li>`).join('');
     const bonus = lines.filter(l => l.affix);
     let extra = bonus.length ? `<li class="affix-h">Bonus</li>${bonus.map(l => `<li class="affix ${l.cost ? 'cost' : ''}">${esc(l.text)} <small>${esc(l.suffix)}</small></li>`).join('')}` : '';
+    const LA = G.legendAffix(item);
+    if (LA) extra += `<li class="affix-h legend-h">Legendary affix</li><li class="affix legend">${esc(LA.text)} <small>${esc(LA.name)}</small></li>`;
     if (isStubborn(item)) extra += `<li class="affix stubborn">Stubborn <small>its stun ignores the stun limit</small></li>`;
-    if (item.rarity === 'legendary') extra += `<li class="affix-h legend-h">Legendary effect</li><li class="effect legend">${esc(G.LEGENDARIES[item.legendary].desc)}</li>`;
+    if (item.rarity === 'artifact') extra += `<li class="affix-h artifact-h">Artifact effect</li><li class="effect artifact">${esc(G.ARTIFACTS[item.artifact].desc)}</li>`;
     return `<ul class="${cls}">${base}${extra}</ul>`;
   }
 
@@ -83,22 +85,22 @@ window.G = window.G || {};
     }
     const wl = weaponLine(item);
     return `<div class="tt-title r-${item.rarity}">${esc(item.name)}</div>
-      <div class="tt-sub">${R.name} ${wl || G.SLOT_NAMES[item.slot]} ${item.rarity === 'legendary' ? '' : ' · Tier ' + item.tier}</div>
+      <div class="tt-sub">${R.name} ${wl || G.SLOT_NAMES[item.slot]} ${item.rarity === 'artifact' ? '' : ' · Tier ' + item.tier}</div>
       ${item.set ? `<div class="tt-tags">${setChip(item.set)}</div>` : ''}
       ${statList(item, 'tt-stats')}
-      ${item.rarity === 'legendary' ? (item.baseTrait ? `<div class="tt-trait">${esc(item.baseTrait)}</div>` : '') : item.trait ? `<div class="tt-trait">${esc(item.trait)}</div>` : ''}
-      ${item.rarity === 'legendary' ? '<p class="tt-extra">Legendary: you can wear only one. Fixed stats, one of a kind in this match.</p>' : ''}${item.affixed ? '<p class="tt-extra">Forged: already has its added bonus.</p>' : ''}${cmp}`;
+      ${item.rarity === 'artifact' ? (item.baseTrait ? `<div class="tt-trait">${esc(item.baseTrait)}</div>` : '') : item.trait ? `<div class="tt-trait">${esc(item.trait)}</div>` : ''}
+      ${item.rarity === 'artifact' ? '<p class="tt-extra">Artifact: you can wear only one. Fixed stats, one of a kind in this match.</p>' : ''}${item.affixed ? '<p class="tt-extra">Forged: already has its added bonus.</p>' : ''}${cmp}`;
   }
 
   // Only label an item when every change points the same way
   function verdict(hero, item) {
     if (item.kind === 'consumable') return { cls: 'side', text: 'Bag item' };
     if (item.kind === 'relic') return null;
-    if (item.rarity === 'legendary') return null;
+    if (item.rarity === 'artifact') return null;
     const eq = hero.gear[item.slot];
     if (!eq) return { cls: 'up', text: 'Empty slot' };
     const diffs = G.Items.compare(item, eq);
-    const same = (item.set || null) === (eq.set || null) && eq.rarity !== 'legendary';
+    const same = (item.set || null) === (eq.set || null) && eq.rarity !== 'artifact';
     if (!diffs.length) return same ? { cls: 'side', text: 'Same stats' } : null;
     if (diffs.every(d => d.d > 0) && same) return { cls: 'up', text: 'Upgrade' };
     if (diffs.every(d => d.d < 0) && same) return { cls: 'down', text: 'Downgrade' };
@@ -134,9 +136,9 @@ window.G = window.G || {};
           <span class="tags">${setChip(item.set)}${v ? `<span class="verdict ${v.cls}">${v.text}</span>` : ''}</span></div>
       </div>
       ${statList(item, 'stat-list')}
-      ${item.trait && item.rarity !== 'legendary' ? `<p class="trait">${esc(item.trait)}</p>` : ''}
-      ${item.rarity === 'legendary' && !G.Hero.canEquip(hero, item) ? `<p class="warn">You already wear a legendary (${esc(G.Hero.wornLegendary(hero).name)}). This one can only go in your bag.</p>` : ''}
-      ${eq ? `<div class="cmp"><span>Compared to ${esc(eq.name)}${eq.rarity === 'legendary' ? ' (loses its legendary effect)' : ''}</span><ul>${diffs.map(d => `<li class="${d.d > 0 ? 'up' : 'down'}">${esc(d.text)}</li>`).join('')}</ul></div>` : ''}
+      ${item.trait && item.rarity !== 'artifact' ? `<p class="trait">${esc(item.trait)}</p>` : ''}
+      ${item.rarity === 'artifact' && !G.Hero.canEquip(hero, item) ? `<p class="warn">You already wear an artifact (${esc(G.Hero.wornArtifact(hero).name)}). This one can only go in your bag.</p>` : ''}
+      ${eq ? `<div class="cmp"><span>Compared to ${esc(eq.name)}${eq.rarity === 'artifact' ? ' (loses its artifact effect)' : ''}</span><ul>${diffs.map(d => `<li class="${d.d > 0 ? 'up' : 'down'}">${esc(d.text)}</li>`).join('')}</ul></div>` : ''}
       <div class="btns">${btns}</div>
     </article>`;
   }
@@ -204,7 +206,7 @@ window.G = window.G || {};
       const it = hero.gear[slot];
       if (!it) return `<div class="slot empty" ${tip(`<div class="tt-title">${G.SLOT_NAMES[slot]}</div><div class="tt-sub">Empty. Loot leans toward empty slots.</div>`)}>
         <span class="ico-wrap">${G.Art.icon(slot)}</span><small>${G.SLOT_NAMES[slot]}</small></div>`;
-      return `<div class="slot r-${it.rarity}" ${tip(itemTip(it))}><span class="ico-wrap r-${it.rarity}">${G.Art.icon(it.iconKey)}</span><small>${esc(it.name)}</small>${it.set ? `<i class="set-dot" style="--set:${G.CLASSES[it.set].color}"></i>` : ''}${it.rarity === 'legendary' ? '<i class="fx-dot legend"></i>' : ''}</div>`;
+      return `<div class="slot r-${it.rarity}" ${tip(itemTip(it))}><span class="ico-wrap r-${it.rarity}">${G.Art.icon(it.iconKey)}</span><small>${esc(it.name)}</small>${it.set ? `<i class="set-dot" style="--set:${G.CLASSES[it.set].color}"></i>` : ''}${it.rarity === 'artifact' ? '<i class="fx-dot artifact"></i>' : ''}</div>`;
     }).join('')}</div></section>`;
   }
 
@@ -216,7 +218,7 @@ window.G = window.G || {};
       const heroes = G.Game.all().filter(h => h.alive);
       detail = `<table class="supply-table"><thead><tr><th>Class</th><th>Left</th>${heroes.map(h => `<th title="${esc(h.name)}">${esc(h.isPlayer ? 'You' : h.name.split(' ').pop().slice(0, 3))}</th>`).join('')}</tr></thead><tbody>${
         G.CLASS_ORDER.map(c => { return `<tr><td style="color:${G.CLASSES[c].color}">${G.CLASSES[c].name}</td><td><b>${counts[c]}</b>/${per}</td>${heroes.map(h => { const n = G.Supply.held(c, h); return `<td>${n || ''}</td>`; }).join('')}</tr>`; }).join('')}</tbody></table>
-        <p class="hint">Every match has ${per} pieces of each class, shared by everyone. When a class runs low, its pieces stop dropping until someone lets one go. Legendaries count toward your set but don’t use up the supply.</p>`;
+        <p class="hint">Every match has ${per} pieces of each class, shared by everyone. When a class runs low, its pieces stop dropping until someone lets one go. Artifacts count toward your set but don’t use up the supply.</p>`;
     }
     return `<div class="supply"><button class="supply-row" data-act="supply" aria-expanded="${supplyOpen}"><span>Set supply</span><span class="supply-bars">${bars}</span><span class="chev">${supplyOpen ? 'Hide' : 'Show'}</span></button>${detail}</div>`;
   }
@@ -331,7 +333,7 @@ window.G = window.G || {};
   // Equipping over a worn piece destroys it, so it takes a press and hold. An empty slot is a plain click.
   function bagUseBtn(p, it, i) {
     if (it.kind !== 'gear') return `<button data-act="bag-use" data-i="${i}">Use</button>`;
-    if (!G.Hero.canEquip(p, it)) return `<button disabled>Equip locked</button><small class="hold-note">You already wear a legendary</small>`;
+    if (!G.Hero.canEquip(p, it)) return `<button disabled>Equip locked</button><small class="hold-note">You already wear an artifact</small>`;
     const eq = p.gear[it.slot];
     if (!eq) return `<button data-act="bag-use" data-i="${i}">Equip</button>`;
     return `<button class="hold" data-hold="bag-use" data-i="${i}" aria-label="Press and hold to equip, replacing ${esc(eq.name)}"><span class="hold-fill"></span><span class="hold-label">Hold to equip</span></button><small class="hold-note">Replaces ${esc(eq.name)}, which sells for ${G.Dungeon.sellPrice(eq)} gold</small>`;
@@ -710,7 +712,7 @@ window.G = window.G || {};
         <button class="ghost" data-act="forge" data-kind="affix" data-slot="${sl}" ${it.affixed || f.affixed || p.gold < F.affixCost ? 'disabled' : ''}>${it.affixed ? 'Already forged' : `Add a random affix (${F.affixCost})`}</button>`);
     }).join('');
     return `<section class="screen"><h2>Forge</h2>
-      <p class="lede">The smith can strengthen one item (its base stats grow by one tier; the card shows exactly how) and add one random affix to one item. Each piece can be strengthened once and take one added affix, ever. Legendaries too. You have ${p.gold} gold.</p>
+      <p class="lede">The smith can strengthen one item (its base stats grow by one tier; the card shows exactly how) and add one random affix to one item. Each piece can be strengthened once and take one added affix, ever. Artifacts too. You have ${p.gold} gold.</p>
       ${f.msg ? `<p class="notice">${esc(f.msg)}</p>` : ''}
       <div class="cards">${cards}</div>
       <div class="row-actions"><button data-act="forge-leave">Leave the forge</button></div></section>`;

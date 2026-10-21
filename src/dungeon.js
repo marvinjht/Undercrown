@@ -270,7 +270,7 @@ window.G = window.G || {};
     if (res.goldStolen) hero.gold = Math.max(0, hero.gold - res.goldStolen);
     if (res.winner === 'b') { logHeart(hero, room, by || 'a fight'); return G.Hero.loseHeart(hero, room) ? 'heart' : 'dead'; }
     hero.hp = Math.max(1, res.aHp);
-    if (res.poison) hero.poison += res.poison;   // snake bites stay with you
+    if (res.poison) G.Hero.addPoison(hero, res.poison);   // snake bites stay with you
     return res.timeout ? 'timeout' : 'won';
   }
 
@@ -290,20 +290,20 @@ window.G = window.G || {};
       { id: 'xp', title: 'Lessons learned', text: `+${CFG().xp.spoils} XP`, xp: CFG().xp.spoils },
       { id: 'dmg', title: 'Whetstone', text: `+${S.statDmg} Damage, permanently`, stat: { dmg: S.statDmg } },
       { id: 'hp', title: 'Hearty meal', text: `+${S.statHp} max Health, permanently`, stat: { hp: S.statHp } },
-      { id: 'gear', title: 'Spoils of war', text: `A random item: gear, a relic or a bag item. Rarely a legendary${room < CFG().legendary.spoilsLateRoom ? ' (more often after room ' + CFG().legendary.spoilsLateRoom + ')' : ''}.`, item: spoilsItem(hero, room, rng), hidden: true },
+      { id: 'gear', title: 'Spoils of war', text: `A random item: gear, a relic or a bag item. Rarely Legendary or an Artifact${room < CFG().artifact.spoilsLateRoom ? ' (more often after room ' + CFG().artifact.spoilsLateRoom + ')' : ''}.`, item: spoilsItem(hero, room, rng), hidden: true },
     ];
     const n = G.Stats.treeFx(hero).fx.spoils4 ? 4 : 3;
     return pickN(all, n, rng);
   }
-  // Spoils of war: any kind of item (gear, relic or bag item), with a small chance of a legendary that grows after room 20
+  // Spoils of war: any kind of item (gear, relic or bag item), with a small chance of an artifact that grows after room 20
   function spoilsItem(hero, room, rng) {
-    const L = CFG().legendary, late = room >= L.spoilsLateRoom;
+    const L = CFG().artifact, late = room >= L.spoilsLateRoom;
     const pct = late ? L.spoilsLate + (room - L.spoilsLateRoom) * L.spoilsLatePerRoom : L.spoilsEarly;
-    if (rng.float() * 100 < pct) { const lg = G.Items.rollLegendary(rng); if (lg) return lg; }
+    if (rng.float() * 100 < pct) { const lg = G.Items.rollArtifact(rng); if (lg) return lg; }
     const M = CFG().spoils.mix, kind = rng.weighted([['gear', M.gear], ['bag', M.bag], ['relic', M.relic]]);
     if (kind === 'relic') { const r = G.Items.rollRelic(hero, rng); if (r) return r; }
     if (kind === 'bag') return G.Items.rollConsumable(room, rng);
-    const rarity = G.Loot.rollRarity(hero, room, rng.int(1, 100) <= 15 ? 1 : 0, rng);
+    const rarity = G.Loot.maybeLegendary(hero, room, 'spoils', G.Loot.rollRarity(hero, room, rng.int(1, 100) <= 15 ? 1 : 0, rng), rng);
     const slot = rng.pick(G.SLOTS);
     return G.Items.generate(rng, { slot, rarity, room, hero, weaponType: slot === 'weapon' ? rng.pick(G.WEAPON_ORDER) : null });
   }
@@ -311,8 +311,12 @@ window.G = window.G || {};
     if (opt.gold) { hero.gold += opt.gold; return `took ${opt.gold} gold`; }
     if (opt.xp) { G.Hero.gainXp(hero, opt.xp); return `gained ${opt.xp} XP`; }
     if (opt.item) {
-      if (!G.Hero.receive(hero, opt.item)) { hero.gold += 10; return `took 10 gold (no room for ${opt.item.name})`; }
-      return `took ${opt.item.name}`;
+      const it = opt.item, war = opt.id === 'gear';
+      const what = it.kind === 'gear' ? `${/^[AEIOU]/.test(G.RARITY[it.rarity].name) ? 'an' : 'a'} ${G.RARITY[it.rarity].name} ${it.name}` : it.kind === 'relic' ? `the relic ${it.name}` : `a ${it.name}`;
+      const where = G.Hero.receive(hero, it);
+      if (!where) { hero.gold += 10; return war ? `opened the Spoils of war: ${what}, but had no room for it, so you took 10 gold` : `took 10 gold (no room for ${it.name})`; }
+      const tail = where === 'equipped' ? ' (equipped)' : where === 'bag' ? ' (in your bag)' : where === 'relic' ? ' (added to your relics)' : '';
+      return war ? `opened the Spoils of war: ${what}${tail}` : `took ${it.name}${tail}`;
     }
     if (opt.stat) {
       hero.bonus = hero.bonus || {};
@@ -326,6 +330,7 @@ window.G = window.G || {};
   function logHeart(hero, room, by) { (hero.heartLog = hero.heartLog || []).push({ room, by }); }
   function tickPoison(hero, room) {
     if (!hero.alive || hero.poison <= 0) return 0;
+    if (G.Hero.poisonImmune(hero)) { hero.poison = 0; return 0; }
     const dmg = hero.poison;
     hero.hp -= dmg;
     if (hero.hp <= 0) { hero.hp = 0; logHeart(hero, room, 'poison'); G.Hero.loseHeart(hero, room); }
@@ -368,7 +373,7 @@ window.G = window.G || {};
   }
 
   // ---------- Forge ----------
-  // Strengthen: base stats grow by one tier step, once per piece (legendaries too).
+  // Strengthen: base stats grow by one tier step, once per piece (artifacts too).
   // Add an affix: one random bonus stat, once per piece.
   const canStrengthen = item => !!item && !item.forged;
   function strengthenGains(item) {
@@ -555,7 +560,7 @@ window.G = window.G || {};
         return txt || 'looked at the forge';
       }
       case 'venom': {
-        hero.poison += CFG().poison.venomStacks;
+        G.Hero.addPoison(hero, CFG().poison.venomStacks);
         return `opened a venom cache, ${autoLoot(hero, G.Loot.offer(hero, room, 'shrine', rng), room, false)}`;
       }
       case 'purify': { const n = hero.poison; hero.poison = 0; G.Hero.heal(hero, CFG().poison.purifyHeal); return n ? `washed away ${n} poison` : 'drank from a clean spring'; }

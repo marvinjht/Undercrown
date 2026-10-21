@@ -100,7 +100,7 @@ window.G = window.G || {};
         }
         // Poisoned Blade: duel poison stays with you
         const bp = res.bladePoison && res.bladePoison[i === 0 ? 'a' : 'b'];
-        if (bp && h.alive) h.poison = (h.poison || 0) + bp;
+        if (bp && h.alive) G.Hero.addPoison(h, bp);
       }
       return out;
     },

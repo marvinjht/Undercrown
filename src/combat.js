@@ -49,7 +49,7 @@ window.G = window.G || {};
         thorns: spec.thorns || (s.fx && s.fx.thorns) || 0, shieldBreak: !!(spec.shieldBreak || (s.fx && s.fx.shieldBreak)),
         steal: spec.steal || 0, stolen: 0, split: spec.split || null, isBoss: !!spec.boss,
         range: CB.ranges[s.range || 'melee'] || 1,
-        // v0.1: hybrids, relics and legendaries
+        // v0.1: hybrids, relics and artifacts
         empower: 0, haste: [], sureHits: (s.fx && s.fx.sureHits) || 0, healCutUntil: -1, sentinelUsed: false, sentinelPending: false,
         shoveNext: 0, beamSec: 0, nextBeam: s.fx && s.fx.beam ? (s.fx.beam.every || 1) : Infinity, beamTarget: null, bleedBy: null,
         nextStomp: s.fx && s.fx.stomp ? s.fx.stomp.every : Infinity, nextPulse: 1, drained: 0,
@@ -64,6 +64,8 @@ window.G = window.G || {};
         // v0.28: weapon traits, poison in fights, Night Lord mark, Aegis rebuild, Paladin shield burst
         riposte: false, rend: 0, fpoison: 0, nextPoison: Infinity, nightInvis: !!(s.fx && s.fx.nightLord), markUsed: false,
         shield0: s.shield || 0, aegisRebuildAt: -1, aegisRebuilt: false, palBurstUsed: false, palBurstPending: false, bladePoison: 0,
+        // v0.32: legendary affixes, Exile's root
+        hitStacks: 0, stunBlockReady: 0, stunUntil: -1, rootUntil: -1,
         ...extra,
       };
       fighters.push(f);
@@ -316,7 +318,11 @@ window.G = window.G || {};
       if (!def.alive) return false;
       if (def.s.fx && def.s.fx.stunImmune) { ccBlocked(def); return false; }
       if (!ignoreLimit && t < def.stunImmuneUntil) return false;
+      // Steadfast (legendary legs): one stun every few seconds just bounces off
+      const sb = def.s.fx && def.s.fx.stunBlock;
+      if (sb && t >= def.stunBlockReady) { def.stunBlockReady = t + sb; push({ type: 'stunblock', src: def.id }); return false; }
       def.nextAtk = Math.max(def.nextAtk, t + secs);
+      def.stunUntil = Math.max(def.stunUntil, t + secs);
       if (!ignoreLimit) def.stunImmuneUntil = t + secs + CB.stunImmune;
       push({ type: 'stun', src: att.id, tgt: def.id, secs });
       return true;
@@ -328,8 +334,9 @@ window.G = window.G || {};
       return c !== to;
     }
 
-    function cast(f) {
-      const sp = f.s.spell, fx = f.s.fx || {};
+    // recastSp: Twincast (legendary staff) casting the same spell again: the hits only, no mana or side effects
+    function cast(f, recastSp) {
+      const sp = recastSp || f.s.spell, fx = f.s.fx || {};
       // Wraith King: Raise Dead calls more ghouls (once)
       if (sp.raise) {
         f.mana = 0; f.raised = true;
@@ -342,7 +349,7 @@ window.G = window.G || {};
         return;
       }
       const tgts = (sp.aoe ? foes(f) : [target(f)].filter(Boolean)).filter(x => !x.invis);
-      push({ type: 'cast', src: f.id, name: sp.name, aoe: sp.aoe, tgts: tgts.map(x => x.id) }, f);
+      push({ type: 'cast', src: f.id, name: sp.name + (recastSp ? ' (Twincast)' : ''), aoe: sp.aoe, tgts: tgts.map(x => x.id) }, f);
       const scrit = fx.spellCrit && roll(f.s.crit);
       for (const d of tgts) {
         if (!d.alive) continue;
@@ -365,12 +372,29 @@ window.G = window.G || {};
           d.hexUntil = t + fx.hex.secs; d.hexPct = fx.hex.pct;
           push({ type: 'hex', src: f.id, tgt: d.id, stacks: d.hex });
         }
+        // Searing (legendary wand): Firebolt burns for a share of the target's max health
+        if (fx.boltBurn && sp.name === 'Firebolt') {
+          const b = Math.max(1, Math.ceil(d.maxHp * fx.boltBurn.pct / 100));
+          if (d.burnUntil < t) d.nextBurn = t + 1;
+          d.burn = Math.max(d.burnUntil >= t ? d.burn : 0, b); d.burnUntil = Math.max(d.burnUntil, t + fx.boltBurn.secs + 0.01);
+          push({ type: 'sear', src: f.id, tgt: d.id });
+        }
+        // Exile: Banish knocks the target back and roots it (it can still attack, it just can't move)
+        if (sp.banish && !ccBlocked(d)) {
+          const dir = Math.sign(d.pos - f.pos) || (f.side === 'a' ? 1 : -1);
+          const before = d.pos, wall = displace(d, d.pos + dir * sp.banish.push);
+          const travel = Math.abs((d.dashTo != null ? d.dashTo : before) - before) / 10;   // knockbacks move 10 steps a second
+          d.rootUntil = Math.max(d.rootUntil, t + travel + sp.banish.root);
+          push({ type: 'root', src: f.id, tgt: d.id, secs: sp.banish.root, delay: travel, slam: wall });
+        }
       }
+      if (recastSp) return;
       f.mana = 0;
       if (fx.primedMana && !f.primedUsed) { f.primedUsed = true; f.mana = fx.primedMana; }
       if (fx.spellShield) { f.shield += fx.spellShield; push({ type: 'shieldup', src: f.id, amount: fx.spellShield }, f); }
       if (fx.empower) f.empower = fx.empower.hits;
       if (fx.echo) pending.push({ at: t + 1, f, sp });
+      if (fx.doubleCast) pending.push({ at: t + 0.4, f, sp, recast: true });   // Twincast
       if (fx.spellHeal) { const h = heal(f, fx.spellHeal); if (h) push({ type: 'heal', src: f.id, amount: h }, f); }
       if (fx.spellStack) f.dmgBonus += fx.spellStack;
     }
@@ -405,6 +429,14 @@ window.G = window.G || {};
       const dfx = fxOf(def);
       const smoke = def.smokeUntil >= t && dfx.smokeDodge ? dfx.smokeDodge : 0;
       if (!sure && !def.egg && roll(Math.min(CB.dodgeCap + smoke, (def.s.dodge || 0) + def.parryDodge + smoke))) {
+        // Parrying (legendary saber): the dodge becomes a parry that strikes back, stuns and heals
+        if (dfx.dodgeParry && !counter && def.alive) {
+          push({ type: 'parry', src: att.id, tgt: def.id });
+          const h = heal(def, dfx.dodgeParry.heal); if (h) push({ type: 'heal', src: def.id, amount: h, label: 'Parry' }, def);
+          stun(def, att, dfx.dodgeParry.stun);
+          if (att.alive) strike(def, att, true);
+          return 0;
+        }
         push({ type: 'dodge', src: att.id, tgt: def.id });
         if (dfx.afterDodge) def.nextHitBonus = dfx.afterDodge;
         if (dfx.riposte) def.riposte = true;   // Saber: the next hit deals +50%
@@ -437,6 +469,8 @@ window.G = window.G || {};
       else if (att.firstCrits > 0) { crit = true; att.firstCrits--; }
       else if (counter && fx.counterCrit) crit = true;
       else crit = roll(att.s.crit);
+      // Clear-eyed (legendary helmet): some crits land as normal hits
+      if (crit && dfx.critGuard && roll(dfx.critGuard)) { crit = false; push({ type: 'critguard', src: def.id }); }
       let raw = att.s.dmg + att.dmgBonus + att.hurtBonus + att.nextHitBonus;
       att.nextHitBonus = 0;
       if (att.riposte) { att.riposte = false; raw = Math.round(raw * (1 + fx.riposte / 100)); }
@@ -456,14 +490,17 @@ window.G = window.G || {};
       // Penitent: release the stored charge as holy damage, and heal the same
       let penance = 0;
       if (fx.penitent && att.charge > 0) { penance = att.charge; att.charge = 0; holy += penance; }
-      const holyPart = holy ? Math.max(0, holy - ward) : 0;
+      let holyPart = holy ? Math.max(0, holy - ward) : 0;
+      if (fx.holyShield && def.shield > 0 && holyPart) holyPart += Math.min(def.shield, holyPart) * (fx.holyShield - 1);   // Radiant: holy doubled against Shields
       amt += holyPart;
       if (att.empowerNow) amt += Math.max(0, fx.empower.dmg - ward);   // Battle Mage
       const fourth = fx.everyFourthMagic && att.atkCount % 4 === 0;
       if (fourth) amt += Math.max(0, fx.everyFourthMagic - ward);
+      if (fx.stunnedDmg && def.stunUntil > t) amt = Math.round(amt * (1 + fx.stunnedDmg / 100));   // Crushing (legendary hammer)
       const r = damage(def, amt, att);
       push({ type: 'hit', src: att.id, tgt: def.id, amount: r.dealt, absorbed: r.absorbed, crit, cheap: ambush, counter: !!counter, kind: att.s.type, ranged: att.range > 2, empowered: !!att.empowerNow }, att, def);
       att.hitsLanded++;
+      if (fx.hitSpd && att.hitStacks < fx.hitSpd.max) att.hitStacks = Math.min(fx.hitSpd.max, att.hitStacks + fx.hitSpd.per);   // Relentless (legendary gloves)
       if (penance) { const h = heal(att, Math.max(1, Math.round(penance * PVP))); push({ type: 'penance', src: att.id, amount: penance, heal: h }, att); }
       if (fourth && fx.manaOnFourth) addMana(att, fx.manaOnFourth);
       // Ghoulgrip: drain max health and feed on the damage
@@ -501,7 +538,7 @@ window.G = window.G || {};
       }
       // Snake bites: poison that stays after the fight (up to the cap per fight)
       // Shadow: Poisoned Blade. Every hit poisons (up to the cap); poison hurts during the fight too
-      if (fx.bladePoison && def.alive && !def.egg && def.fpoison < fx.bladePoison.cap) {
+      if (fx.bladePoison && def.alive && !def.egg && !dfx.poisonImmune && def.fpoison < fx.bladePoison.cap) {
         def.fpoison = Math.min(fx.bladePoison.cap, def.fpoison + 1);
         if (def.nextPoison === Infinity) def.nextPoison = t + 2;
         if (opts.pvp) def.bladePoison = def.fpoison;   // a duel's poison stays with the loser and winner alike
@@ -514,7 +551,7 @@ window.G = window.G || {};
         if (!att.markUsed && def.alive) { att.markUsed = true; def.mark = { by: att, dmg: 0, until: t + 3 }; push({ type: 'mark', src: att.id, tgt: def.id }); }
       }
       // Snakes: only critical bites poison
-      if (att.s.poison && crit && def.alive && def === A && def.poisonGain < POISON_CAP) {
+      if (att.s.poison && crit && def.alive && def === A && !dfx.poisonImmune && def.poisonGain < POISON_CAP) {
         const add = Math.min(att.s.poison, POISON_CAP - def.poisonGain);
         def.poisonGain += add;
         push({ type: 'poison', src: att.id, tgt: def.id, amount: add, total: def.poisonGain });
@@ -571,7 +608,10 @@ window.G = window.G || {};
       if (def.alive) {
         if (roll(att.s.stun) || (fx.fourthStun && att.hitsLanded % fx.fourthStun === 0)) stun(att, def, crit ? CB.critStun : 1);   // a crit stun lasts longer
         // Sword & Shield: Shield Bash every few hits (ignores the stun limit, so it combos)
-        if (def.alive && fx.bash && att.hitsLanded % fx.bash === 0 && !counter) { push({ type: 'bash', src: att.id, tgt: def.id }); stun(att, def, 1, true); }
+        if (def.alive && fx.bash && att.hitsLanded % fx.bash === 0 && !counter) {
+          push({ type: 'bash', src: att.id, tgt: def.id }); stun(att, def, 1, true);
+          if (fx.bashShield) { att.shield += fx.bashShield; push({ type: 'shieldup', src: att.id, amount: fx.bashShield, label: 'Bastion' }, att); }   // Bastion (legendary sword & shield)
+        }
       }
       return r.dealt;
     }
@@ -581,14 +621,17 @@ window.G = window.G || {};
       if (!def) return;
       att.atkCount++;
       const fx = att.s.fx || {};
-      const shots = fx.doubleShot && att.atkCount % fx.doubleShot === 0 ? 2 : 1;
-      if (shots === 2) push({ type: 'double', src: att.id });
+      const twin = fx.twinStrike && att.atkCount % fx.twinStrike === 0;   // Twinned (legendary daggers)
+      const shots = (fx.doubleShot && att.atkCount % fx.doubleShot === 0) || twin ? 2 : 1;
+      if (shots === 2) push({ type: 'double', src: att.id, twin: !!twin });
       for (let i = 0; i < shots; i++) {
         const d = target(att);
         if (!d || !att.alive) break;
         att.empowerNow = att.empower > 0;
         if (att.empowerNow) att.empower--;
         const dealt = strike(att, d, false);
+        // Volley (legendary shortbow): every few shots a second arrow for half damage
+        if (fx.volley && i === 0 && att.atkCount % fx.volley === 0 && dealt > 0 && d.alive) fxHit(att, d, Math.max(CB.minHit, 2 * Math.round(dealt / 4)), 'Volley');
         const cleaves = att.s.cleave || att.empowerNow;
         att.empowerNow = false;
         if (cleaves && dealt > 0) {
@@ -599,7 +642,7 @@ window.G = window.G || {};
             applyBleed(d, (att.s.bleed || 0) + d.rend, att);
           }
           if (second) {
-            const r = damage(second, Math.max(CB.minHit, Math.floor(dealt / 2 / 2) * 2), att);
+            const r = damage(second, fx.cleaveFull ? dealt : Math.max(CB.minHit, Math.floor(dealt / 2 / 2) * 2), att);
             push({ type: 'hit', src: att.id, tgt: second.id, amount: r.dealt, absorbed: r.absorbed, cleave: true }, second);
             afterDamage(second, att);
           }
@@ -642,8 +685,9 @@ window.G = window.G || {};
         const tg = target(f);
         if (!tg) continue;
         const d = Math.abs(tg.pos - f.pos);
+        if (f.rootUntil > t) continue;   // Exile's Banish: rooted fighters can't walk (they can still attack in range)
         if (d > f.range + 1e-6) {
-          const step = Math.min(CB.moveSpeed * CB.dt, d - f.range);
+          const step = Math.min((CB.moveSpeed + ((f.s.fx && f.s.fx.moveBonus) || 0)) * CB.dt, d - f.range);   // Swift (legendary boots)
           f.pos += tg.pos > f.pos ? step : -step;
           tracks[f.id].push([t, Math.round(f.pos * 100) / 100]);
         }
@@ -651,7 +695,7 @@ window.G = window.G || {};
       // Archer 6: Kiting. When a foe reaches melee range, step back 3.
       for (const f of fighters) {
         const kite = f.alive && !f.egg && f.s.fx && f.s.fx.kite;
-        if (!kite || f.dashTo != null || t < f.kiteNext) continue;
+        if (!kite || f.dashTo != null || t < f.kiteNext || f.rootUntil > t) continue;
         const near = foes(f).some(x => Math.abs(x.pos - f.pos) <= 1 + 1e-6);
         if (!near) continue;
         const foe = foes(f).filter(x => Math.abs(x.pos - f.pos) <= 1 + 1e-6)[0];
@@ -663,7 +707,7 @@ window.G = window.G || {};
         f.dashTo = to; f.kiteNext = t + kite;
         push({ type: 'kite', src: f.id });
       }
-      for (let i = pending.length - 1; i >= 0; i--) if (pending[i].at <= t) { const p = pending.splice(i, 1)[0]; echo(p.f, p.sp); }
+      for (let i = pending.length - 1; i >= 0; i--) if (pending[i].at <= t) { const p = pending.splice(i, 1)[0]; if (p.recast) { if (p.f.alive && !p.f.egg) cast(p.f, p.sp); } else echo(p.f, p.sp); }
       for (const f of fighters) {
         if (!f.alive) continue;
         // The egg cracks if the fight isn't over in time
@@ -800,6 +844,7 @@ window.G = window.G || {};
         const fx = f.s.fx || {};
         let spd = f.s.spd + (fx.shieldSpd && f.shield > 0 ? fx.shieldSpd : 0) + (fx.lowSpd && f.hp < f.maxHp / 2 ? fx.lowSpd : 0);
         if (fx.dodgeHaste) { f.haste = f.haste.filter(x => x > t); spd += f.haste.length * fx.dodgeHaste.spd; }
+        spd += f.hitStacks;   // Relentless: counts past the Attack Speed cap
         if (f.frenzyUntil >= t) spd = (spd - f.s.spd + (f.s.spdUncapped || f.s.spd)) * 2;   // Hummingbird: ignores the Attack Speed cap while active
         if (f.sunderUntil >= t && f.sunderFx) spd *= 1 - f.sunderFx.slow;
         if (f.mired) spd *= 1 - f.mired * (f.mirePct || 8) / 100;   // Mire Beast

@@ -26,29 +26,29 @@ window.G = window.G || {};
       for (const h of this.heroes) {
         if (onlyHero && h !== onlyHero) continue;
         if (!h.alive) continue;
-        // Legendaries sit on top of the supply: they never use up one of the 12 pieces
-        for (const slot of G.SLOTS) { const it = h.gear[slot]; if (it && it.set === cls && it.rarity !== 'legendary') n++; }
-        for (const it of h.bag) if (it.kind === 'gear' && it.set === cls && it.rarity !== 'legendary') n++;
+        // Artifacts sit on top of the supply: they never use up one of the 12 pieces
+        for (const slot of G.SLOTS) { const it = h.gear[slot]; if (it && it.set === cls && it.rarity !== 'artifact') n++; }
+        for (const it of h.bag) if (it.kind === 'gear' && it.set === cls && it.rarity !== 'artifact') n++;
       }
       return n;
     },
     left(cls) { return this.heroes.length ? Math.max(0, G.CONFIG.supplyPerClass - this.held(cls)) : G.CONFIG.supplyPerClass; },
     counts() { const o = {}; for (const c of G.CLASS_ORDER) o[c] = this.left(c); return o; },
-    // Legendaries of a class someone holds (shown on top of the supply)
-    legendaries(cls, onlyHero) {
+    // Artifacts of a class someone holds (shown on top of the supply)
+    artifacts(cls, onlyHero) {
       let n = 0;
       for (const h of this.heroes) {
         if ((onlyHero && h !== onlyHero) || !h.alive) continue;
-        for (const it of [...G.SLOTS.map(sl => h.gear[sl]), ...h.bag]) if (it && it.rarity === 'legendary' && it.set === cls) n++;
+        for (const it of [...G.SLOTS.map(sl => h.gear[sl]), ...h.bag]) if (it && it.rarity === 'artifact' && it.set === cls) n++;
       }
       return n;
     },
-    // Each legendary exists once per match: held by anyone still in = gone from the pool
-    legendTaken() {
+    // Each artifact exists once per match: held by anyone still in = gone from the pool
+    artifactTaken() {
       const out = new Set();
       for (const h of this.heroes) {
         if (!h.alive) continue;
-        for (const it of [...G.SLOTS.map(sl => h.gear[sl]), ...h.bag]) if (it && it.legendary) out.add(it.legendary);
+        for (const it of [...G.SLOTS.map(sl => h.gear[sl]), ...h.bag]) if (it && it.artifact) out.add(it.artifact);
       }
       return out;
     },
@@ -80,13 +80,13 @@ window.G = window.G || {};
       base.dmg = value('dmg', W.dmg, R, tier);
       base.spd = W.spd;
       for (const k in W.bonus) base[k] = value(k, W.bonus[k], R, tier);
-      name = W.bases[R.rank];
+      name = W.bases[R.nameRank != null ? R.nameRank : R.rank];
       iconKey = weaponType;
       trait = W.trait;
     } else {
       const A = G.ARMOR[slot];
       for (const k in A.primary) base[k] = value(k, A.primary[k], R, tier);
-      name = A.bases[R.rank];
+      name = A.bases[R.nameRank != null ? R.nameRank : R.rank];
       iconKey = slot;
     }
 
@@ -115,7 +115,7 @@ window.G = window.G || {};
       nAffix -= 1;   // a rare with a trade-off keeps one plain affix
     }
     if (nAffix > 0) {
-      const pool = Object.keys(G.AFFIXES).filter(k => !(G.AFFIXES[k].rareOnly && rarity !== 'rare') && !(G.AFFIXES[k].weaponOnly && slot !== 'weapon'));
+      const pool = Object.keys(G.AFFIXES).filter(k => !(G.AFFIXES[k].rareOnly && rarity !== 'rare' && rarity !== 'legendary') && !(G.AFFIXES[k].weaponOnly && slot !== 'weapon'));
       for (let i = 0; i < nAffix && pool.length; i++) {
         const k = pool.splice(Math.floor(rng.float() * pool.length), 1)[0];
         affixes.push(k);
@@ -125,27 +125,29 @@ window.G = window.G || {};
       }
       if (affixes.length && !tradeoff) name += ' ' + G.AFFIXES[affixes[0]].suffix;
     }
+    // Legendary: the slot's legendary affix names it
+    if (rarity === 'legendary') { const LA = G.legendAffix({ rarity, slot, weaponType }); if (LA) name = LA.name + ' ' + name; }
 
     return { id: G.uid('item'), kind: 'gear', slot, rarity, room, tier, weaponType: weaponType || null, set: itemSet,
       name, base, stats, affixStats, affixes, tradeoff, trait, iconKey };
   }
 
-  // A legendary: fixed stats, its own name, the class tag it was made for
-  function legendary(id) {
-    const D = G.LEGENDARIES[id];
+  // An artifact: fixed stats, its own name, the class tag it was made for
+  function artifact(id) {
+    const D = G.ARTIFACTS[id];
     const W = D.weaponType ? G.WEAPONS[D.weaponType] : null;
-    // Fixed numbers. A legendary weapon's hitting power is set to a late-dungeon rare's (same for everyone, every match).
+    // Fixed numbers. An artifact weapon's hitting power is set to a late-dungeon rare's (same for everyone, every match).
     const st = { ...D.stats };
-    if (W) for (const k of ['dmg', 'spellDmg', 'holy', 'bleed']) if (st[k]) st[k] = value(k, st[k], G.RARITY.rare, G.CONFIG.legendary.tier);
-    return { id: G.uid('item'), kind: 'gear', slot: D.slot, rarity: 'legendary', legendary: id, room: 0, tier: G.CONFIG.legendary.tier,
+    if (W) for (const k of ['dmg', 'spellDmg', 'holy', 'bleed']) if (st[k]) st[k] = value(k, st[k], G.RARITY.rare, G.CONFIG.artifact.tier);
+    return { id: G.uid('item'), kind: 'gear', slot: D.slot, rarity: 'artifact', artifact: id, room: 0, tier: G.CONFIG.artifact.tier,
       weaponType: D.weaponType || null, set: D.cls, name: D.name, base: { ...st }, stats: { ...st },
-      affixStats: {}, affixes: [], tradeoff: null, trait: D.desc, baseTrait: W && !(D.fx && D.fx.meleeStaff) ? W.trait : null,   // Inferno replaces the Staff's own trait
+      affixStats: {}, affixes: [], tradeoff: null, trait: D.desc, baseTrait: D.baseTrait !== undefined ? D.baseTrait : W && !(D.fx && D.fx.meleeStaff) ? W.trait : null,   // Inferno replaces the Staff's own trait
       iconKey: D.weaponType || D.slot };
   }
-  function rollLegendary(rng) {
-    const taken = Supply.legendTaken();
-    const pool = G.LEGENDARY_ORDER.filter(id => !taken.has(id));
-    return pool.length ? legendary(rng.pick(pool)) : null;
+  function rollArtifact(rng) {
+    const taken = Supply.artifactTaken();
+    const pool = G.ARTIFACT_ORDER.filter(id => !taken.has(id));
+    return pool.length ? artifact(rng.pick(pool)) : null;
   }
 
   // Relics: collected, never equipped. A relic you already hold at the max can't roll for you.
@@ -194,7 +196,7 @@ window.G = window.G || {};
     }
     return out;
   }
-  function effectText(item) { return item && item.legendary ? { name: 'Legendary', desc: G.LEGENDARIES[item.legendary].desc } : null; }
+  function effectText(item) { return item && item.artifact ? { name: 'Artifact', desc: G.ARTIFACTS[item.artifact].desc } : null; }
 
   function compare(item, equipped) {
     const out = [];
@@ -222,7 +224,7 @@ window.G = window.G || {};
     return c.weight + (R.weight - c.weight) * f;
   }
 
-  G.Items = { generate, fmtStat, statLines, effectText, compare, tierFor, consumable, rollConsumable, rollSet, legendary, rollLegendary, relic, rollRelic, addAffix };
+  G.Items = { generate, fmtStat, statLines, effectText, compare, tierFor, consumable, rollConsumable, rollSet, artifact, rollArtifact, relic, rollRelic, addAffix };
   G.Supply = Supply;
 
   // ---------- Loot ----------
@@ -235,6 +237,16 @@ window.G = window.G || {};
     const e = L().early, l = L().late, w = {};
     for (const r of G.RARITY_ORDER) w[r] = e[r] + (l[r] - e[r]) * t;
     return w;
+  }
+
+  // Legendary tier: a gear drop can turn Legendary (never early; more often late, from elites and bosses)
+  function legendaryChance(hero, room, kind) {
+    const LC = G.CONFIG.legendary, eff = hero && hero.spec === 'treasureHunter' ? room + L().treasureHunterRooms : room;
+    if (eff < LC.fromRoom) return 0;
+    return (eff >= LC.lateRoom ? LC.late : LC.early) * (kind === 'elite' || kind === 'boss' ? LC.eliteMult : 1);
+  }
+  function maybeLegendary(hero, room, kind, rarity, rng) {
+    return rng.float() * 100 < legendaryChance(hero, room, kind) ? 'legendary' : rarity;
   }
 
   function rollRarity(hero, room, floor, rng) {
@@ -284,7 +296,8 @@ window.G = window.G || {};
       if (kind === 'elite' || kind === 'shrine') floor = 1;
       if (kind === 'boss') floor = 2;
       if (kind === 'vault') floor = i === 0 ? 2 : 1;
-      const rarity = kind === 'trash' ? 'grey' : rollRarity(hero, room, floor, rng);
+      let rarity = kind === 'trash' ? 'grey' : rollRarity(hero, room, floor, rng);
+      if (kind !== 'trash' && kind !== 'shop') rarity = maybeLegendary(hero, room, kind, rarity, rng);
       let pick = null;
       for (const slot of slotOrder(hero, room, rng, exclude)) {
         const it = generate(rng, { slot, rarity, room, hero, weaponType: slot === 'weapon' ? rollWeaponType(hero, rng) : null });
@@ -299,11 +312,11 @@ window.G = window.G || {};
     // Relics: elites sometimes, bosses often, the Vault always
     const rc = G.CONFIG.relicChance[kind];
     if (rc && rng.int(1, 100) <= rc) { const r = rollRelic(hero, rng); if (r) items.push(r); }
-    // Legendaries: the later bosses always offer one; elites deep in the dungeon sometimes do
-    const LG = G.CONFIG.legendary;
+    // Artifacts: the later bosses always offer one; elites deep in the dungeon sometimes do
+    const LG = G.CONFIG.artifact;
     const ev = LG.eventChance && LG.eventChance[kind];
     if ((kind === 'boss' && LG.bossRooms.includes(room)) || (kind === 'elite' && room > LG.eliteFromRoom && rng.int(1, 100) <= LG.eliteChance) || (ev && rng.float() * 100 < ev)) {
-      const lg = rollLegendary(rng); if (lg) items.push(lg);
+      const lg = rollArtifact(rng); if (lg) items.push(lg);
     }
     return items;
   }
@@ -336,5 +349,5 @@ window.G = window.G || {};
     return out;
   }
 
-  G.Loot = { rarityWeights, rollRarity, offer, armory, shopTable };
+  G.Loot = { rarityWeights, rollRarity, offer, armory, shopTable, legendaryChance, maybeLegendary };
 })(window.G);

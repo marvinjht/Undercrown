@@ -1,7 +1,7 @@
 // Weapon types at tier 1, common. dmg = damage per hit, spd = attacks per 10 seconds.
 // range: melee (1 step) | near (4) | far (6). type: phys (Armor blocks it) | magic (Magic Resist blocks it).
 // bonus = built-in stats that grow with tier and rarity. spell = what full mana casts.
-// classes = the class tags an uncommon or legendary copy can roll (unique items can ignore this later).
+// classes = the class tags an uncommon or artifact copy can roll (unique items can ignore this later).
 window.G = window.G || {};
 
 G.WEAPONS = {
@@ -14,7 +14,7 @@ G.WEAPONS = {
   },
   saber: {
     classes: ['rogue', 'warrior'],
-    name: 'Saber', range: 'melee', type: 'phys', dmg: 14, spd: 14, bonus: { dodge: 10 }, fx: { riposte: 50 },
+    name: 'Saber', range: 'melee', type: 'phys', dmg: 16, spd: 14, bonus: { dodge: 10 }, fx: { riposte: 50 },
     trait: 'Light footwork: extra Dodge. Riposte: after you dodge, your next hit deals +50%.',
     blurb: 'Quick strikes and slippery defense.',
     bases: ['Bent Saber', 'Corsair Saber', 'Moonsilver Saber'],

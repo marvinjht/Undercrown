@@ -333,8 +333,9 @@ window.G = window.G || {};
           s.offer = { items: G.Loot.offer(p, s.room, 'vault', s.rng), gold: CFG().gold.skipItemBase + 2 * Math.round(s.room / 2), title: 'Treasure Vault', text: 'A sealed vault, untouched for years. Take one.' };
           s.phase = 'reward'; break;
         case 'venom':
-          p.poison += CFG().poison.venomStacks;
-          s.offer = { items: G.Loot.offer(p, s.room, 'shrine', s.rng), gold: 0, title: 'Venom Cache', text: `The lid bites. You gain ${CFG().poison.venomStacks} poison (${p.poison} total). Take one item.` };
+          const immune = G.Hero.poisonImmune(p);
+          G.Hero.addPoison(p, CFG().poison.venomStacks);
+          s.offer = { items: G.Loot.offer(p, s.room, 'shrine', s.rng), gold: 0, title: 'Venom Cache', text: immune ? 'The lid bites, but your Purifying mace burns the poison away. Take one item.' : `The lid bites. You gain ${CFG().poison.venomStacks} poison (${p.poison} total). Take one item.` };
           s.phase = 'reward'; break;
         case 'purify': {
           const n = p.poison; p.poison = 0;
@@ -502,7 +503,7 @@ window.G = window.G || {};
       }
       const me = tourNow ? s.tour.entrants.find(e => e.hero === p) : null;
       if (tourNow && (!me || me.out)) return;
-      if (it.kind === 'gear' && !G.Hero.canEquip(p, it)) { s.bagMsg = 'You already wear a legendary. Only one at a time.'; render(); return; }
+      if (it.kind === 'gear' && !G.Hero.canEquip(p, it)) { s.bagMsg = 'You already wear an artifact. Only one at a time.'; render(); return; }
       if (it.kind === 'gear') {
         // Equipping over a piece sells the old one automatically
         p.bag.splice(i, 1);

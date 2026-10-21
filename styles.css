@@ -660,15 +660,26 @@ table.tour { width: 100%; border-collapse: collapse; font-size: 15px; font-varia
 .card.relic-card .ico-wrap { color: var(--rel); border-color: var(--rel); }
 .verdict.relic-tag { color: var(--rel); border-color: var(--rel); }
 
-/* Legendaries */
-.r-legendary { color: var(--r-gold); }
-.ico-wrap.r-legendary { border-color: #b48a2a; color: var(--r-gold); box-shadow: inset 0 0 14px rgba(242, 193, 74, .3); }
-.card.item.r-legendary { border-color: #b48a2a; background: linear-gradient(160deg, #3a2c14, var(--bg-3) 55%); box-shadow: 0 0 0 1px rgba(242, 193, 74, .25), 0 0 18px rgba(242, 193, 74, .12); }
-.slot.r-legendary { border-color: #b48a2a; }
-.slot .fx-dot.legend { background: var(--r-gold); }
-.rarity-dots i.r-legendary { background: var(--r-gold); }
-.affix-h.legend-h { color: var(--r-gold); }
-.effect.legend { color: #f6dc94; }
+/* Artifacts: red with a glowing red border. Legendary tier: gold-yellow. */
+:root { --r-artifact: #ff4a3d; --r-legend: #ffd84a; }
+@keyframes artglow { from { box-shadow: 0 0 0 1px rgba(255, 74, 61, .45), 0 0 10px rgba(255, 74, 61, .25); } to { box-shadow: 0 0 0 1px rgba(255, 74, 61, .8), 0 0 22px rgba(255, 74, 61, .45); } }
+.r-artifact { color: var(--r-artifact); }
+.ico-wrap.r-artifact { border-color: #c4302a; color: var(--r-artifact); box-shadow: inset 0 0 14px rgba(255, 74, 61, .35), 0 0 10px rgba(255, 74, 61, .45); }
+.card.item.r-artifact { border-color: #d8382f; background: linear-gradient(160deg, #3d1512, var(--bg-3) 55%); animation: artglow 1.6s ease-in-out infinite alternate; }
+.slot.r-artifact { border-color: #d8382f; box-shadow: 0 0 10px rgba(255, 74, 61, .5); }
+.slot .fx-dot.artifact { background: var(--r-artifact); }
+.rarity-dots i.r-artifact { background: var(--r-artifact); }
+.affix-h.artifact-h { color: var(--r-artifact); }
+.effect.artifact { color: #ffb0a8; }
+.tt-title.r-artifact { text-shadow: 0 0 10px rgba(255, 74, 61, .6); }
+.r-legendary { color: var(--r-legend); }
+.ico-wrap.r-legendary { border-color: #b8971e; color: var(--r-legend); box-shadow: inset 0 0 12px rgba(255, 216, 74, .3); }
+.card.item.r-legendary { border-color: #c9a62a; background: linear-gradient(160deg, #353012, var(--bg-3) 55%); box-shadow: 0 0 0 1px rgba(255, 216, 74, .25), 0 0 14px rgba(255, 216, 74, .12); }
+.slot.r-legendary { border-color: #c9a62a; }
+.rarity-dots i.r-legendary { background: var(--r-legend); }
+.affix-h.legend-h { color: var(--r-legend); }
+.stat-list .affix.legend, .tt-stats .affix.legend { color: #ffe68a; }
+@media (prefers-reduced-motion: reduce) { .card.item.r-artifact { animation: none; box-shadow: 0 0 0 1px rgba(255, 74, 61, .6), 0 0 16px rgba(255, 74, 61, .35); } }
 .lg-plus { color: var(--r-gold); font: 600 11px var(--f-mono); margin-left: 3px; }
 .forge-opt { display: flex; flex-direction: column; gap: 6px; }
 .forge-preview { list-style: none; margin: 0; padding: 0; font: 13px/1.5 var(--f-mono); }

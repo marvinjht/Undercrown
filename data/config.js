@@ -2,7 +2,7 @@
 // All stats are flat whole numbers. Chance stats (Crit, Dodge, Stun) mean "out of 100".
 window.G = window.G || {};
 
-G.VERSION = '0.31';   // players in one room must all run the same version
+G.VERSION = '0.32';   // players in one room must all run the same version
 
 G.CONFIG = {
   // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
@@ -55,7 +55,7 @@ G.CONFIG = {
   duel: { winGold: 20 },
 
   // Selling from your bag: gear by rarity; potions and elixirs for half their price
-  sell: { grey: 4, green: 12, rare: 30, legendary: 60, consumablePct: 50 },
+  sell: { grey: 4, green: 12, rare: 30, legendary: 45, artifact: 60, consumablePct: 50 },
 
   shop: {
     reviewSeconds: 10,  // everyone looks over the table before picks start
@@ -81,14 +81,17 @@ G.CONFIG = {
 
   // Gear pacing: normal fights give gear 1 in 3 times (otherwise Spoils), elites and bosses always do
   gearChance: { fight: 33, lucky: 50 },
-  spoils: { gold: 24, statDmg: 2, statHp: 8, mix: { gear: 50, bag: 30, relic: 20 } },   // mix: what Spoils of war turns out to be (out of 100), when it isn't a legendary
+  spoils: { gold: 24, statDmg: 2, statHp: 8, mix: { gear: 50, bag: 30, relic: 20 } },   // mix: what Spoils of war turns out to be (out of 100), when it isn't an artifact
 
   // Out of 100, how often a relic joins the reward choices (Plunder always has one)
   relicChance: { fight: 8, elite: 35, boss: 100, vault: 100 },
-  // Legendaries: these bosses always offer one; elites past eliteFromRoom offer one this often (out of 100)
-  legendary: { bossRooms: [18, 28], eliteFromRoom: 15, eliteChance: 10, tier: 6,
-    spoilsEarly: 1, spoilsLateRoom: 20, spoilsLate: 5, spoilsLatePerRoom: 0.5,   // Spoils of war: 1% to be a legendary before room 20, then 5% + 0.5% per room past it
-    eventChance: { vault: 2, shrine: 1 } },   // vaults, venom caches and blood shrines: a very rare legendary (out of 100)   // tier: weapon damage matches a rare of this tier
+  // Artifacts: these bosses always offer one; elites past eliteFromRoom offer one this often (out of 100)
+  artifact: { bossRooms: [18, 28], eliteFromRoom: 15, eliteChance: 10, tier: 6,
+    spoilsEarly: 1, spoilsLateRoom: 20, spoilsLate: 5, spoilsLatePerRoom: 0.5,   // Spoils of war: 1% to be an artifact before room 20, then 5% + 0.5% per room past it
+    eventChance: { vault: 2, shrine: 1 } },   // vaults, venom caches and blood shrines: a very rare artifact (out of 100)   // tier: weapon damage matches a rare of this tier
+  // Legendary tier: a normal gear drop turns Legendary this often (out of 100). Never before fromRoom;
+  // early% from there, late% from lateRoom on; elites and bosses roll eliteMult times as often. Treasure Hunters count 6 rooms deeper.
+  legendary: { fromRoom: 12, early: 2, lateRoom: 20, late: 5, eliteMult: 2 },
   forge: { upgradeCost: 40, affixCost: 50 },
 
   // Out of 100 wins, how often a consumable joins the reward choices
@@ -104,7 +107,7 @@ G.CONFIG = {
     tierGrowth: 0.25,
     chanceTierGrowth: 0.10,
     treasureHunterRooms: 6,
-    tagChance: { green: 45, rare: 65 },
+    tagChance: { green: 45, rare: 65, legendary: 75 },
     treasureHunterTag: 20,                // Treasure Hunter: this much more often   // out of 100: how often an item carries a class tag
     tradeoffChance: 50,                   // out of 100: an uncommon item's bonus is a trade-off
     setMatchChance: 70,                   // out of 100: a tag leans toward a class you already wear

@@ -1,4 +1,4 @@
-// Class sets. Uncommon and legendary gear carries one class tag. Six slots count: 5 armor + weapon.
+// Class sets. Uncommon and artifact gear carries one class tag. Six slots count: 5 armor + weapon.
 // 2 of a class = "two" bonus (no look change).
 // 4 or 5 = "four" bonus (replaces "two"), and your color and look change.
 // 6 = "four" bonus + the "six" capstone, and the full class look.

@@ -1,10 +1,11 @@
-// Legendaries: one per armor slot and weapon type. Fixed stats (no tiers, no affixes, no Strengthen),
-// a class tag, and an effect that changes how you fight. You can wear only one, and each is unique per match.
+// Artifacts (red): one per armor slot and weapon type (two staffs). Fixed stats (one forge Strengthen allowed),
+// a class tag, the slot's legendary affix (data/armor.js G.LEGEND_AFFIXES), and an effect that changes how you fight.
+// You can wear only one, and each is unique per match.
 // stats = flat stats on the item. fx = effect keys read by stats.js and combat.js.
-// Weapons keep their weapon type's range, damage type and trait unless the legendary says otherwise.
+// Weapons keep their weapon type's range, damage type and trait unless the artifact says otherwise.
 window.G = window.G || {};
 
-G.LEGENDARIES = {
+G.ARTIFACTS = {
   // ---------- Armor ----------
   heartlight: { name: 'Heartlight', slot: 'chest', cls: 'mage',
     stats: { hp: 40, ward: 6 }, fx: { beam: { start: 2, step: 2, cap: 100, every: 0.5 } },
@@ -13,8 +14,8 @@ G.LEGENDARIES = {
     stats: { hp: 20, dmg: 10, crit: 8 }, fx: { trueStrike: 1 },
     desc: 'Your attacks can’t be dodged or parried, and they hit invisible enemies.' },
   quakestep: { name: 'Quakestep', slot: 'boots', cls: 'warrior', stubborn: true,
-    stats: { dodge: 8, spd: 2 }, fx: { stomp: { every: 5, dmg: 8, stun: 1 } },
-    desc: 'Every 5 seconds you stomp: 8 damage to every enemy and a 1-second stun.' },
+    stats: { hp: 25, armor: 5, dodge: 8, spd: 2 }, fx: { stomp: { every: 5, dmg: 30, stun: 1 } },
+    desc: 'Every 5 seconds you stomp: 30 damage to every enemy and a 1-second stun.' },
   ghoulgrip: { name: 'Ghoulgrip', slot: 'gloves', cls: 'rogue',
     stats: { dmg: 5, spd: 3 }, fx: { ghoul: { drain: 2, capPct: 0.3, healPct: 0.5 }, ghoulSummon: { count: 2, hpPct: 15, dmgPct: 30 } },
     desc: 'Each hit drains 2 max health from the target (up to 30% of its max) and heals you for half the damage dealt. In every fight (duels and the tournament too), 2 ghouls rise beside you (15% of your health, 30% of your damage) and their hits heal you too.' },
@@ -36,7 +37,7 @@ G.LEGENDARIES = {
     stats: { dmg: 16, spd: 8, manaGain: 25 }, fx: { splitDamage: 1, sunder: { dmg: 45, slow: 0.3, shred: 8, secs: 4 } },
     desc: 'Hits are half physical, half magic. Attacks add 25 mana; at full it casts Sunder: 45 magic damage, −30% Attack Speed and −8 Armor and Magic Resist for 4 seconds.' },
   guillotine: { name: 'Guillotine', slot: 'weapon', weaponType: 'greatAxe', cls: 'warrior',
-    stats: { dmg: 16, spd: 8, bleed: 4 }, fx: { pull: 1, execute: { pct: 0.15, bossDmg: 50 } },
+    stats: { dmg: 21, spd: 8, bleed: 5 }, fx: { pull: 1, execute: { pct: 0.15, bossDmg: 50 } },
     desc: 'At the start you pull your target into melee. Hits on an enemy below 15% health execute it. Bosses take 50 damage instead.' },
   monolith: { name: 'Monolith', slot: 'weapon', weaponType: 'greatHammer', cls: 'warrior',
     stats: { dmg: 20, spd: 6, hp: 100, stun: 30 }, fx: { hpDmg: { per: 30, dmg: 5 } },
@@ -56,8 +57,12 @@ G.LEGENDARIES = {
   hexglass: { name: 'Hexglass', slot: 'weapon', weaponType: 'wandFocus', cls: 'mage',
     stats: { dmg: 8, spd: 10, manaGain: 20, spellDmg: 35, startMana: 50, ward: 4 }, fx: { hex: { pct: 10, secs: 4, max: 3 } },
     desc: 'Each Firebolt curses the target: it takes 10% more damage from everything for 4 seconds, stacking 3 times.' },
+  exile: { name: 'Exile', slot: 'weapon', weaponType: 'staff', cls: 'mage',
+    stats: { dmg: 10, spd: 6, manaGain: 25, spellDmg: 40 }, fx: { banish: { push: 3, root: 1 } },
+    baseTrait: 'Far range. Point blank: attacks 25% slower with an enemy right next to you.',
+    desc: 'Full mana casts Banish instead of Meteor: it hits one enemy, knocks it back 3 steps and roots it for 1 second (it can’t move, but it can still attack if you’re in range).' },
   inferno: { name: 'Inferno', slot: 'weapon', weaponType: 'staff', cls: 'warrior',
     stats: { dmg: 15, spd: 10 }, fx: { meleeStaff: 1, noSpell: 1, physical: 1, burnHit: { dmg: 8, secs: 3 }, fireRing: { start: 1, closed: 3, dmg: 12 } },
     desc: 'A melee staff that deals physical damage. Hits burn for 8 a second over 3 seconds. From 1 second in, fire closes in from both walls (fully closed by 3 seconds); enemies in it burn 12 a second. You’re immune.' },
 };
-G.LEGENDARY_ORDER = Object.keys(G.LEGENDARIES);
+G.ARTIFACT_ORDER = Object.keys(G.ARTIFACTS);

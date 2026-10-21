@@ -41,12 +41,43 @@ G.TRADEOFFS = {
 // Build effects moved to relics (data/relics.js).
 
 
-// Common grey, Uncommon green, Rare blue (two affixes), Legendary gold (fixed stats, see data/legendaries.js).
+// Common grey, Uncommon green, Rare blue (two affixes), Legendary gold-yellow (two affixes + a legendary affix),
+// Artifact red (fixed stats, one of a kind, see data/artifacts.js). nameRank = which base name the item uses.
 G.RARITY = {
   grey:  { name: 'Common',   rank: 0, mult: 1.0, affixes: 0 },
   green: { name: 'Uncommon', rank: 1, mult: 1.3, affixes: 1 },
   rare:  { name: 'Rare',     rank: 2, mult: 1.6, affixes: 2 },
-  legendary: { name: 'Legendary', rank: 3, mult: 1.6, affixes: 0 },
+  legendary: { name: 'Legendary', rank: 3, nameRank: 2, mult: 1.9, affixes: 2 },
+  artifact: { name: 'Artifact', rank: 4, mult: 1.6, affixes: 0 },
+};
+
+// Legendary affixes: every Legendary and every Artifact carries the one for its slot (or weapon type).
+// name = the word in front of a Legendary's name. fx = effect keys read by stats.js and combat.js.
+G.LEGEND_AFFIXES = {
+  boots:  { name: 'Swift',      text: 'Walk 50% faster (+1 step a second)', fx: { moveBonus: 1 } },
+  legs:   { name: 'Steadfast',  text: 'Block one stun every 10 seconds', fx: { stunBlock: 10 } },
+  chest:  { name: 'Bulwark',    text: '+1 Armor for every 40 max Health', fx: { armorPerHp: 40 } },
+  gloves: { name: 'Relentless', text: 'Each hit gives +1 Attack Speed for the fight, up to +10 (ignores the Attack Speed cap)', fx: { hitSpd: { per: 1, max: 10 } } },
+  helmet: { name: 'Clear-eyed', text: 'Crits against you have a 30% chance to land as normal hits', fx: { critGuard: 30 } },
+  weapon: {
+    daggers:     { name: 'Twinned',    text: 'Every 4th attack strikes twice', fx: { twinStrike: 4 } },
+    saber:       { name: 'Parrying',   text: 'When you dodge, you parry instead: strike back, stun the attacker for 2 seconds and heal 15', fx: { dodgeParry: { stun: 2, heal: 15 } } },
+    swordShield: { name: 'Bastion',    text: 'Each Shield Bash restores 15 Shield', fx: { bashShield: 15 } },
+    longsword:   { name: 'Rending',    text: 'Your crits cause Bleed 4', fx: { critBleed: 4 } },
+    greatAxe:    { name: 'Sundering',  text: 'Cleave hits for full damage instead of half', fx: { cleaveFull: 1 } },
+    greatHammer: { name: 'Crushing',   text: 'Stunned enemies take 25% more damage from you', fx: { stunnedDmg: 25 } },
+    mace:        { name: 'Purifying',  text: 'You are immune to poison', fx: { poisonImmune: 1 } },
+    maceShield:  { name: 'Radiant',    text: 'Your holy damage is doubled against Shields', fx: { holyShield: 2 } },
+    shortbow:    { name: 'Volley',     text: 'Every 3rd shot fires a second arrow for half damage', fx: { volley: 3 } },
+    longbow:     { name: 'Deadeye',    text: 'Your first shot each fight crits', fx: { firstCrits: 1 } },
+    wandFocus:   { name: 'Searing',    text: 'Firebolt burns the target for 5% of its max Health a second for 3 seconds', fx: { boltBurn: { pct: 5, secs: 3 } } },
+    staff:       { name: 'Twincast',   text: 'Your spells cast twice', fx: { doubleCast: 1 } },
+  },
+};
+// The legendary affix an item carries (Legendary and Artifact items only)
+G.legendAffix = item => {
+  if (!item || (item.rarity !== 'legendary' && item.rarity !== 'artifact')) return null;
+  return item.slot === 'weapon' ? G.LEGEND_AFFIXES.weapon[item.weaponType] || null : G.LEGEND_AFFIXES[item.slot] || null;
 };
 G.RARITY_ORDER = ['grey', 'green', 'rare'];
 

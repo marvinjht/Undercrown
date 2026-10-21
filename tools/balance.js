@@ -5,7 +5,7 @@ const root = path.join(__dirname, '..');
 const ctx = { console, Math };
 ctx.window = ctx;
 vm.createContext(ctx);
-for (const f of ['data/config.js', 'data/weapons.js', 'data/armor.js', 'data/relics.js', 'data/legendaries.js', 'data/sets.js', 'data/gems.js', 'data/consumables.js', 'data/specs.js', 'data/monsters.js',
+for (const f of ['data/config.js', 'data/weapons.js', 'data/armor.js', 'data/relics.js', 'data/artifacts.js', 'data/sets.js', 'data/gems.js', 'data/consumables.js', 'data/specs.js', 'data/monsters.js',
   'src/rng.js', 'src/stats.js', 'src/items.js', 'src/combat.js', 'src/dungeon.js', 'src/tournament.js']) {
   vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 }
@@ -15,8 +15,8 @@ const rng = new G.RNG(12345);
 const C = G.CONFIG;
 const stats = { heroes: 0, noHeartLost: 0, reachedEnd: 0, heartsAtEnd: {}, levelAt: { 10: [], 20: [], 30: [] }, outBy: {},
   heartLossRoom: {}, duelLen: [], tourLen: [], tourRounds: [], specWins: {}, gemWins: {}, buildWins: {}, sets: {}, hybrids: {}, full: {},
-  supplyLow: 0, fightLen: [], gear: [], rarity: { grey: 0, green: 0, rare: 0, legendary: 0 }, tagged: 0, effects: 0, tradeoffs: 0,
-  legendHeld: {}, legendWins: {}, relicsAtEnd: [], hybridWins: {}, lostTo: {} };
+  supplyLow: 0, fightLen: [], gear: [], rarity: { grey: 0, green: 0, rare: 0, legendary: 0, artifact: 0 }, tagged: 0, effects: 0, tradeoffs: 0,
+  artifactHeld: {}, artifactWins: {}, relicsAtEnd: [], hybridWins: {}, lostTo: {} };
 G._fightLog = stats.fightLen;
 
 for (let mi = 0; mi < MATCHES; mi++) {
@@ -51,7 +51,7 @@ for (let mi = 0; mi < MATCHES; mi++) {
       for (const a of st.active) stats.sets[a.cls + a.tier] = (stats.sets[a.cls + a.tier] || 0) + 1;
       if (st.hybrid) stats.hybrids[st.hybrid] = (stats.hybrids[st.hybrid] || 0) + 1;
       if (st.full) stats.full[st.look] = (stats.full[st.look] || 0) + 1;
-      for (const s of G.SLOTS) { const it = h.gear[s]; if (!it) continue; stats.rarity[it.rarity]++; if (it.set) stats.tagged++; if (it.legendary) stats.legendHeld[it.legendary] = (stats.legendHeld[it.legendary] || 0) + 1; if (it.tradeoff) stats.tradeoffs++; }
+      for (const s of G.SLOTS) { const it = h.gear[s]; if (!it) continue; stats.rarity[it.rarity]++; if (it.set) stats.tagged++; if (it.artifact) stats.artifactHeld[it.artifact] = (stats.artifactHeld[it.artifact] || 0) + 1; if (it.tradeoff) stats.tradeoffs++; }
       stats.relicsAtEnd.push(Object.values(h.relics || {}).reduce((a, b) => a + b, 0));
     } else stats.outBy[h.outIn || 'dungeon'] = (stats.outBy[h.outIn || 'dungeon'] || 0) + 1;
   }
@@ -68,7 +68,7 @@ for (let mi = 0; mi < MATCHES; mi++) {
       const st = G.Stats.sets(h);
       const b = st.full ? st.look + ' 6' : st.hybrid ? G.HYBRIDS[st.hybrid].name : st.active.map(a => a.cls + ' ' + st.counts[a.cls]).join('+') || 'no set';
       stats.buildWins[b] = (stats.buildWins[b] || 0) + 1;
-      const lg = G.SLOTS.map(sl => h.gear[sl]).find(it => it && it.legendary); const lk = lg ? lg.legendary : 'none'; stats.legendWins[lk] = (stats.legendWins[lk] || 0) + 1;
+      const lg = G.SLOTS.map(sl => h.gear[sl]).find(it => it && it.artifact); const lk = lg ? lg.artifact : 'none'; stats.artifactWins[lk] = (stats.artifactWins[lk] || 0) + 1;
       if (st.hybrid) stats.hybridWins[G.HYBRIDS[st.hybrid].name] = (stats.hybridWins[G.HYBRIDS[st.hybrid].name] || 0) + 1;
     }
   }
@@ -91,6 +91,6 @@ console.log('Hybrids:', stats.hybrids, 'Full sets:', stats.full);
 console.log('Tournament wins by spec:', stats.specWins);
 console.log('Tournament wins by gem:', stats.gemWins);
 console.log('Tournament wins by build:', stats.buildWins);
-console.log('Legendaries worn at the end:', stats.legendHeld);
-console.log('Tournament wins by legendary:', stats.legendWins, 'by hybrid:', stats.hybridWins);
+console.log('Artifacts worn at the end:', stats.artifactHeld);
+console.log('Tournament wins by artifact:', stats.artifactWins, 'by hybrid:', stats.hybridWins);
 console.log('Relic copies per hero at the end, average:', avg(stats.relicsAtEnd));

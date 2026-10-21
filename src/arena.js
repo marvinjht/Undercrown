@@ -7,7 +7,7 @@ window.G = window.G || {};
   const FONT = '"Spline Sans Mono", ui-monospace, monospace';
   const X0 = 150, STEP = 60;                      // pixels: position 0 and 1 step (Kiting can step back past 0)
   const LANES = [200, 132, 268, 166, 234, 110, 290];
-  const FX_COLORS = { 'Holy Burst': '#f0d27a', Heartlight: '#c9b8ff', Quakestep: '#e7c38a', Aegis: '#9fc4ff', Inferno: '#ff9a3c', Butcher: '#ff4a3a', Dawnwall: '#f0d27a', Sentinel: '#9fc4ff', Guillotine: '#ff3b2f' };
+  const FX_COLORS = { 'Holy Burst': '#f0d27a', Heartlight: '#c9b8ff', Quakestep: '#e7c38a', Aegis: '#9fc4ff', Inferno: '#ff9a3c', Butcher: '#ff4a3a', Dawnwall: '#f0d27a', Sentinel: '#9fc4ff', Guillotine: '#ff3b2f', Volley: '#8fcf78' };
 
   function posAt(track, t) {
     if (!track || !track.length) return 0;
@@ -230,7 +230,26 @@ window.G = window.G || {};
         case 'bleed': if (def) this.float(def, String(e.amount), '#d0473a', 12, 18); break;
         case 'stun': if (def) this.float(def, e.secs > 1 ? 'STUNNED ' + e.secs + 's' : 'STUNNED', '#ffd34d', e.secs > 1 ? 15 : 13); break;
         case 'smoke': if (att) this.smoke(att, e.dur || 2); break;
-        case 'double': if (att) this.float(att, 'DOUBLE SHOT', '#8fcf78', 12); break;
+        case 'double': if (att) this.float(att, e.twin ? 'TWIN STRIKE' : 'DOUBLE SHOT', '#8fcf78', 12); break;
+        case 'stunblock': if (att) this.float(att, 'STEADFAST', '#ffd84a', 13); break;
+        case 'critguard': if (att) this.float(att, 'GUARDED', '#ffd84a', 12); break;
+        case 'sear': if (def) this.float(def, 'SEARED', '#ff9a3c', 12); break;
+        case 'root': if (def) {
+          // Exile's Banish: a violet hex circle under the target while it's rooted
+          this.float(def, e.slam ? 'BANISHED' : 'ROOTED', '#c08cff', 15);
+          const delay = (e.delay || 0) * 1000 / this.speed, life = (e.secs || 1) * 1000 / this.speed;
+          const hex = this.add.graphics();
+          hex.lineStyle(3, 0xb07cff, 0.95);
+          const pts = []; for (let k = 0; k < 6; k++) { const a = Math.PI / 6 + k * Math.PI / 3; pts.push({ x: Math.cos(a) * 30, y: Math.sin(a) * 12 + 22 }); }
+          hex.strokePoints(pts, true);
+          hex.lineStyle(1.5, 0xe2ccff, 0.8).strokeEllipse(0, 22, 44, 16);
+          hex.fillStyle(0x8a5cff, 0.25).fillPoints(pts, true);
+          hex.setAlpha(0);
+          def.cont.addAt(hex, 0);
+          this.tweens.add({ targets: hex, alpha: 1, delay, duration: 120 / this.speed });
+          this.tweens.add({ targets: hex, alpha: 0.45, yoyo: true, repeat: -1, delay: delay + 120 / this.speed, duration: 220 / this.speed });
+          this.time.delayedCall(delay + life, () => { if (hex.scene) hex.destroy(); });
+        } break;
         case 'steal': if (att) this.float(att, `-${e.amount}g`, '#f2c14a', 13); break;
         case 'cheap_ready': break;
         case 'escape':
@@ -272,7 +291,7 @@ window.G = window.G || {};
           if (def) { def.dead = true; def.body.setTint(0x555555); this.tweens.add({ targets: def.cont, alpha: 0.35, angle: def.dir * 80, duration: 450 / this.speed }); }
           break;
         case 'timeout': { const a = F.a; if (a) this.float(a, 'TIME', '#ece3d6', 16); break; }
-        // ---------- v0.1: hybrids and legendaries ----------
+        // ---------- v0.1: hybrids and artifacts ----------
         case 'fxhit': if (def) { this.flash(def); this.float(def, String(e.amount), FX_COLORS[e.name] || '#ffb36b', 15, 14); } break;
         case 'beam': if (att && def) { att.beamTo = def; att.beamPower = e.power; } break;
         case 'stomp': if (att) {

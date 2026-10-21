@@ -52,7 +52,7 @@ window.G = window.G || {};
   function weaponSpd(hero, W) {
     const w = hero.gear.weapon;
     if (!w) return 10;
-    if (w.legendary && G.LEGENDARIES[w.legendary].stats.spd) return G.LEGENDARIES[w.legendary].stats.spd;
+    if (w.artifact && G.ARTIFACTS[w.artifact].stats.spd) return G.ARTIFACTS[w.artifact].stats.spd;
     return W ? W.spd : 10;
   }
 
@@ -86,9 +86,11 @@ window.G = window.G || {};
     if (W && W.fx) merge(W.fx);
     // Relics: each copy strengthens the effect
     for (const rid in hero.relics || {}) { const n = hero.relics[rid]; if (n > 0 && G.RELICS[rid]) merge(G.RELICS[rid].fx(n)); }
-    // The legendary you wear
-    const leg = G.SLOTS.map(sl => hero.gear[sl]).find(it => it && it.legendary);
-    if (leg) merge(G.LEGENDARIES[leg.legendary].fx);
+    // The artifact you wear
+    const leg = G.SLOTS.map(sl => hero.gear[sl]).find(it => it && it.artifact);
+    if (leg) merge(G.ARTIFACTS[leg.artifact].fx);
+    // Legendary affixes: every Legendary or Artifact piece adds its slot's (or weapon type's) affix
+    for (const sl of G.SLOTS) { const LA = G.legendAffix(hero.gear[sl]); if (LA) merge(LA.fx); }
     if (fx.relicSpd) t.spd += fx.relicSpd;   // Twitching Rat Paw
     // Skill tree picks
     const tree = treeFx(hero);
@@ -115,7 +117,7 @@ window.G = window.G || {};
       manaGain: t.manaGain, startMana: t.startMana,
       spec: hero.spec || null, gem: hero.gem || null, weaponType: wt,
       type: W && !fx.physical ? W.type : 'phys', range: W ? (fx.meleeStaff ? 'melee' : W.range) : 'melee',
-      legendary: leg ? leg.legendary : null,
+      artifact: leg ? leg.artifact : null, legendCount: G.SLOTS.filter(sl => hero.gear[sl] && hero.gear[sl].rarity === 'legendary').length,
       cleave: !!(W && W.cleave), healEvery: W && W.healEvery ? W.healEvery : null,
       spell: null, fx, sets: st,
     };
@@ -124,7 +126,7 @@ window.G = window.G || {};
 
     // Spell: the stronger of the weapon's spell and Arcane Blast
     const cands = [];
-    if (W && W.spell && !fx.noSpell) cands.push({ name: W.spell.name, aoe: W.spell.aoe, dmg: t.spellDmg });
+    if (W && W.spell && !fx.noSpell) cands.push(fx.banish ? { name: 'Banish', aoe: false, dmg: t.spellDmg, banish: fx.banish } : { name: W.spell.name, aoe: W.spell.aoe, dmg: t.spellDmg });
     if (fx.sunder) cands.push({ name: 'Sunder', aoe: false, dmg: fx.sunder.dmg, sunder: true });
     if (fx.arcane) cands.push({ name: 'Arcane Blast', aoe: true, dmg: fx.arcane });
     if (cands.length) {
@@ -158,6 +160,7 @@ window.G = window.G || {};
     if (SC && s.spd - baseSpd > SC) s.spd = baseSpd + SC + Math.floor((s.spd - baseSpd - SC) / 2);
     s.spd = Math.max(CB.minSpd, s.spd);
     if (fx.hpShieldPct) s.shield += even(s.maxHp * fx.hpShieldPct / 100);   // Tortoise Shell
+    if (fx.armorPerHp) s.armor += Math.floor(s.maxHp / fx.armorPerHp);   // Bulwark (legendary chest)
     if (fx.armorShield) s.shield += fx.armorShield * s.armor;
     // Monolith: damage from max health
     if (fx.hpDmg) s.dmg += fx.hpDmg.dmg * Math.floor(s.maxHp / fx.hpDmg.per);
@@ -223,7 +226,8 @@ window.G = window.G || {};
     if (s.fx.critHeal) def *= 1 + s.crit / 400;
     if (s.fx.fourthStun) off *= 1.06;
     if (s.fx.bleedShred && s.bleed) off *= 1.08;
-    if (s.legendary) { off *= 1.2; def *= 1.1; }
+    if (s.artifact) { off *= 1.2; def *= 1.1; }
+    if (s.legendCount) { off *= 1 + 0.04 * s.legendCount; def *= 1 + 0.03 * s.legendCount; }
     if (s.fx.empower || s.fx.spellShield || s.fx.dodgeHaste || s.fx.shove || s.fx.sentinelBurst || s.fx.healCut || s.fx.sureHits || s.fx.capHeal || s.fx.spellCrit || s.fx.manaOnFourth) off *= 1.12;
     return Math.sqrt(off * def);
   }
@@ -247,13 +251,16 @@ window.G = window.G || {};
         hearts: C().hearts, level: 1, xp: 0, treePicks: {}, opponents: [], relics: {},
       };
     },
-    // You can wear only one legendary: a second one only goes on in place of the first
-    wornLegendary(hero) { return G.SLOTS.map(sl => hero.gear[sl]).find(it => it && it.rarity === 'legendary') || null; },
+    // You can wear only one artifact: a second one only goes on in place of the first
+    wornArtifact(hero) { return G.SLOTS.map(sl => hero.gear[sl]).find(it => it && it.rarity === 'artifact') || null; },
     canEquip(hero, item) {
-      if (item.kind !== 'gear' || item.rarity !== 'legendary') return true;
-      const worn = this.wornLegendary(hero);
+      if (item.kind !== 'gear' || item.rarity !== 'artifact') return true;
+      const worn = this.wornArtifact(hero);
       return !worn || worn.slot === item.slot;
     },
+    // Purifying (legendary mace): poison never sticks
+    poisonImmune(hero) { return !!compute(hero).fx.poisonImmune; },
+    addPoison(hero, n) { if (n > 0 && !this.poisonImmune(hero)) hero.poison = (hero.poison || 0) + n; return hero.poison; },
     // Relics stack up to the max; a maxed relic can't be taken again
     relicCount(hero, rid) { return (hero.relics || {})[rid] || 0; },
     addRelic(hero, item) {
