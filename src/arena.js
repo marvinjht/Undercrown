@@ -7,7 +7,7 @@ window.G = window.G || {};
   const FONT = '"Spline Sans Mono", ui-monospace, monospace';
   const X0 = 150, STEP = 60;                      // pixels: position 0 and 1 step (Kiting can step back past 0)
   const LANES = [200, 132, 268, 166, 234, 110, 290];
-  const FX_COLORS = { Heartlight: '#c9b8ff', Quakestep: '#e7c38a', Aegis: '#9fc4ff', Inferno: '#ff9a3c', Butcher: '#ff4a3a', Dawnwall: '#f0d27a', Sentinel: '#9fc4ff', Guillotine: '#ff3b2f' };
+  const FX_COLORS = { 'Holy Burst': '#f0d27a', Heartlight: '#c9b8ff', Quakestep: '#e7c38a', Aegis: '#9fc4ff', Inferno: '#ff9a3c', Butcher: '#ff4a3a', Dawnwall: '#f0d27a', Sentinel: '#9fc4ff', Guillotine: '#ff3b2f' };
 
   function posAt(track, t) {
     if (!track || !track.length) return 0;
@@ -43,9 +43,13 @@ window.G = window.G || {};
         this.tweens.add({ targets: glow, alpha: 0.05, scale: 1.25, duration: 600 + Math.random() * 400, yoyo: true, repeat: -1 });
       });
       this.objs = [];
+      // Each game carries its own fight: a game that was replaced before it finished booting can't
+      // take the newer game's fight (that left an empty arena when the screen redrew twice quickly)
       const owner = this.arenaOwner = this.game.__owner || G.Arena;
-      owner._scene = this;
-      if (owner._pending) { const p = owner._pending; owner._pending = null; this.begin(p); }
+      if (owner.game === this.game) owner._scene = this;
+      const cfg = this.game.__cfg;
+      this.game.__cfg = null;
+      if (cfg && owner.game === this.game) this.begin(cfg);
     }
 
     track(o) { this.objs.push(o); return o; }
@@ -100,6 +104,15 @@ window.G = window.G || {};
       if (this.cfg.mirror) p = G.CONFIG.combat.startGap - p;   // you're side b: play it back from your side
       if (!f.gone) f.cont.x = X0 + p * STEP + f.lunge * f.dir;
       f.cont.y = f.y + f.dy;
+      // Face the nearest enemy (a kiting archer that rolls past turns around)
+      if (!f.dead && !f.gone) {
+        let best = null, bd = Infinity;
+        for (const id in this.F) { const o = this.F[id]; if (o.side === f.side || o.dead || o.gone) continue; const d = Math.abs(o.cont.x - f.cont.x); if (d < bd) { bd = d; best = o; } }
+        if (best && Math.abs(best.cont.x - f.cont.x) > 4) {
+          const dir = best.cont.x > f.cont.x ? 1 : -1;
+          if (dir !== f.dir) { f.dir = dir; f.cont.scaleX = dir * Math.abs(f.cont.scaleY || f.sc); }
+        }
+      }
     }
 
     float(f, str, color, size = 18, dx = 0) {
@@ -203,13 +216,14 @@ window.G = window.G || {};
         }
         case 'spellhit': {
           if (!def) break;
+          if (e.name === 'Night Lord') { this.blood(def, true); this.float(def, 'BLOOD BURST', '#ff4a3a', 15, 22); }
           const ring = this.track(this.add.image(def.cont.x, def.cont.y, 'fx_ring').setTint(0xff8a4c).setScale(0.2));
           this.tweens.add({ targets: ring, scale: 0.8, alpha: 0, duration: 380 / this.speed, onComplete: () => ring.destroy() });
           this.flash(def);
           this.float(def, String(e.amount), '#c9b8ff', 20);
           break;
         }
-        case 'dodge': if (att && def) { if (att.m.range === 'melee') this.swing(att); this.float(def, 'DODGE', '#cfe8ff', 14); this.tweens.add({ targets: def, dy: -16, duration: 110 / this.speed, yoyo: true }); } break;
+        case 'dodge': if (att && def) { if (att.m.range === 'melee' || att.m.range === 'reach') this.swing(att); this.float(def, 'DODGE', '#cfe8ff', 14); this.tweens.add({ targets: def, dy: -16, duration: 110 / this.speed, yoyo: true }); } break;
         case 'hidden': if (att && def) { this.swing(att); this.float(def, 'MISS', '#b9a7d9', 13); } break;
         case 'parry': if (def) this.float(def, 'PARRY', '#9fe3ff', 15); break;
         case 'heal': if (att) this.float(att, '+' + e.amount, '#7be07b', 14, -20 * att.dir); break;
@@ -245,7 +259,10 @@ window.G = window.G || {};
           this.tweens.add({ targets: ring, scale: 3.2, alpha: 0, duration: 650 / this.speed, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
           this.cameras.main.shake(220 / this.speed, 0.008);
         } break;
-        case 'burn': if (def) this.float(def, String(e.amount), '#ff9a3c', 13, -18); break;
+        case 'burn': if (def) this.float(def, String(e.amount), e.poison ? '#8fdc5a' : '#ff9a3c', 13, -18); break;
+        case 'mark': if (def) { this.float(def, 'MARKED', '#c06cff', 15); def.body.setTint(0xc8a0ff); this.time.delayedCall(3000 / this.speed, () => { if (def.body.active && !def.dead) { if (def.tint) def.body.setTint(def.tint); else def.body.clearTint(); } }); } break;
+        case 'bash': if (def) { this.float(def, 'SHIELD BASH', '#f0d27a', 14); this.cameras.main.shake(80 / this.speed, 0.003); } break;
+        case 'palburst': if (att) { this.float(att, 'HOLY BURST', '#f0d27a', 16); const r = this.track(this.add.image(att.cont.x, att.cont.y, 'fx_ring').setTint(0xf0d27a).setScale(0.3)); this.tweens.add({ targets: r, scale: 2.4, alpha: 0, duration: 520 / this.speed, onComplete: () => r.destroy() }); } break;
         case 'kite': if (att) this.float(att, 'KITE', '#8fcf78', 12); break;
         case 'thorns': if (def) this.float(def, String(e.amount), '#c9a26b', 12, 14); break;
         case 'undying': if (att) this.float(att, 'UNDYING', '#ff5b4a', 16); break;
@@ -510,6 +527,7 @@ window.G = window.G || {};
           scene: [ArenaScene], banner: false, audio: { noAudio: true },
         });
         this.game.__owner = this;
+        this.game.__cfg = cfg;
       },
       stop() {
         const g = this.game;

@@ -28,8 +28,8 @@ G.CLASSES = {
   },
   paladin: {
     name: 'Paladin', tint: 0xf0c84a, color: '#f0d27a',
-    two:  { stats: { ward: 2, holy: 2 }, desc: '+2 Magic Resist, hits add 2 holy damage' },
-    four: { stats: { shield: 30, holy: 4 }, desc: 'Start fights with Shield 30, hits add 4 holy damage' },
+    two:  { stats: { ward: 4, holy: 4 }, desc: '+4 Magic Resist, hits add 4 holy damage' },
+    four: { stats: { ward: 4, holy: 4, shield: 30 }, shieldBurst: 1, desc: '+4 Magic Resist, hits add 4 holy damage, start fights with Shield 30. When your Shield breaks, it explodes for its starting size as holy damage to every enemy' },
     six:  { name: 'Consecration', consecrate: 1, desc: 'Holy damage you deal also heals you for the same amount' },
   },
   rogue: {

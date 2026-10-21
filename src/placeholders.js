@@ -165,6 +165,7 @@ window.G = window.G || {};
     troll: g => { blob(g, 32, 32, 52, 58, 0x6f7f72, 0xffe066); g.fillStyle(0x56645a).fillCircle(22, 14, 6).fillCircle(22, 50, 6); },
     ogre: g => { blob(g, 32, 32, 54, 58, 0x9a7a5a, 0xff7a3b); g.fillStyle(0x5b4636).fillRect(46, 20, 14, 24); },
     cultist: g => { g.fillStyle(0x5a1820).fillTriangle(10, 32, 46, 8, 46, 56); blob(g, 36, 32, 26, 30, 0x8c2a34, 0xff3040); },
+    skeletonArcher: g => { g.lineStyle(3, 0x8a6a48).beginPath().arc(40, 32, 18, -1.2, 1.2).strokePath(); g.lineStyle(1, 0xe8e8e8).lineBetween(46, 15, 46, 49); blob(g, 28, 32, 30, 40, 0xe4dccb, 0x1b1410); g.lineStyle(2, 0x9c917f).lineBetween(22, 18, 22, 46); },
     snake: g => { g.lineStyle(7, 0x4f7a3a).beginPath().moveTo(4, 40).lineTo(14, 28).lineTo(24, 40).lineTo(34, 30).strokePath(); blob(g, 42, 30, 20, 16, 0x5f9444, 0xffe066); g.lineStyle(2, 0xd04040).lineBetween(52, 30, 58, 30); },
     hydra: g => {
       g.lineStyle(6, 0x2f6a5a).lineBetween(14, 32, 40, 12).lineBetween(14, 32, 44, 32).lineBetween(14, 32, 40, 52);

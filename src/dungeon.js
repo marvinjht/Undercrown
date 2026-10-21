@@ -7,8 +7,15 @@ window.G = window.G || {};
   const even = x => Math.max(2, 2 * Math.round(x / 2));
 
   // Which bosses this match meets: drawn once from the match seed, so everyone in a room gets the same three
-  let bossPlan = null;
+  let bossPlan = null, matchSeed = 1;
+  // A random stream shared by everyone in the match for one room: the same doors, monsters and events for all
+  function sharedRng(room, tag) {
+    let h = (matchSeed ^ Math.imul(room + 1, 0x9e3779b1)) >>> 0;
+    for (const c of String(tag || '')) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
+    return new G.RNG(h);
+  }
   function planBosses(seed) {
+    matchSeed = seed >>> 0;
     const r = new G.RNG((seed ^ 0x2f6b1d35) >>> 0), pool = G.BOSS_ORDER.slice();
     bossPlan = {};
     for (const room of Object.keys(CFG().bossRooms).map(Number).sort((a, b) => a - b)) bossPlan[room] = pool.splice(r.int(0, pool.length - 1), 1)[0];
@@ -32,7 +39,7 @@ window.G = window.G || {};
       ward: def.ward ? even(def.ward * (1 + (room - 1) / 20)) : 0,
       dodge: def.dodge || 0, crit: def.crit || 0, critDmg: 0, stun: def.stun || 0, leech: def.leech || 0,
       bleed: def.bleed || 0, shield: 0, holy: 0, pierce: 0, manaGain: 0, startMana: 0, poison: def.poison || 0,
-      spec: null, gem: null, spell: null, fx: { ...(def.fx || {}) }, type: 'phys', range: 'melee',
+      spec: null, gem: null, spell: null, fx: { ...(def.fx || {}) }, type: 'phys', range: def.range || 'melee',
     };
   }
   // Trait stats grow with depth: about a third early, full strength by the last rooms
@@ -160,13 +167,15 @@ window.G = window.G || {};
     return 'doors';
   }
 
-  function makeDoors(hero, room, rng) {
+  // Doors (and their monsters and traits) are the same for every player in the match; rewards stay personal
+  function makeDoors(hero, room) {
+    const rng = sharedRng(room, 'doors');
     if (room === 1) return [{ type: 'armory' }];
     const kind = roomKind(room);
     if (kind === 'shop') return [{ type: 'shop' }];
     if (kind === 'merchant') return [{ type: 'merchant' }];
     if (kind === 'boss') return [{ type: 'boss', monster: monsterFor(room, 'boss', rng) }];
-    const w = t => (t === 'purify' && hero.poison > 0 ? CFG().purifyWeightPoisoned : CFG().doorWeights[t]);
+    const w = t => CFG().doorWeights[t];
     const types = Object.keys(CFG().doorWeights).filter(t => room >= CFG().doorMinRoom[t]);
     const first = rng.weighted(types.map(t => [t, w(t)]));
     const rest = types.filter(t => t !== first);
@@ -253,10 +262,11 @@ window.G = window.G || {};
     return G.simulateFight(G.Stats.compute(hero, { buffs: true }), doorFoes(door, room), fightOpts(hero, rng.int(0, 1e9)));
   }
   // Applies the result. Returns 'won' | 'timeout' | 'heart' (lost a heart, back at full) | 'dead' (out of hearts)
-  function applyFight(hero, res, room) {
+  // by = what you fought (kept in your heart log for the match database)
+  function applyFight(hero, res, room, by) {
     hero.buffs = {};
     if (res.goldStolen) hero.gold = Math.max(0, hero.gold - res.goldStolen);
-    if (res.winner === 'b') return G.Hero.loseHeart(hero, room) ? 'heart' : 'dead';
+    if (res.winner === 'b') { logHeart(hero, room, by || 'a fight'); return G.Hero.loseHeart(hero, room) ? 'heart' : 'dead'; }
     hero.hp = Math.max(1, res.aHp);
     if (res.poison) hero.poison += res.poison;   // snake bites stay with you
     return res.timeout ? 'timeout' : 'won';
@@ -279,9 +289,18 @@ window.G = window.G || {};
       { id: 'cons', title: 'Supplies', text: 'A random bag item', item: G.Items.rollConsumable(room, rng) },
       { id: 'dmg', title: 'Whetstone', text: `+${S.statDmg} Damage, permanently`, stat: { dmg: S.statDmg } },
       { id: 'hp', title: 'Hearty meal', text: `+${S.statHp} max Health, permanently`, stat: { hp: S.statHp } },
+      { id: 'gear', title: 'Spoils of war', text: 'A random gear piece for this depth. Usually ordinary, sometimes great, very rarely legendary', item: spoilsGear(hero, room, rng), hidden: true },
     ];
     const n = G.Stats.treeFx(hero).fx.spoils4 ? 4 : 3;
     return pickN(all, n, rng);
+  }
+  // Victory screen: a random piece of gear for this depth, with a small (growing) chance of a legendary
+  function spoilsGear(hero, room, rng) {
+    const L = CFG().legendary;
+    if (rng.float() * 100 < L.spoilsBase + room * L.spoilsPerRoom) { const lg = G.Items.rollLegendary(rng); if (lg) return lg; }
+    const rarity = G.Loot.rollRarity(hero, room, rng.int(1, 100) <= 15 ? 1 : 0, rng);
+    const slot = rng.pick(G.SLOTS);
+    return G.Items.generate(rng, { slot, rarity, room, hero, weaponType: slot === 'weapon' ? rng.pick(G.WEAPON_ORDER) : null });
   }
   function takeSpoils(hero, opt) {
     if (opt.gold) { hero.gold += opt.gold; return `took ${opt.gold} gold`; }
@@ -299,11 +318,12 @@ window.G = window.G || {};
   }
 
   // Poison ticks at the start of every room. Dying to it costs a heart.
+  function logHeart(hero, room, by) { (hero.heartLog = hero.heartLog || []).push({ room, by }); }
   function tickPoison(hero, room) {
     if (!hero.alive || hero.poison <= 0) return 0;
     const dmg = hero.poison;
     hero.hp -= dmg;
-    if (hero.hp <= 0) { hero.hp = 0; G.Hero.loseHeart(hero, room); }
+    if (hero.hp <= 0) { hero.hp = 0; logHeart(hero, room, 'poison'); G.Hero.loseHeart(hero, room); }
     return dmg;
   }
 
@@ -369,7 +389,7 @@ window.G = window.G || {};
   }
 
   G.Dungeon = {
-    monsterFor, planBosses, bossDesc, buildEnemies, monsterName, makeDoors, doorInfo, danger, goldFor, itemPrice, sellPrice, doorFoes,
+    monsterFor, planBosses, sharedRng, logHeart, bossDesc, buildEnemies, monsterName, makeDoors, doorInfo, danger, goldFor, itemPrice, sellPrice, doorFoes,
     specOptions, gemOptions, rollMystery, fight, applyFight, tickPoison, useItem, fightOpts, roomKind, merchantStock, merchantPrice,
     gearDrops, spoilsOptions, takeSpoils, forgeStrengthen, forgeAffix, strengthenGains,
   };
@@ -496,8 +516,8 @@ window.G = window.G || {};
     const doFight = (door, kind) => {
       const bet = kind === 'wager' ? wagerBet(hero) : 0;
       const res = fight(hero, door, room, rng);
-      const out = applyFight(hero, res, room);
       const nm = monsterName(door.monster, kind === 'wager' ? 'fight' : kind, door.trait);
+      const out = applyFight(hero, res, room, nm);
       if (out === 'dead') { hero.gold = Math.max(0, hero.gold - bet); return `fell to ${nm} and is out`; }
       if (out === 'heart') { hero.gold = Math.max(0, hero.gold - bet); return `lost a heart to ${nm}`; }
       if (out === 'timeout') {
@@ -536,7 +556,7 @@ window.G = window.G || {};
       case 'shop': return soloShop(hero, room, rng);
       case 'merchant': return 'visited a merchant, ' + aiMerchant(hero, room, rng);
       case 'mystery': {
-        const ev = rollMystery(rng);
+        const ev = rollMystery(sharedRng(room, 'mystery'));
         if (ev.id === 'spring') return `drank from a spring (+${G.Hero.heal(hero, CFG().springHeal)})`;
         if (ev.id === 'cache') { const g = 2 * rng.int(10, 16); hero.gold += g; return `found ${g} gold`; }
         if (ev.id === 'shrine') {
@@ -548,7 +568,7 @@ window.G = window.G || {};
           }
           return 'walked past a shrine';
         }
-        return 'was ambushed: ' + doFight({ type: 'fight', monster: monsterFor(room, 'fight', rng) }, 'fight');
+        return 'was ambushed: ' + doFight({ type: 'fight', monster: monsterFor(room, 'fight', sharedRng(room, 'ambush')) }, 'fight');
       }
     }
     return '';

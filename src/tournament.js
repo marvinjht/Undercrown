@@ -90,10 +90,16 @@ window.G = window.G || {};
         if (!pair.ghost) h.opponents.push(sides[1 - i].hero.id);
         G.Hero.gainXp(h, won ? X.duelWin : X.duelLoss);
         if (won && !pair.ghost) h.gold += CFG().duel.winGold;
-        if (!won && !pair.ghost) {
+        // Losing costs a heart, against a ghost too (a time-out against a ghost doesn't)
+        if (!won && !(pair.ghost && res.draw)) {
           out.heartLost.push(h);
+          const opp = sides[1 - i];
+          G.Dungeon.logHeart(h, room, `duel vs ${opp.ghost ? opp.name : opp.hero.name}${res.draw ? ' (time)' : ''}`);
           if (!G.Hero.loseHeart(h, room)) h.outIn = 'duel';   // back at full health, or out
         }
+        // Poisoned Blade: duel poison stays with you
+        const bp = res.bladePoison && res.bladePoison[i === 0 ? 'a' : 'b'];
+        if (bp && h.alive) h.poison = (h.poison || 0) + bp;
       }
       return out;
     },
@@ -110,7 +116,7 @@ window.G = window.G || {};
 
   // ---------- Tournament ----------
   // Everyone with hearts enters at their dungeon health plus a 30% heal. Each round everyone is paired again.
-  // Winners keep the health they end with; losers lose a heart and come back at full health.
+  // Everyone starts every fight at full health; losers (to a ghost too) lose a heart.
   // Last player with hearts wins.
   function entryHeal(h, max) {
     let heal = 2 * Math.round(max * CFG().arenaHealPct / 2);
@@ -146,6 +152,8 @@ window.G = window.G || {};
 
   function buildRound(T) {
     const list = alive(T);
+    // Everyone starts every tournament fight at full health
+    for (const e of list) { e.maxHp = G.Hero.maxHp(e.hero); e.hp = e.maxHp; }
     // closest heart counts meet, ties by health
     const key = (x, y) => y.hero.hearts - x.hero.hearts || y.hp - x.hp;
     const pairs = makePairs(list, T.rng, e => T.lastOpp[e.hero.id], key);
@@ -181,6 +189,7 @@ window.G = window.G || {};
       if (m.draw && !m.ghost) {
         // Past the time limit: both lose a heart and come back at full health
         e.hero.hearts = Math.max(0, e.hero.hearts - 1);
+        G.Dungeon.logHeart(e.hero, 30, `tournament round ${currentRound(T).n} (time)`);
         m.lostHearts.push(e); e.hp = e.maxHp;
         continue;
       }
@@ -190,11 +199,10 @@ window.G = window.G || {};
         // Warrior 6 (Bloodrage): the kill heal carries into the next fight
         const rage = res.bloodrage ? res.bloodrage[i === 0 ? 'a' : 'b'] : 0;
         if (rage) { const add = e.hero.gem === 'gaia' ? 0 : e.hero.gem === 'stone' ? 1 : rage; e.hp = Math.min(e.maxHp, e.hp + add); m.rageHeal = add; }
-      } else if (m.ghost) {
-        // Losing to a ghost costs no heart; you limp on with what's left (at least 10)
-        e.hp = Math.max(10, hpOf(i));
       } else {
         e.hero.hearts = Math.max(0, e.hero.hearts - 1);
+        const opp = sides[1 - i];
+        G.Dungeon.logHeart(e.hero, 30, `tournament round ${currentRound(T).n} vs ${opp.ghost ? opp.name : opp.hero.name}`);
         m.lostHeart = e; m.lostHearts.push(e);
         e.hp = e.maxHp;
       }

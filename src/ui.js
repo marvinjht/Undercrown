@@ -7,7 +7,7 @@ window.G = window.G || {};
   const CFG = () => G.CONFIG;
   const tips = {}; let tipSeq = 0;
   const tip = (html) => { const id = 't' + (++tipSeq); tips[id] = html; return `data-tip="${id}" tabindex="0"`; };
-  const RANGE_NAMES = { melee: 'Melee', near: 'Near range', far: 'Far range' };
+  const RANGE_NAMES = { melee: 'Melee', reach: 'Reach (2 steps)', near: 'Near range', far: 'Far range' };
   let bagOpen = -1;
   let supplyOpen = false;
 
@@ -145,7 +145,7 @@ window.G = window.G || {};
       cell('Damage', s.dmg, I.dmg.desc, s.type === 'magic' ? 'Your weapon deals magic damage, so Magic Resist blocks it.' : 'Your weapon deals physical damage, so Armor blocks it.'),
       cell('Attack Speed', s.spd, I.spd.desc, `You attack every ${Math.round(100 / s.spd) / 10} seconds.`),
       cell('Crit', s.crit, I.crit.desc, `Your crits hit for ${s.dmg * 2 + s.critDmg}.`),
-      cell('Range', RANGE_NAMES[s.range].replace(' range', ''), 'Fights start 6 steps apart. Melee walks in first; Near shoots from 4 steps, Far from 6.'),
+      cell('Range', RANGE_NAMES[s.range].replace(' range', ''), 'Fights start 6 steps apart. Melee walks in first; the Longsword reaches 2 steps; Near shoots from 4 steps, Far from 6.'),
     ];
     const ext = [];
     if (s.critDmg) ext.push(cell('Crit Dmg', s.critDmg, I.critDmg.desc));
@@ -800,7 +800,7 @@ window.G = window.G || {};
     const opp = m.a.hero && m.a.hero.isPlayer ? m.b : m.a;
     return `<section class="screen"><h2>Duel</h2>
       ${rivalBlock(opp)}
-      <p class="lede">Everyone still in is paired up. ${opp.ghost ? `You're the odd one out, so you face a ghost: a half-strength copy of ${esc(opp.of.name)}. Losing to it costs no heart.` : `You face <b>${esc(opp.hero.name)}</b>. The loser loses a heart.`} You fight at your current health. The winner's health goes back to what it was; the loser comes back at full. Past one minute, both lose a heart.</p>
+      <p class="lede">Everyone still in is paired up. ${opp.ghost ? `You're the odd one out, so you face a ghost: a half-strength copy of ${esc(opp.of.name)}. Losing to it still costs a heart.` : `You face <b>${esc(opp.hero.name)}</b>. The loser loses a heart.`} You fight at your current health. The winner's health goes back to what it was; the loser comes back at full. Past one minute, both lose a heart.</p>
       ${others ? `<div class="round"><h4>Other duels</h4><ul>${others}</ul></div>` : ''}
       <p class="hint">You can drink potions and elixirs now, before the fight. Not once it starts.</p>
       ${d.goSent ? `<p class="waiting">Locked in. The fight is starting…</p>`
@@ -937,7 +937,7 @@ window.G = window.G || {};
     if (!T.rounds.length) return '';
     const next = G.Tournament.nextMatch(T);
     const row = (e, won, p, i) => {
-      if (e.ghost) return `<div class="b-row ghost ${won === true ? 'won' : won === false ? 'lost' : ''}"><b>${esc(e.name)}</b><span class="b-meta"><small>no heart at stake</small></span></div>`;
+      if (e.ghost) return `<div class="b-row ghost ${won === true ? 'won' : won === false ? 'lost' : ''}"><b>${esc(e.name)}</b><span class="b-meta"><small>ghost</small></span></div>`;
       const snap = p.snap && p.snap[i];
       const hearts = snap ? snap.hearts : e.hero.hearts;
       const hp = p.result ? (won ? `${snap ? snap.hp : e.hp} hp left` : p.draw ? 'out of time' : snap && snap.out ? 'out' : 'lost') : `${e.hp} hp`;
@@ -974,6 +974,7 @@ window.G = window.G || {};
       return `<section class="screen end"><h2>${won ? 'You are the last one standing' : `${esc(T.champion.hero.name)} wins the tournament`}</h2>
         <p class="lede">${T.entrants.length === 1 ? 'Everyone else ran out of hearts in the dungeon.' : won ? 'Thirty rooms, a tournament, and nobody could stop you.' : 'You made it to the end. Next time, the crown.'}</p>
         ${placements(T)}${roundsList(T)}
+        ${G.Game.mp && G.MP.isHost && G.MP.saveStatus ? `<p class="hint save-status">Match database: ${G.MP.saveStatus === 'saved' ? 'this match was saved.' : G.MP.saveStatus === 'saving' ? 'saving…' : esc(G.MP.saveStatus)}</p>` : ''}
         <div class="row-actions">${G.Game.mp ? (G.MP.isHost ? '<button class="enter" data-act="mp-rematch">Play again (same room)</button><button class="ghost" data-act="mp-leave">Leave</button>'
           : '<p class="waiting">The host can start a rematch in this room.</p><button class="ghost" data-act="mp-leave">Leave</button>') : '<button class="enter" data-act="title">Play again</button>'}</div></section>`;
     }
@@ -986,7 +987,7 @@ window.G = window.G || {};
     return `<section class="screen"><h2>The Tournament</h2>
       ${watchTop ? `<p class="waiting">Fights in progress…</p>${tourSpectatePanel(st)}` : ''}
       ${opp ? rivalBlock(opp.ghost ? opp : { hero: opp.hero, hp: opp.hp }) : ''}
-      <p class="lede">Last one with hearts wins. Each round everyone is paired up again. Winners keep the health they finish with; losers lose a heart and come back at full health. Fights go to the death; past one minute, both lose a heart.</p>
+      <p class="lede">Last one with hearts wins. Each round everyone is paired up again and starts the fight at full health. Losers lose a heart, against a ghost too. Fights go to the death; past one minute, both lose a heart.</p>
       ${roundsList(T)}
       ${watchTop ? '' : st.tourPhase === 'fight' ? '<p class="waiting">Fights in progress…</p>' : `<p class="waiting">${mine ? 'Your fight starts' : 'Next fights start'} in <b id="wait-num">${Math.ceil(G.Game.timeLeft() || 0)}s</b></p>`}</section>`;
   }

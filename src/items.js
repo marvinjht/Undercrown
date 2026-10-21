@@ -294,7 +294,8 @@ window.G = window.G || {};
     if (rc && rng.int(1, 100) <= rc) { const r = rollRelic(hero, rng); if (r) items.push(r); }
     // Legendaries: the later bosses always offer one; elites deep in the dungeon sometimes do
     const LG = G.CONFIG.legendary;
-    if ((kind === 'boss' && LG.bossRooms.includes(room)) || (kind === 'elite' && room > LG.eliteFromRoom && rng.int(1, 100) <= LG.eliteChance)) {
+    const ev = LG.eventChance && LG.eventChance[kind];
+    if ((kind === 'boss' && LG.bossRooms.includes(room)) || (kind === 'elite' && room > LG.eliteFromRoom && rng.int(1, 100) <= LG.eliteChance) || (ev && rng.float() * 100 < ev)) {
       const lg = rollLegendary(rng); if (lg) items.push(lg);
     }
     return items;
@@ -310,7 +311,7 @@ window.G = window.G || {};
       const rarity = i === 0 ? 'rare' : (rng.int(1, 100) <= 25 ? 'rare' : 'green');
       items.push(generate(rng, { slot, rarity, room, weaponType: slot === 'weapon' ? rng.pick(G.WEAPON_ORDER) : null }));
     }
-    const cpool = ['greater', 'antidote', 'tome', 'dye', ...G.BUFF_IDS];
+    const cpool = [opts.tome ? 'potion' : 'greater', 'antidote', 'tome', 'dye', ...G.BUFF_IDS];   // no Greater Potions in the tournament
     if (opts.tome) cpool.push('tome', 'tome');
     for (let i = 0; i < nCons; i++) items.push(rollConsumable(Math.max(room, 15), rng, cpool));
     items.unshift(rollRelic(null, rng));   // every Plunder has one relic

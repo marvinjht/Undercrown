@@ -270,7 +270,8 @@ window.G = window.G || {};
       this.heroes = heroes;
       G.Game.startMatch({ seed: (m.seed + me.slot * 7919) >>> 0, matchSeed: m.seed, player: heroes[me.slot], rivals: m.players.filter(p => p.slot !== me.slot).map(p => heroes[p.slot]) });
       if (this.isHost) {
-        this.H = { seed: m.seed, rng: new G.RNG((m.seed ^ 0x5bd1e995) >>> 0), room: 0, ready: {}, snaps: {} };
+        this.H = { seed: m.seed, rng: new G.RNG((m.seed ^ 0x5bd1e995) >>> 0), room: 0, ready: {}, snaps: {},
+          rec: { started: new Date().toISOString(), builds: {}, duels: [], tour: [], saved: false } };   // the match database record
         for (const p of m.players) if (p.bot) heroes[p.slot].rng = new G.RNG((m.seed + p.slot * 104729) >>> 0);
         setTimeout(() => this.hostStartRoom(1), 300);
       }
@@ -366,6 +367,7 @@ window.G = window.G || {};
     hostStartRoom(n) {
       const H = this.H;
       H.room = n; H.ready = {}; H.snaps = {}; H.plunder = null; H.duels = null; H.skip = null;
+      if (H.rec && (n === 11 || n === 21)) H.rec.builds[n - 1] = this.allBuilds();   // everyone's build after rooms 10 and 20
       const kind = G.Dungeon.roomKind(n);
       // Bots in shared rooms take their poison now; their room is the shared event itself
       for (const p of this.players) {
@@ -550,6 +552,7 @@ window.G = window.G || {};
         D.done[w.a] = true; if (w.b != null) D.done[w.b] = true;
         const pair = this.duelPair(w);
         const spec = G.Tournament.pvpSpec(pair.a, pair.b);
+        this.recFight('duels', { room: this.H.room, a: w.a, b: w.b, ghostOf: w.ghostOf }, G.Tournament.pvpFrom(spec, w.seed), spec);
         // The host settles the bots' side; each player's own game settles theirs from the same fight
         if (w.a !== this.mySlot && w.b !== this.mySlot && (this.isBot(w.a) || (w.b != null && this.isBot(w.b)))) G.Duel.resolve(pair, G.Tournament.pvpFrom(spec, w.seed), this.H.room);
         this.cast({ t: 'duelFight', room: D.room, w, spec });
@@ -578,7 +581,9 @@ window.G = window.G || {};
       const H = this.H;
       H.duels.done[w.a] = true; if (w.b != null) H.duels.done[w.b] = true;
       const pair = this.duelPair(w);
-      G.Duel.resolve(pair, G.Duel.simulate(pair, H.rng), H.room);
+      const res = G.Duel.simulate(pair, H.rng);
+      this.recFight('duels', { room: H.room, a: w.a, b: w.b, ghostOf: w.ghostOf }, res, null);
+      G.Duel.resolve(pair, res, H.room);
     },
     // Build a duel pair from the wire, with fight-start health
     duelPair(w, heroes) {
@@ -622,6 +627,7 @@ window.G = window.G || {};
     hostStartTournament() {
       const H = this.H;
       const field = this.players.map(p => this.heroes[p.slot]).filter(h => h.alive);
+      if (H.rec) H.rec.builds[30] = this.allBuilds();
       const T = G.Tournament.create(field, H.rng.fork());
       H.tour = { T, waiting: null };
       this.hostTourBreak(CFG().tourBreakSeconds + CFG().tourIntroExtra);
@@ -644,7 +650,7 @@ window.G = window.G || {};
     hostTourBreak(secs) {
       const H = this.H, T = H.tour.T;
       H.tour.breakEnds = now() + secs * 1000;
-      if (T.champion) { this.cast({ t: 'tour', state: this.tourWire(T), phase: 'done' }); return; }
+      if (T.champion) { this.cast({ t: 'tour', state: this.tourWire(T), phase: 'done' }); this.hostSaveMatch(T); return; }
       this.cast({ t: 'tour', state: this.tourWire(T), phase: 'break', ms: secs * 1000, heroes: this.allWire() });
       clearTimeout(H.tourTimer);
       H.tourTimer = setTimeout(() => this.hostTourFight(), secs * 1000);
@@ -681,7 +687,12 @@ window.G = window.G || {};
       H.tour.waiting = null;
       clearTimeout(H.tourTimer);
       const T = H.tour.T, round = G.Tournament.currentRound(T);
-      for (const m of round.pairs.slice()) if (!m.result) G.Tournament.resolve(T, m, m._res || G.Tournament.simulate(T, m));
+      for (const m of round.pairs.slice()) {
+        if (m.result) continue;
+        const res = m._res || G.Tournament.simulate(T, m);
+        this.recFight('tour', { round: round.n, a: m.a.hero.slot, b: m.ghost ? null : m.b.hero.slot, ghostOf: m.ghost ? m.b.of.slot : null }, res, m._spec);
+        G.Tournament.resolve(T, m, res);
+      }
       // A Plunder between rounds (not after the final)
       if (T.champion || G.Tournament.alive(T).length < 2) { this.hostTourBreak(CFG().tourBreakSeconds); return; }
       this.cast({ t: 'tour', state: this.tourWire(T), phase: 'plunder', heroes: this.allWire() });
@@ -740,6 +751,57 @@ window.G = window.G || {};
       this.lastTourWire = m.state;
       G.Game.mpTour(this.tourFromWire(m.state), m.phase, m.ms || 0);
     },
+    // ---------- Match database ----------
+    // One record per match, saved by the host when the tournament ends (see tools/supabase-matches.sql)
+    buildOf(h) {
+      if (!h) return null;
+      const st = G.Stats.sets(h), s = G.Stats.compute(h);
+      const item = it => it && { name: it.name, rarity: it.rarity, set: it.set || null, legendary: it.legendary || null, tier: it.tier || null,
+        weaponType: it.weaponType || null, forged: it.forged || 0, affixes: it.affixes || [], tradeoff: it.tradeoff ? it.tradeoff.id : null };
+      const gear = {};
+      for (const sl of G.SLOTS) gear[sl] = item(h.gear[sl]);
+      const lg = G.SLOTS.map(sl => h.gear[sl]).find(it => it && it.legendary);
+      return { slot: h.slot, name: h.name, bot: !!this.isBot(h.slot), botWas: h.botWas || null, alive: !!h.alive, hearts: h.hearts, level: h.level, gold: h.gold,
+        spec: h.spec || null, tree: h.treePicks || {}, gem: h.gem || null, weapon: h.gear.weapon ? h.gear.weapon.weaponType : null, legendary: lg ? lg.legendary : null,
+        sets: st.counts, hybrid: st.hybrid, look: st.look, full: st.full, relics: h.relics || {}, gear, poison: h.poison || 0, diedRoom: h.diedRoom || null,
+        heartLog: h.heartLog || [], stats: { maxHp: s.maxHp, dmg: s.dmg, spd: s.spd, armor: s.armor, ward: s.ward, crit: s.crit, critDmg: s.critDmg, dodge: s.dodge,
+          shield: s.shield, holy: s.holy, pierce: s.pierce, leech: s.leech, bleed: s.bleed, stun: s.stun, range: s.range, type: s.type } };
+    },
+    allBuilds() { const o = {}; for (const p of this.players) o[p.slot] = this.buildOf(this.heroes[p.slot]); return o; },
+    recFight(kind, who, res, spec) {
+      const R = this.H && this.H.rec;
+      if (!R || !res) return;
+      const st = x => x && { maxHp: x.maxHp, dmg: x.dmg, spd: x.spd, armor: x.armor, ward: x.ward, crit: x.crit, dodge: x.dodge, shield: x.shield, spec: x.spec, gem: x.gem, legendary: x.legendary, weaponType: x.weaponType };
+      R[kind].push({ ...who, winner: res.draw ? 'draw' : res.winner, duration: res.duration,
+        aHp: spec ? spec.aHp : null, bHp: spec ? spec.b.hp : null, aStats: spec ? st(spec.sa) : null, bStats: spec ? st(spec.b.s) : null });
+    },
+    hostSaveMatch(T) {
+      const H = this.H, R = H && H.rec;
+      if (!R || R.saved) return;
+      R.saved = true;
+      // Final builds: tournament entrants as they fought, everyone else as last seen
+      const finals = this.allBuilds();
+      for (const e of T.entrants) {
+        const b = this.buildOf(e.hero); if (!b) continue;
+        b.place = e.place; b.alive = true;
+        const seen = finals[e.hero.slot];
+        b.heartLog = [...((seen && seen.heartLog) || []).filter(x => x.room < 30), ...(e.hero.heartLog || []).filter(x => x.room >= 30)];
+        finals[e.hero.slot] = b;
+      }
+      const humans = this.players.filter(p => !p.bot || p.botWas);
+      const data = {
+        version: G.VERSION, started: R.started, ended: new Date().toISOString(),
+        players: this.players.map(p => ({ slot: p.slot, name: p.botWas || p.name, bot: !!p.bot && !p.botWas, droppedOrKicked: !!p.botWas, kicked: !!p.kicked })),
+        bosses: [8, 18, 28].map(r => { const b = G.Dungeon.monsterFor(r, 'boss'); return b ? b.id : null; }),
+        champion: T.champion ? { slot: T.champion.hero.slot, name: T.champion.hero.name } : null,
+        builds: { ...R.builds, final: finals }, duels: R.duels, tournament: R.tour,
+      };
+      const row = { version: G.VERSION, room_code: this.code, players: humans.length, bots: this.players.length - humans.length,
+        champion: data.champion ? data.champion.name : null, data };
+      this.saveStatus = 'saving';
+      G.Net.saveMatch(row).then(() => { this.saveStatus = 'saved'; update(); }).catch(err => { this.saveStatus = 'failed: ' + (err && err.message || err); console.warn('Match not saved', err); update(); });
+    },
+
     // ---------- Live spectating ----------
     // Click the eye next to a player: you see their game as they see it, live, without being able to touch it.
     // The watched player's game sends its screen state (only while someone watches); fights replay from their inputs.

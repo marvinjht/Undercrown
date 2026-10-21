@@ -9,12 +9,12 @@ G.GEMS = {
   },
   stone: {
     name: 'Heart of Stone', color: '#a8a39a',
-    up: 'For the first 5 seconds of a fight, every hit on your health deals 1. After that, each enemy’s hits deal 1, then 2, then 3 (never more).',
+    up: 'For the first 5 seconds of a fight, every hit on your health deals 1. After that, each enemy’s hits deal 1, then 2, then 3 (never more). Enemies attack 15% slower.',
     cost: 'Max Health becomes 25 (gear Health ignored). Every heal restores exactly 1. Shields still take full hits.',
   },
   pure: {
     name: 'Pure Blood', color: '#e05a6a',
-    up: '+20 Health, +2 Damage.',
+    up: '+100 max Health and +2 Damage. Heals you 100 when you take it.',
     cost: 'None. The safe pick.',
   },
   vulture: {
@@ -25,7 +25,7 @@ G.GEMS = {
   devil: {
     name: 'Devil’s Tooth', color: '#d6402f',
     up: 'Deal double damage.',
-    cost: 'Take double damage.',
+    cost: 'Take 50% more damage.',
   },
   gaia: {
     name: 'Gaia’s Embrace', color: '#6fbf5a',

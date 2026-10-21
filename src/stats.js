@@ -82,6 +82,8 @@ window.G = window.G || {};
       const o = {}; for (const k in h) if (!['stats', 'desc', 'name'].includes(k)) o[k] = h[k];
       merge(o);
     }
+    // Weapon traits (Riposte, Shield Bash, Rend, Point blank)
+    if (W && W.fx) merge(W.fx);
     // Relics: each copy strengthens the effect
     for (const rid in hero.relics || {}) { const n = hero.relics[rid]; if (n > 0 && G.RELICS[rid]) merge(G.RELICS[rid].fx(n)); }
     // The legendary you wear
@@ -117,7 +119,8 @@ window.G = window.G || {};
       cleave: !!(W && W.cleave), healEvery: W && W.healEvery ? W.healEvery : null,
       spell: null, fx, sets: st,
     };
-    if (fx.minRange === 'near' && s.range === 'melee') s.range = 'near';
+    if (fx.minRange === 'near' && (s.range === 'melee' || s.range === 'reach')) s.range = 'near';
+    if (fx.meleeStaff) delete fx.pointBlank;   // Inferno fights up close anyway
 
     // Spell: the stronger of the weapon's spell and Arcane Blast
     const cands = [];
@@ -134,7 +137,7 @@ window.G = window.G || {};
     if (hero.spec === 'bloodthirst') s.leech += G.SPECS.bloodthirst.params.leech;
 
     // Heart gems
-    if (hero.gem === 'pure') { s.maxHp += 20; s.dmg += 2; }
+    if (hero.gem === 'pure') { s.maxHp += C().pureBlood.hp; s.dmg += C().pureBlood.dmg; }
     if (hero.gem === 'gaia') s.shield += C().gaiaShield;
     if (hero.gem === 'stone') s.maxHp = C().stoneHp;
 
@@ -271,6 +274,8 @@ window.G = window.G || {};
       hero.hp = Math.max(1, Math.min(max, hero.hp));
       // Heart of Stone puts you at exactly its max health, never lower
       if (id === 'stone') hero.hp = C().stoneHp;
+      // Pure Blood heals you as you take it
+      if (id === 'pure') hero.hp = Math.min(compute(hero).maxHp, hero.hp + C().pureBlood.heal);
     },
     // All healing outside fights goes through here so heart gems apply
     heal(hero, amount) {

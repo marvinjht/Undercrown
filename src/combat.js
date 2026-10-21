@@ -25,7 +25,7 @@ window.G = window.G || {};
 
   function simulateFight(sa, sb, opts = {}) {
     const CB = C();
-    const SH = G.SPECS.shadow.params, DU = G.SPECS.duelist.params, BE = G.SPECS.berserker.params;
+    const SH = G.SPECS.shadow.params, DU = G.SPECS.duelist.params, BE = G.SPECS.berserker.params, BT = G.SPECS.bloodthirst.params;
     const rng = new G.RNG(opts.seed != null ? opts.seed : G.newSeed());
     const roll = n => n > 0 && rng.int(1, 100) <= n;
     const events = [], tracks = {}, fighters = [], meta = [];
@@ -61,6 +61,9 @@ window.G = window.G || {};
         pxBurn: 0, pxBurnUntil: -1, pxNextBurn: Infinity, pxBy: null,
         chill: 0, chillReadyAt: 0, mired: 0, gauzeAt: -1, gauzeReady: 0, egg: false, eggUntil: -1,
         fadeNext: s.fx && s.fx.packFade ? s.fx.packFade.every : Infinity,
+        // v0.28: weapon traits, poison in fights, Night Lord mark, Aegis rebuild, Paladin shield burst
+        riposte: false, rend: 0, fpoison: 0, nextPoison: Infinity, nightInvis: !!(s.fx && s.fx.nightLord), markUsed: false,
+        shield0: s.shield || 0, aegisRebuildAt: -1, aegisRebuilt: false, palBurstUsed: false, palBurstPending: false, bladePoison: 0,
         ...extra,
       };
       fighters.push(f);
@@ -72,13 +75,18 @@ window.G = window.G || {};
     }
 
     const A = mk('a', { s: sa, name: opts.aName || 'You', hp: opts.aHp, revive: opts.aRevive }, 0);
-    // Ghoulgrip: ghouls rise beside you in monster fights
-    const GS = !opts.pvp && sa.fx && sa.fx.ghoulSummon;
-    if (GS) for (let i = 0; i < GS.count; i++) {
-      const gs = allyStats(Math.max(4, 2 * Math.round(sa.maxHp * GS.hpPct / 200)), Math.max(2, 2 * Math.round(sa.dmg * GS.dmgPct / 200)));
-      mk('a', { s: gs, name: 'Ghoul', sprite: 'monster_ghoul', ally: true, owner: A, scale: 0.8 }, 0.5);
-    }
     toSpecs(sb).forEach(sp => mk('b', { ...sp, revive: sp.revive != null ? sp.revive : opts.bRevive }, CB.startGap));
+    // Ghoulgrip: ghouls rise beside whoever wears it (monster fights, duels and the tournament)
+    for (const owner of fighters.slice()) {
+      const GS = owner.s.fx && owner.s.fx.ghoulSummon;
+      if (!GS || owner.ally) continue;
+      for (let i = 0; i < GS.count; i++) {
+        const gs = allyStats(Math.max(4, 2 * Math.round(owner.s.maxHp * GS.hpPct / 200)), Math.max(2, 2 * Math.round(owner.s.dmg * GS.dmgPct / 200)));
+        mk(owner.side, { s: gs, name: 'Ghoul', sprite: 'monster_ghoul', ally: true, owner, scale: 0.8 }, owner.pos + (owner.side === 'a' ? 0.5 : -0.5));
+      }
+    }
+    // The fight is between the main fighters: allies don't keep it going
+    const mainB = () => fighters.filter(f => f.side === 'b' && f.alive && !f.ally);
     const result = { revived: { a: false, b: false }, goldStolen: 0, bloodrage: { a: 0, b: 0 }, phoenixWin: null };
     const POISON_CAP = (G.CONFIG.poison && G.CONFIG.poison.fightCap) || 50;
     const PVP = opts.pvp ? G.CONFIG.arena.damageMult : 1;   // duels and the tournament: half damage
@@ -118,7 +126,7 @@ window.G = window.G || {};
       if (f.side === 'b') {
         if (!A.alive) return null;
         let best = A, bd = Math.abs(A.pos - f.pos) - 0.01;
-        for (const x of fighters) if (x.ally && x.alive && !x.invis) { const d = Math.abs(x.pos - f.pos); if (d < bd) { best = x; bd = d; } }
+        for (const x of fighters) if (x.ally && x.side === 'a' && x.alive && !x.invis) { const d = Math.abs(x.pos - f.pos); if (d < bd) { best = x; bd = d; } }
         return best;
       }
       const fs = foes(f); return fs.find(x => !x.invis) || fs[0] || null;
@@ -140,7 +148,7 @@ window.G = window.G || {};
     // Shields soak hits at full damage (even with Heart of Stone); Stone only turns health damage into 1.
     function damage(def, amt, att) {
       if (att && att.s.gem === 'devil') amt *= 2;
-      if (def.s.gem === 'devil') amt *= 2;
+      if (def.s.gem === 'devil') amt *= G.CONFIG.devilTaken || 1.5;
       // Hexglass: cursed targets take more from everything
       if (def.hexUntil >= t && def.hex) amt = Math.round(amt * (1 + def.hex * def.hexPct / 100));
       // Relics: Giant's Knucklebone (bosses and elites), Poacher's Snare (healthy targets), Gravedigger's Spade (dying ones)
@@ -161,6 +169,10 @@ window.G = window.G || {};
         } else { absorbed = Math.min(def.shield, amt); def.shield -= absorbed; amt -= absorbed; }
         // Sentinel: the shield breaking sets off a burst (handled in afterDamage)
         if (def.shield <= 0 && def.s.fx && def.s.fx.sentinelBurst && !def.sentinelUsed) { def.sentinelUsed = true; def.sentinelPending = true; }
+        // Paladin 4: the shield breaking explodes for its starting size as holy damage
+        if (def.shield <= 0 && def.s.fx && def.s.fx.shieldBurst && !def.palBurstUsed && def.shield0 > 0) { def.palBurstUsed = true; def.palBurstPending = true; }
+        // Aegis: rebuilds once, a few seconds after it breaks
+        if (def.shield <= 0 && def.s.fx && def.s.fx.aegisRebuild && !def.aegisRebuilt && def.aegisRebuildAt < 0) def.aegisRebuildAt = t + def.s.fx.aegisRebuild.secs;
       }
       // Heart of Stone: each attacker's hits to health deal 1 more than that attacker's last, up to the cap
       // (and for the first few seconds of a fight, every hit deals just 1)
@@ -170,7 +182,7 @@ window.G = window.G || {};
       }
       def.hp -= amt;
       // Penitent: damage you take charges your next hit
-      if (amt > 0 && def.s.fx && def.s.fx.penitent && !def.egg) def.charge = Math.min(def.s.fx.penitent, def.charge + amt);
+      if (amt > 0 && def.s.fx && def.s.fx.penitent && !def.egg) def.charge = Math.min(def.s.fx.penitent, def.charge + Math.round(amt / PVP));   // charges at full value in player fights
       // Bloody Gauze: 2 seconds after taking damage, heal (at most once every 3 seconds)
       if (amt > 0 && def.s.fx && def.s.fx.gauze && !def.egg && t >= def.gauzeReady) { def.gauzeAt = t + 2; def.gauzeReady = t + 3; }
       // Berserker: Undying Rage keeps you at 1 for a few seconds (never as an egg)
@@ -186,6 +198,12 @@ window.G = window.G || {};
         def.alive = false; def.egg = false;
         push({ type: 'death', tgt: def.id, src: att ? att.id : null }, def);
         return;
+      }
+      if (def.hp > 0 && def.palBurstPending) {
+        def.palBurstPending = false;
+        const tg = att && att.alive && att.side !== def.side ? att : target(def);
+        push({ type: 'palburst', src: def.id });
+        if (tg) for (const x of foes(def)) fxHit(def, x, Math.max(CB.minHit, def.shield0 - wardOf(x)), 'Holy Burst');
       }
       if (def.hp > 0 && def.sentinelPending) {
         def.sentinelPending = false;
@@ -225,7 +243,7 @@ window.G = window.G || {};
       if (def.s.gem === 'phoenix' && !def.exploded) {
         def.exploded = true;
         phoenixBurst(def);
-        if (!foes(def).length) {
+        if (!foes(def).some(x => !x.ally)) {
           def.hp = PX.standUp; result.phoenixWin = def.side;
           push({ type: 'revive', src: def.id }, def);
           return;
@@ -381,6 +399,7 @@ window.G = window.G || {};
       if (!sure && !def.egg && roll(Math.min(CB.dodgeCap + smoke, (def.s.dodge || 0) + def.parryDodge + smoke))) {
         push({ type: 'dodge', src: att.id, tgt: def.id });
         if (dfx.afterDodge) def.nextHitBonus = dfx.afterDodge;
+        if (dfx.riposte) def.riposte = true;   // Saber: the next hit deals +50%
         // Skirmisher: dodging speeds you up
         if (dfx.dodgeHaste) { def.haste.push(t + dfx.dodgeHaste.secs); if (def.haste.length > dfx.dodgeHaste.max) def.haste.shift(); }
         return 0;
@@ -412,6 +431,7 @@ window.G = window.G || {};
       else crit = roll(att.s.crit);
       let raw = att.s.dmg + att.dmgBonus + att.hurtBonus + att.nextHitBonus;
       att.nextHitBonus = 0;
+      if (att.riposte) { att.riposte = false; raw = Math.round(raw * (1 + fx.riposte / 100)); }
       if (counter && fx.counterDmg) raw += fx.counterDmg;
       if (ambush && fx.cheapDmg) raw += fx.cheapDmg;
       if (att.s.spec === 'berserker') raw += Math.min(fx.berserkCap || CB.berserkCap, Math.floor((att.maxHp - att.hp) / BE.per) * BE.dmg);
@@ -434,7 +454,7 @@ window.G = window.G || {};
       const fourth = fx.everyFourthMagic && att.atkCount % 4 === 0;
       if (fourth) amt += Math.max(0, fx.everyFourthMagic - ward);
       const r = damage(def, amt, att);
-      push({ type: 'hit', src: att.id, tgt: def.id, amount: r.dealt, absorbed: r.absorbed, crit, cheap: ambush, counter: !!counter, kind: att.s.type, ranged: att.range > 1, empowered: !!att.empowerNow }, att, def);
+      push({ type: 'hit', src: att.id, tgt: def.id, amount: r.dealt, absorbed: r.absorbed, crit, cheap: ambush, counter: !!counter, kind: att.s.type, ranged: att.range > 2, empowered: !!att.empowerNow }, att, def);
       att.hitsLanded++;
       if (penance) { const h = heal(att, Math.max(1, Math.round(penance * PVP))); push({ type: 'penance', src: att.id, amount: penance, heal: h }, att); }
       if (fourth && fx.manaOnFourth) addMana(att, fx.manaOnFourth);
@@ -449,7 +469,7 @@ window.G = window.G || {};
       if (!def.egg && def.s.fx && def.s.fx.hurtStack) def.hurtBonus = Math.min(def.s.fx.hurtCap, def.hurtBonus + def.s.fx.hurtStack);
       // Life on Hit, plus Paladin 6: Consecration (holy damage heals you), plus crit heals
       const low = att.hp < att.maxHp / 2;
-      const lifeOnHit = (att.s.leech || 0) * (fx.lowLeechDouble && low ? 2 : 1) + (fx.consecrate ? holyPart : 0) + (crit && fx.critHeal ? fx.critHeal : 0)
+      const lifeOnHit = (att.s.leech || 0) * (fx.lowLeechDouble && low ? 2 : 1) + (att.s.spec === 'bloodthirst' ? Math.floor(r.dealt * BT.pct / 100) : 0) + (fx.consecrate ? holyPart : 0) + (crit && fx.critHeal ? fx.critHeal : 0)
         + (fx.capHeal && att.hurtBonus >= (fx.hurtCap || 0) ? fx.capHeal : 0);
       if (lifeOnHit > 0) { const h = heal(att, lifeOnHit); if (h) push({ type: 'heal', src: att.id, amount: h }, att); }
       // Ghoulgrip ghouls: their hits heal you for half
@@ -472,7 +492,20 @@ window.G = window.G || {};
         push({ type: 'steal', src: att.id, amount: att.steal });
       }
       // Snake bites: poison that stays after the fight (up to the cap per fight)
-      if (att.s.poison && def.alive && def === A && def.poisonGain < POISON_CAP) {
+      // Shadow: Poisoned Blade. Every hit poisons (up to the cap); poison hurts during the fight too
+      if (fx.bladePoison && def.alive && !def.egg && def.fpoison < fx.bladePoison.cap) {
+        def.fpoison = Math.min(fx.bladePoison.cap, def.fpoison + 1);
+        if (def.nextPoison === Infinity) def.nextPoison = t + 2;
+        if (opts.pvp) def.bladePoison = def.fpoison;   // a duel's poison stays with the loser and winner alike
+      }
+      // Night Lord: your first hit out of hiding marks the target; the mark bursts for half the damage it took
+      if (att.nightInvis) {
+        att.nightInvis = false;
+        if (att.invis) { att.invis = false; att.invisUntil = -1; push({ type: 'stealth_off', src: att.id }); }
+        if (!att.markUsed && def.alive) { att.markUsed = true; def.mark = { by: att, dmg: 0, until: t + 3 }; push({ type: 'mark', src: att.id, tgt: def.id }); }
+      }
+      // Snakes: only critical bites poison
+      if (att.s.poison && crit && def.alive && def === A && def.poisonGain < POISON_CAP) {
         const add = Math.min(att.s.poison, POISON_CAP - def.poisonGain);
         def.poisonGain += add;
         push({ type: 'poison', src: att.id, tgt: def.id, amount: add, total: def.poisonGain });
@@ -505,7 +538,7 @@ window.G = window.G || {};
           if (def.bleedUntil < t) def.nextBleed = t + 1;
           def.bleed = Math.max(def.bleed, fx.butcher.perStack * def.butcher); def.bleedUntil = t + 3;
           if (def.butcher >= fx.butcher.pop) {
-            const left = def.bleed * Math.max(1, Math.ceil(def.bleedUntil - t));
+            const left = def.bleed * Math.max(1, Math.ceil(def.bleedUntil - t)) * (fx.butcher.popMult || 1);
             def.butcher = 0; def.bleed = 0; def.bleedUntil = -1;
             push({ type: 'pop', src: att.id, tgt: def.id });
             fxHit(att, def, left, 'Butcher');
@@ -528,6 +561,8 @@ window.G = window.G || {};
       }
       if (def.alive) {
         if (roll(att.s.stun) || (fx.fourthStun && att.hitsLanded % fx.fourthStun === 0)) stun(att, def, crit ? CB.critStun : 1);   // a crit stun lasts longer
+        // Sword & Shield: Shield Bash every few hits (ignores the stun limit, so it combos)
+        if (def.alive && fx.bash && att.hitsLanded % fx.bash === 0 && !counter) { push({ type: 'bash', src: att.id, tgt: def.id }); stun(att, def, 1, true); }
       }
       return r.dealt;
     }
@@ -549,6 +584,11 @@ window.G = window.G || {};
         att.empowerNow = false;
         if (cleaves && dealt > 0) {
           const second = foes(att).find(x => x !== d);
+          // Great Axe: Rend. With no second target, the cleave feeds a growing bleed instead
+          if (!second && fx.rend && d.alive) {
+            d.rend = Math.min(fx.rend.cap, (d.bleedUntil >= t ? d.rend : 0) + fx.rend.step);
+            applyBleed(d, (att.s.bleed || 0) + d.rend, att);
+          }
           if (second) {
             const r = damage(second, Math.max(CB.minHit, Math.floor(dealt / 2 / 2) * 2), att);
             push({ type: 'hit', src: att.id, tgt: second.id, amount: r.dealt, absorbed: r.absorbed, cleave: true }, second);
@@ -559,7 +599,7 @@ window.G = window.G || {};
       addMana(att, att.s.manaGain || 0);
     }
 
-    const done = () => !A.alive || !fighters.some(f => f.side === 'b' && f.alive);
+    const done = () => !A.alive || !mainB().length;
     let winner = null;
     for (const f of fighters) if (f.invis) push({ type: 'stealth_on', src: f.id, label: 'Night Lord' });
     // Openers: Blinkfang teleports in and stuns, Guillotine drags the target in
@@ -605,8 +645,11 @@ window.G = window.G || {};
         if (!kite || f.dashTo != null || t < f.kiteNext) continue;
         const near = foes(f).some(x => Math.abs(x.pos - f.pos) <= 1 + 1e-6);
         if (!near) continue;
-        const dir = f.side === 'a' ? -1 : 1;
-        const to = Math.max(-CB.kiteEdge, Math.min(CB.startGap + CB.kiteEdge, f.pos + dir * 3));
+        const foe = foes(f).filter(x => Math.abs(x.pos - f.pos) <= 1 + 1e-6)[0];
+        const dir = Math.sign(f.pos - foe.pos) || (f.side === 'a' ? -1 : 1);
+        let to = Math.max(-CB.kiteEdge, Math.min(CB.startGap + CB.kiteEdge, f.pos + dir * 3));
+        // Backed against the wall: roll past the enemy and kite the other way
+        if (Math.abs(to - f.pos) < 0.8) to = Math.max(-CB.kiteEdge, Math.min(CB.startGap + CB.kiteEdge, foe.pos - dir * 2.5));
         if (Math.abs(to - f.pos) < 0.8) continue;
         f.dashTo = to; f.kiteNext = t + kite;
         push({ type: 'kite', src: f.id });
@@ -620,6 +663,19 @@ window.G = window.G || {};
           continue;
         }
         const ffx = f.s.fx || {};
+        // Aegis rebuilds its shield once
+        if (f.aegisRebuildAt >= 0 && t >= f.aegisRebuildAt && !f.aegisRebuilt) {
+          f.aegisRebuilt = true; f.aegisRebuildAt = -1;
+          f.shield += ffx.aegisRebuild.amount; push({ type: 'shieldup', src: f.id, amount: ffx.aegisRebuild.amount, label: 'Aegis' }, f);
+        }
+        // Poison in a fight (Poisoned Blade): its stacks as damage every 2 seconds
+        if (f.fpoison > 0 && t >= f.nextPoison) {
+          f.nextPoison = t + 2;
+          const r = damage(f, f.fpoison, null);
+          push({ type: 'burn', tgt: f.id, amount: r.dealt, poison: true }, f);
+          afterDamage(f, null);
+          if (!f.alive) continue;
+        }
         // Bloody Gauze
         if (f.gauzeAt >= 0 && t >= f.gauzeAt) {
           f.gauzeAt = -1;
@@ -726,6 +782,10 @@ window.G = window.G || {};
         if (f.frenzyUntil >= t) spd *= 2;
         if (f.sunderUntil >= t && f.sunderFx) spd *= 1 - f.sunderFx.slow;
         if (f.mired) spd *= 1 - f.mired * (f.mirePct || 8) / 100;   // Mire Beast
+        // Point blank: Longbow and Staff slow down with an enemy right next to them
+        if (fx.pointBlank && Math.abs(tg.pos - f.pos) <= 1 + 1e-6) spd *= 1 - fx.pointBlank / 100;
+        // Heart of Stone: its wearer's enemies attack slower
+        if (tg.s.gem === 'stone' && !tg.egg) spd *= 1 - (G.CONFIG.stoneSlow || 15) / 100;
         f.nextAtk = t + 10 / spd;
         attack(f);
       }
@@ -734,18 +794,18 @@ window.G = window.G || {};
     // A Phoenix egg still standing when the other side is gone hatches
     for (const f of fighters) {
       if (!f.alive || !f.egg) continue;
-      if (!fighters.some(x => x.alive && x.side !== f.side)) {
+      if (!fighters.some(x => x.alive && x.side !== f.side && !x.ally)) {
         f.egg = false; f.hp = PX.standUp; result.phoenixWin = f.side;
         push({ type: 'revive', src: f.id, hatch: true }, f);
       }
     }
     let timeout = false;
     if (!A.alive) winner = 'b';
-    else if (!fighters.some(f => f.side === 'b' && f.alive)) winner = 'a';
+    else if (!mainB().length) winner = 'a';
     else {
       timeout = true;
       result.draw = !!opts.pvp;   // player fights that run out of time: both lose
-      const bs = fighters.filter(f => f.side === 'b' && f.alive);
+      const bs = mainB();
       const bf = bs.reduce((x, f) => x + f.hp, 0) / Math.max(1, bs.reduce((x, f) => x + f.maxHp, 0));
       winner = !A.egg && A.hp / A.maxHp >= bf ? 'a' : 'b';   // an unhatched egg loses on time
       push({ type: 'timeout' });
@@ -756,6 +816,7 @@ window.G = window.G || {};
       aHp: Math.max(0, A.hp), bHp: B0 ? Math.max(0, B0.hp) : 0,
       revived: result.revived, goldStolen: result.goldStolen, bloodrage: result.bloodrage, phoenixWin: result.phoenixWin, draw: !!result.draw,
       poison: A.alive ? A.poisonGain : 0,
+      bladePoison: { a: A.bladePoison || 0, b: B0 ? B0.bladePoison || 0 : 0 },
     };
   }
 

@@ -2,7 +2,7 @@
 // All stats are flat whole numbers. Chance stats (Crit, Dodge, Stun) mean "out of 100".
 window.G = window.G || {};
 
-G.VERSION = '0.27';   // players in one room must all run the same version
+G.VERSION = '0.28';   // players in one room must all run the same version
 
 G.CONFIG = {
   // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
@@ -39,7 +39,10 @@ G.CONFIG = {
   phoenix: { burst: 100, burn: 20, burnSeconds: 5, selfBurn: 1, standUp: 25, eggSeconds: 5, eggHpPct: 50 },   // explode, burn them, hide in an egg
   stoneHp: 25,
   stoneGrace: 5,           // Heart of Stone: for this many seconds at the start of a fight, every hit deals 1
-  stoneCrack: 3,           // Heart of Stone: each hit deals 1 more than the last, up to this
+  stoneCrack: 3,
+  stoneSlow: 15,           // Heart of Stone: enemies attack this % slower
+  devilTaken: 1.5,         // Devil's Tooth: damage taken multiplier
+  pureBlood: { hp: 100, dmg: 2, heal: 100 },           // Heart of Stone: each hit deals 1 more than the last, up to this
   gaiaShield: 100,
   vultureHeal: 10,         // Vulture's Heart: heal this much and gain this much max health whenever a rival loses a heart
 
@@ -81,7 +84,9 @@ G.CONFIG = {
   // Out of 100, how often a relic joins the reward choices (Plunder always has one)
   relicChance: { fight: 8, elite: 35, boss: 100, vault: 100 },
   // Legendaries: these bosses always offer one; elites past eliteFromRoom offer one this often (out of 100)
-  legendary: { bossRooms: [18, 28], eliteFromRoom: 15, eliteChance: 10, tier: 6 },   // tier: weapon damage matches a rare of this tier
+  legendary: { bossRooms: [18, 28], eliteFromRoom: 15, eliteChance: 10, tier: 6,
+    spoilsBase: 0.5, spoilsPerRoom: 0.1,   // the victory screen's random gear: 0.5% + 0.1% per room to be a legendary
+    eventChance: { vault: 2, shrine: 1 } },   // vaults, venom caches and blood shrines: a very rare legendary (out of 100)   // tier: weapon damage matches a rare of this tier
   forge: { upgradeCost: 40, affixCost: 50 },
 
   // Out of 100 wins, how often a consumable joins the reward choices
@@ -107,8 +112,8 @@ G.CONFIG = {
   supplyPerClass: 12,
 
   monster: {
-    hpBase: 54, hpGrowth: 1.094,
-    hitBase: 7, hitGrowth: 1.076,
+    hpBase: 56, hpGrowth: 1.099,
+    hitBase: 7, hitGrowth: 1.084,
     elite: { hp: 1.35, hit: 1.15, packExtra: 1 },
     boss:  { hp: 1.6, hit: 1.1 },
     swarmCopy: { hp: 0.35, hit: 0.5 },
@@ -121,7 +126,7 @@ G.CONFIG = {
     startGap: 6,          // steps between the sides at the start
     moveSpeed: 2,         // steps per second
     kiteEdge: 1.4,        // how far past the start lines a Kiting archer can step back
-    ranges: { melee: 1, near: 4, far: 6 },
+    ranges: { melee: 1, reach: 2, near: 4, far: 6 },
     minHit: 2,
     dodgeCap: 30,
     critCap: 50,

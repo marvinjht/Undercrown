@@ -66,8 +66,18 @@ window.G = window.G || {};
     try { return new URLSearchParams(location.search).get('net') === 'local' ? 'local' : 'supabase'; } catch (e) { return 'supabase'; }
   }
 
+  // Match database: one row per finished match (insert only; see tools/supabase-matches.sql)
+  let dbClient = null;
+  function saveMatch(row) {
+    if (mode() === 'local') { (window.__savedMatches = window.__savedMatches || []).push(row); return Promise.resolve(); }   // testing
+    return loadSupabase().then(lib => {
+      dbClient = dbClient || lib.createClient(SUPABASE.url, SUPABASE.key, { auth: { persistSession: false } });
+      return dbClient.from('matches').insert(row).then(({ error }) => { if (error) throw new Error(error.message); });
+    });
+  }
+
   G.Net = {
-    mode,
+    mode, saveMatch,
     connect(code, onMessage) {
       return mode() === 'local' ? localTransport(code, onMessage) : supabaseTransport(code, onMessage);
     },

@@ -12,8 +12,8 @@ G.SPECS = {
   },
   bloodthirst: {
     name: 'Bloodthirst', role: 'Reaver',
-    params: { leech: 2 },
-    desc: 'Heal 2 health every time you hit. The healing stays with you after the fight.',
+    params: { leech: 2, pct: 20 },
+    desc: 'Heal 20% of the damage you deal, plus 2 every time you hit. The healing stays with you after the fight.',
     tip: 'Fast weapons heal the most.',
     affinity: ['greatAxe', 'daggers'],
   },
@@ -50,14 +50,14 @@ G.SPEC_TREES = {
   shadow: {
     t10: [{ id: 'quick', name: 'Quick Hands', fx: { cheapEvery: 4 }, desc: 'Cheap Shot every 4 seconds instead of 6' },
           { id: 'dirty', name: 'Dirty Fighting', fx: { cheapDmg: 10 }, desc: 'Cheap Shots deal +10' }],
-    t15: [{ id: 'poison', name: 'Poisoned Blade', fx: { cheapBleed: 8 }, desc: 'Cheap Shots cause Bleed 8 instead of 4' },
+    t15: [{ id: 'poison', name: 'Poisoned Blade', fx: { bladePoison: { cap: 25 } }, desc: 'Every hit adds 1 poison, up to 25. Poisoned enemies take damage equal to their poison every 2 seconds, and in duels it stays with them' },
           { id: 'smoke', name: 'Smoke Bomb', fx: { smokeDodge: 20 }, desc: 'After a Cheap Shot, +20 Dodge for 2 seconds' }],
-    t20: { id: 'nightlord', name: 'Night Lord', fx: { openInvis: 5 }, desc: 'Start every fight invisible for 5 seconds: enemies can’t target you' },
+    t20: { id: 'nightlord', name: 'Night Lord', fx: { openInvis: 5, nightLord: 1 }, desc: 'Start every fight invisible for up to 5 seconds (your first hit reveals you). That hit marks the target for 3 seconds, then it bursts for half the damage it took' },
   },
   bloodthirst: {
     t10: [{ id: 'gorge', name: 'Gorge', fx: { overhealShield: 20 }, desc: 'Healing past full health becomes Shield, up to 20' },
           { id: 'frenzy', name: 'Frenzy', fx: { lowSpd: 2 }, desc: '+2 Attack Speed below half health' }],
-    t15: [{ id: 'pact', name: 'Blood Pact', stats: { leech: 2, hp: -16 }, desc: '+2 more Life on Hit, −16 max Health' },
+    t15: [{ id: 'pact', name: 'Blood Pact', stats: { leech: 2, hp: -10 }, desc: '+2 more Life on Hit, −10 max Health' },
           { id: 'hemorrhage', name: 'Hemorrhage', stats: { bleed: 2 }, desc: 'Your hits cause Bleed 2' }],
     t20: { id: 'sanguine', name: 'Sanguine', fx: { lowLeechDouble: 1 }, desc: 'Life on Hit heals double below half health' },
   },

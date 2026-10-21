@@ -112,7 +112,7 @@ window.G = window.G || {};
           const won = m.winner && m.winner.hero === s.player && !m.draw;
           const me = T.entrants.find(e => e.hero === s.player);
           s.notice = m.draw ? (m.suddenDeath ? 'A full minute and nobody fell. Sudden death: you both keep your last heart.' : `A full minute and nobody fell: you and ${oppName} both lose a heart.`)
-            : won ? `You beat ${oppName}. You go on with ${me ? me.hp : '?'} health.` : m.ghost ? `The ${oppName} beat you. No heart lost.`
+            : won ? `You beat ${oppName}.` : m.ghost && !(me && me.out) ? `The ${oppName} beat you. You lose a heart (${s.player.hearts} left).`
             : me && me.out ? `${oppName} took your last heart.` : `${oppName} won. You lose a heart (${s.player.hearts} left) and come back at full health.`;
         }
         break;
@@ -256,7 +256,7 @@ window.G = window.G || {};
         case 'reward': auto = `Time ran out. ${this.autoTakeToBag(s.offer.items, s.offer.gold)}`; break;
         case 'spoils': auto = `Time ran out. You ${G.AI.autoSpoils(p, s.spoils)}.`; break;
         case 'mystery':
-          if (s.mystery.id === 'ambush') { this.startBattle({ type: 'fight', monster: G.Dungeon.monsterFor(s.room, 'fight', s.rng) }, 'fight'); return; }
+          if (s.mystery.id === 'ambush') { this.startBattle({ type: 'fight', monster: G.Dungeon.monsterFor(s.room, 'fight', G.Dungeon.sharedRng(s.room, 'ambush')) }, 'fight'); return; }
           break;
         case 'wager': { const B = CFG().wager.bets.filter(b => p.gold >= b); s.wagerBet = B[0] || 0; s.notice = s.wagerBet ? `Time ran out. You bet ${s.wagerBet} gold.` : 'Time ran out. You fight with nothing on the line.'; this.startBattle(s.door, 'wager'); return; }
         case 'merchant': auto = 'Time ran out, so you left the merchant.'; break;
@@ -353,7 +353,7 @@ window.G = window.G || {};
           return;
         }
         case 'forge': s.forge = { strengthened: false, affixed: false, msg: null }; s.phase = 'forge'; break;
-        case 'mystery': s.mystery = G.Dungeon.rollMystery(s.rng); s.phase = 'mystery'; break;
+        case 'mystery': s.mystery = G.Dungeon.rollMystery(G.Dungeon.sharedRng(s.room, 'mystery')); s.phase = 'mystery'; break;
         case 'merchant': s.merchant = G.Dungeon.merchantStock(p, s.room, s.rng); s.phase = 'merchant'; break;
       }
       render();
@@ -387,7 +387,7 @@ window.G = window.G || {};
       if (!b || b.done || b.tour || b.duel) return;
       b.done = true;
       const before = this.heartsSnapshot();
-      const out = G.Dungeon.applyFight(p, b.res, s.room);
+      const out = G.Dungeon.applyFight(p, b.res, s.room, b.title);
       this.afterHeartLoss(before);
       const notes = [];
       if (b.res.phoenixWin === 'a') notes.push(`Phoenix Heart: you exploded, outlasted them, and hatched at ${CFG().phoenix.standUp} health.`);
@@ -583,7 +583,7 @@ window.G = window.G || {};
         s.offer = { items: G.Loot.offer(p, s.room, 'shrine', s.rng), gold: 0, title: 'Blood Shrine', text: `The altar drinks ${cost} health. It offers these in return.` };
         s.phase = 'reward';
         render();
-      } else if (act === 'ambush') this.startBattle({ type: 'fight', monster: G.Dungeon.monsterFor(s.room, 'fight', s.rng) }, 'fight');
+      } else if (act === 'ambush') this.startBattle({ type: 'fight', monster: G.Dungeon.monsterFor(s.room, 'fight', G.Dungeon.sharedRng(s.room, 'ambush')) }, 'fight');
       else if (act === 'leave') this.completeRoom('You left the shrine alone.');
     },
 
@@ -664,7 +664,7 @@ window.G = window.G || {};
           this.afterHeartLoss(before);
           const won = res.winner === 'a';
           const X = CFG().xp;
-          if (pair.ghost) s.notice = res.draw ? `Time ran out against the ${oppName}. No heart lost.` : won ? `You beat the ${oppName}. +${X.duelWin} XP.` : `The ${oppName} got the better of you. No heart lost. +${X.duelLoss} XP.`;
+          if (pair.ghost) s.notice = res.draw ? `Time ran out against the ${oppName}. No heart lost.` : won ? `You beat the ${oppName}. +${X.duelWin} XP.` : `The ${oppName} got the better of you. You lose a heart (${s.player.hearts} left). +${X.duelLoss} XP.`;
           else if (res.draw) s.notice = `A full minute and nobody fell: you and ${oppName} both lose a heart. You come back at full health (${s.player.hearts} left).`;
           else s.notice = won ? `You beat ${oppName}! +${CFG().duel.winGold} gold, +${X.duelWin} XP. Your health goes back to what it was.`
             : `${oppName} won the duel. You lose a heart (${s.player.hearts} left) and come back at full health. +${X.duelLoss} XP.`;
@@ -700,7 +700,7 @@ window.G = window.G || {};
           G.Duel.resolve(m, res, s.room);
           const won = !res.draw && res.winner === (mirrored ? 'b' : 'a');
           const X = CFG().xp;
-          if (m.ghost) s.notice = res.draw ? `Time ran out against the ${oppName}. No heart lost.` : won ? `You beat the ${oppName}. +${X.duelWin} XP.` : `The ${oppName} got the better of you. No heart lost. +${X.duelLoss} XP.`;
+          if (m.ghost) s.notice = res.draw ? `Time ran out against the ${oppName}. No heart lost.` : won ? `You beat the ${oppName}. +${X.duelWin} XP.` : `The ${oppName} got the better of you. You lose a heart (${s.player.hearts} left). +${X.duelLoss} XP.`;
           else if (res.draw) s.notice = `A full minute and nobody fell: you and ${oppName} both lose a heart. You come back at full health (${s.player.hearts} left).`;
           else s.notice = won ? `You beat ${oppName}! +${CFG().duel.winGold} gold, +${X.duelWin} XP. Your health goes back to what it was.`
             : `${oppName} won the duel. You lose a heart (${s.player.hearts} left) and come back at full health. +${X.duelLoss} XP.`;
@@ -920,8 +920,8 @@ window.G = window.G || {};
           G.Tournament.resolve(T, m, fixed);
           const me = T.entrants.find(e => e.hero.isPlayer);
           if (fixed.draw && !m.ghost) s.notice = m.suddenDeath ? `A full minute and nobody fell. Sudden death: you both keep your last heart and go again.` : `A full minute and nobody fell: you and ${oppName} both lose a heart and come back at full health.`;
-          else if (m.ghost) s.notice = won ? `You beat the ${oppName}. You keep ${me.hp} health.` : `The ${oppName} beat you. No heart lost; you go on with ${me.hp} health.`;
-          else if (won) s.notice = `You beat ${oppName}. You go into the next round with ${me.hp} health.${m.rageHeal ? ` Bloodrage: +${m.rageHeal}.` : ''}`;
+          else if (m.ghost) s.notice = won ? `You beat the ${oppName}.` : me.out ? `The ${oppName} took your last heart.` : `The ${oppName} beat you. You lose a heart (${s.player.hearts} left).`;
+          else if (won) s.notice = `You beat ${oppName}. Everyone is healed to full before the next round.`;
           else s.notice = me.out ? `${oppName} took your last heart.` : `${oppName} won. You lose a heart (${s.player.hearts} left) and come back at full health.`;
           s.phase = 'tournament';
           if (!T.champion) this.startTimer(CFG().tourBreakSeconds);
