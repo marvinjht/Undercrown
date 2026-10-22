@@ -359,7 +359,7 @@ window.G = window.G || {};
       const scrit = fx.spellCrit && roll(f.s.crit);
       for (const d of tgts) {
         if (!d.alive) continue;
-        const raw = sp.dmg * (scrit ? 2 : 1);
+        const raw = Math.round(sp.dmg * (recastSp ? 0.5 : 1)) * (scrit ? 2 : 1);   // Twincast: the repeat deals half
         const r = damage(d, Math.max(CB.minHit, raw - spellCut(f, d)), f);
         push({ type: 'spellhit', src: f.id, tgt: d.id, amount: r.dealt, absorbed: r.absorbed, name: sp.name, crit: !!scrit }, d);
         afterDamage(d, f);
@@ -486,7 +486,7 @@ window.G = window.G || {};
       else if (att.firstCrits > 0) { crit = true; att.firstCrits--; }
       else if (counter && fx.counterCrit) crit = true;
       else crit = roll(att.s.crit);
-      if (fx.noCrit) crit = false;   // Hummingbird: never crits (not even Cheap Shots)
+      if (fx.noCrit) crit = false;   // noCrit: never crits (not even Cheap Shots); unused for now
       // Clear-eyed (legendary helmet): some crits land as normal hits
       if (crit && dfx.critGuard && roll(dfx.critGuard)) { crit = false; push({ type: 'critguard', src: def.id }); }
       let raw = att.s.dmg + att.dmgBonus + att.hurtBonus + att.nextHitBonus;

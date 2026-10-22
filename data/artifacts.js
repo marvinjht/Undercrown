@@ -49,8 +49,8 @@ G.ARTIFACTS = {
     stats: { dmg: 10, spd: 10, holy: 5, armor: 10, ward: 10 }, fx: { dawnwall: { every: 3, dmg: 24, stun: 1 } },
     desc: 'Every 3rd hit against you is fully blocked and answered with a holy flash: 24 damage and a 1-second stun.' },
   hummingbird: { name: 'Hummingbird', slot: 'weapon', weaponType: 'shortbow', cls: 'archer',
-    stats: { dmg: 9, spd: 18 }, fx: { frenzy: { every: 5, secs: 1 }, noCrit: 1 },
-    desc: 'Every 5 seconds, your attack speed doubles for 1 second, and the Attack Speed cap doesn’t apply while it lasts. You can’t crit.' },
+    stats: { dmg: 9, spd: 18, crit: 6 }, dmgPct: 90, fx: { frenzy: { every: 5, secs: 1 } },
+    desc: 'Every 5 seconds, your attack speed doubles for 1 second, and the Attack Speed cap doesn’t apply while it lasts.' },   // dmgPct: its Damage is 10% lower than the usual artifact scaling
   gale: { name: 'Gale', slot: 'weapon', weaponType: 'longbow', cls: 'archer',
     stats: { dmg: 20, spd: 10, pierce: 2 }, fx: { gale: { chance: 25, push: 2, stun: 0, cooldown: 8 } },
     desc: 'Each shot has a 25% chance to knock the target back 2 steps.' },

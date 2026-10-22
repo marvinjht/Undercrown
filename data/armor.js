@@ -71,7 +71,7 @@ G.LEGEND_AFFIXES = {
     shortbow:    { name: 'Volley',     text: 'Every 3rd shot fires a second arrow for half damage', fx: { volley: 3 } },
     longbow:     { name: 'Deadeye',    text: 'Your first shot each fight crits', fx: { firstCrits: 1 } },
     wandFocus:   { name: 'Searing',    text: 'Firebolt burns the target for 5% of its max Health a second for 3 seconds', fx: { boltBurn: { pct: 5, secs: 3 } } },
-    staff:       { name: 'Twincast',   text: 'Your spells cast twice', fx: { doubleCast: 1 } },
+    staff:       { name: 'Twincast',   text: 'Your spells cast twice; the second cast deals half damage', fx: { doubleCast: 1 } },
   },
 };
 // The legendary affix an item carries (Legendary and Artifact items only)

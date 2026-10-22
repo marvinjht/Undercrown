@@ -168,7 +168,7 @@ window.G = window.G || {};
     s.dodgeRaw = s.dodge; s.critRaw = s.crit;
     s.dodge = Math.min(CB.dodgeCap, s.dodge);
     s.crit = Math.min(CB.critCap, s.crit);
-    if (fx.noCrit) { s.crit = 0; s.critDmg = 0; }   // Hummingbird: can't crit
+    if (fx.noCrit) { s.crit = 0; s.critDmg = 0; }   // noCrit effect (unused for now)
     s.atkSpd = s.spd / 10;
     return s;
   }

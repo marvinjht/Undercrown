@@ -139,6 +139,7 @@ window.G = window.G || {};
     // Fixed numbers. An artifact weapon's hitting power is set to a late-dungeon rare's (same for everyone, every match).
     const st = { ...D.stats };
     if (W) for (const k of ['dmg', 'spellDmg', 'holy', 'bleed']) if (st[k]) st[k] = value(k, st[k], G.RARITY.rare, G.CONFIG.artifact.tier);
+    if (st.dmg && D.dmgPct) st.dmg = Math.max(2, 2 * Math.round(st.dmg * D.dmgPct / 200));   // e.g. Hummingbird: 10% less Damage
     return { id: G.uid('item'), kind: 'gear', slot: D.slot, rarity: 'artifact', artifact: id, room: 0, tier: G.CONFIG.artifact.tier,
       weaponType: D.weaponType || null, set: D.cls, name: D.name, base: { ...st }, stats: { ...st },
       affixStats: {}, affixes: [], tradeoff: null, trait: D.desc, baseTrait: D.baseTrait !== undefined ? D.baseTrait : W && !(D.fx && D.fx.meleeStaff) ? W.trait : null,   // Inferno replaces the Staff's own trait
