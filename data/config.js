@@ -2,7 +2,7 @@
 // All stats are flat whole numbers. Chance stats (Crit, Dodge, Stun) mean "out of 100".
 window.G = window.G || {};
 
-G.VERSION = '0.34';   // players in one room must all run the same version
+G.VERSION = '0.35';   // players in one room must all run the same version
 
 G.CONFIG = {
   // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
@@ -16,6 +16,7 @@ G.CONFIG = {
 
   roundSeconds: 45,        // doors, rewards, spec picks... (fights don't count against it)
   tourBreakSeconds: 6,
+  skipHurrySeconds: 10,    // a passed skip vote cuts the slow player's clock to this (needs 3+ players still in)
   tourIntroExtra: 5,
   duelIntroSeconds: 5,     // the duel card shows this long before the fight starts (or press Fight)       // extra seconds before the first tournament round
   bagSize: 6,

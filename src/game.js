@@ -161,8 +161,9 @@ window.G = window.G || {};
     tick() {
       const s = this.s;
       if (!s) return;
-      // Voted to skip: everything left in this room is decided for you right away
-      if (this.mp && s.skipRoom === s.room && (s.roundKind === 'room' || s.roundKind === 'after') && G.MP.skipAllowed(s.room) && s.phase !== 'battle' && s.roundEnds && now() < s.roundEnds) s.roundEnds = now() - 1;
+      // Hurried by a skip vote: your clock in this room never runs longer than a few seconds
+      const hurry = CFG().skipHurrySeconds * 1000;
+      if (this.mp && s.skipRoom === s.room && (s.roundKind === 'room' || s.roundKind === 'after') && G.MP.skipAllowed(s.room) && s.phase !== 'battle' && s.roundEnds && s.roundEnds > now() + hurry) s.roundEnds = now() + hurry;
       if (this.mp && (s.roundKind === 'shop' || s.roundKind === 'tour' || ['waiting', 'duelWait', 'mpEnded', 'dead', 'shop'].includes(s.phase))) {
         if (s.phase === 'shop' && s.shop && s.shop.reviewUntil && !s.shop.reviewDone && now() >= s.shop.reviewUntil) { s.shop.reviewDone = true; s.shop.turnStart = now(); G.UI.refreshShopPicks(); }
         return;
@@ -235,8 +236,9 @@ window.G = window.G || {};
       const s = this.s;
       if (!s || s.room !== room || s.phase === 'waiting') return;
       s.skipRoom = room;
-      s.notice = 'The other players voted to skip the rest of your turn, so the game chose for you.';
-      if (s.roundEnds) s.roundEnds = now() - 1;
+      s.notice = `The other players voted to hurry you: you have ${CFG().skipHurrySeconds} seconds left for this room.`;
+      const hurry = now() + CFG().skipHurrySeconds * 1000;
+      if (s.roundEnds && s.roundEnds > hurry) s.roundEnds = hurry;
     },
     markActive() { const s = this.s; if (s) s.actedRoom = s.room; },
     timeUp() {
@@ -266,7 +268,7 @@ window.G = window.G || {};
         case 'gem': { const id = G.AI.autoGem(p, s.gemOptions); s.notice = `Time ran out. You took the ${G.GEMS[id].name}.`; s.gemDone = true; this.nextStep(); return; }
         case 'duelIntro': this.startDuelFight(); return;
       }
-      if (auto && this.mp && s.skipRoom === s.room) auto = 'The other players voted to skip your turn. ' + auto;
+      if (auto && this.mp && s.skipRoom === s.room) auto = 'You were hurried by a skip vote. ' + auto;
       if (!p.alive) { this.playerOut(auto); return; }
       s.notice = auto;
       this.endRound();
@@ -509,16 +511,15 @@ window.G = window.G || {};
       }
       const me = tourNow ? s.tour.entrants.find(e => e.hero === p) : null;
       if (tourNow && (!me || me.out)) return;
-      if (it.kind === 'gear' && !G.Hero.canEquip(p, it)) { s.bagMsg = 'You already wear an artifact. Only one at a time.'; render(); return; }
       if (it.kind === 'gear') {
         // Equipping over a piece sells the old one automatically
         p.bag.splice(i, 1);
-        const old = G.Hero.equip(p, it);
-        if (old) {
-          const g = G.Dungeon.sellPrice(old);
+        const olds = G.Hero.equipSwap(p, it);   // an artifact also replaces the artifact you wear
+        if (olds.length) {
+          const g = olds.reduce((a, o) => a + G.Dungeon.sellPrice(o), 0);
           p.gold += g;
           s.goldPop = { amount: g, at: Date.now() };
-          s.bagMsg = `Equipped ${it.name}. Sold ${old.name} for ${g} gold.`;
+          s.bagMsg = `Equipped ${it.name}. Sold ${olds.map(o => o.name).join(' and ')} for ${g} gold.`;
         } else s.bagMsg = `Equipped ${it.name}.`;
       } else if (G.CONSUMABLES[it.cid].dye) {
         // Turncoat's Dye: pick a piece, then a class (see dyeItem / dyeClass)

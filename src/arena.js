@@ -235,6 +235,7 @@ window.G = window.G || {};
         case 'stunblock': if (att) this.float(att, 'STEADFAST', '#ffd84a', 13); break;
         case 'critguard': if (att) this.float(att, 'GUARDED', '#ffd84a', 12); break;
         case 'sear': if (def) this.float(def, 'SEARED', '#ff9a3c', 12); break;
+        case 'exilemark': if (def) this.float(def, 'MARKED', '#c08cff', 13); break;
         case 'root': if (def) {
           // Exile's Banish: a violet hex circle under the target while it's rooted
           this.float(def, e.extend ? 'ROOTED ' + e.secs + 's' : e.slam ? 'BANISHED' : 'ROOTED', '#c08cff', 15);

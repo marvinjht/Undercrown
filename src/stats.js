@@ -168,6 +168,7 @@ window.G = window.G || {};
     s.dodgeRaw = s.dodge; s.critRaw = s.crit;
     s.dodge = Math.min(CB.dodgeCap, s.dodge);
     s.crit = Math.min(CB.critCap, s.crit);
+    if (fx.noCrit) { s.crit = 0; s.critDmg = 0; }   // Hummingbird: can't crit
     s.atkSpd = s.spd / 10;
     return s;
   }
@@ -276,6 +277,22 @@ window.G = window.G || {};
         return old;
       });
     },
+    // The artifact you'd have to give up to put this one on (an artifact worn in another slot), or null
+    artifactConflict(hero, item) {
+      if (!item || item.kind !== 'gear' || item.rarity !== 'artifact') return null;
+      const worn = this.wornArtifact(hero);
+      return worn && worn.slot !== item.slot ? worn : null;
+    },
+    // Equip from the bag: everything it replaces comes off (the piece in that slot, and any other artifact you wear)
+    equipSwap(hero, item) {
+      const other = this.artifactConflict(hero, item);
+      const out = [];
+      if (other) withMaxChange(hero, () => { hero.gear[other.slot] = null; });
+      const old = this.equip(hero, item);
+      if (old) out.push(old);
+      if (other) out.push(other);
+      return out;
+    },
     setSpec(hero, id) { withMaxChange(hero, () => { hero.spec = id; }); },
     setGem(hero, id) {
       hero.gem = id;
@@ -324,11 +341,14 @@ window.G = window.G || {};
         if (n) hero.relics[item.rid] = n; else delete hero.relics[item.rid];
         return p;
       }
-      if (!this.canEquip(hero, item)) return 0;
+      // Another artifact you wear comes off if you swap this one in
+      const other = this.artifactConflict(hero, item);
       const saved = hero.gear[item.slot];
+      if (other) hero.gear[other.slot] = null;
       hero.gear[item.slot] = item;
       const p = power(compute(hero));
       hero.gear[item.slot] = saved;
+      if (other) hero.gear[other.slot] = other;
       return p;
     },
     bagFull(hero) { return hero.bag.length >= C().bagSize; },

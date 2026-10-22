@@ -137,7 +137,7 @@ window.G = window.G || {};
       </div>
       ${statList(item, 'stat-list')}
       ${item.trait && item.rarity !== 'artifact' ? `<p class="trait">${esc(item.trait)}</p>` : ''}
-      ${item.rarity === 'artifact' && !G.Hero.canEquip(hero, item) ? `<p class="warn">You already wear an artifact (${esc(G.Hero.wornArtifact(hero).name)}). This one can only go in your bag.</p>` : ''}
+      ${item.rarity === 'artifact' && !G.Hero.canEquip(hero, item) ? `<p class="warn">You already wear an artifact (${esc(G.Hero.wornArtifact(hero).name)}). This one goes in your bag; equipping it from there sells ${esc(G.Hero.wornArtifact(hero).name)}.</p>` : ''}
       ${eq ? `<div class="cmp"><span>Compared to ${esc(eq.name)}${eq.rarity === 'artifact' ? ' (loses its artifact effect)' : ''}</span><ul>${diffs.map(d => `<li class="${d.d > 0 ? 'up' : 'down'}">${esc(d.text)}</li>`).join('')}</ul></div>` : ''}
       <div class="btns">${btns}</div>
     </article>`;
@@ -333,10 +333,10 @@ window.G = window.G || {};
   // Equipping over a worn piece destroys it, so it takes a press and hold. An empty slot is a plain click.
   function bagUseBtn(p, it, i) {
     if (it.kind !== 'gear') return `<button data-act="bag-use" data-i="${i}">Use</button>`;
-    if (!G.Hero.canEquip(p, it)) return `<button disabled>Equip locked</button><small class="hold-note">You already wear an artifact</small>`;
-    const eq = p.gear[it.slot];
-    if (!eq) return `<button data-act="bag-use" data-i="${i}">Equip</button>`;
-    return `<button class="hold" data-hold="bag-use" data-i="${i}" aria-label="Press and hold to equip, replacing ${esc(eq.name)}"><span class="hold-fill"></span><span class="hold-label">Hold to equip</span></button><small class="hold-note">Replaces ${esc(eq.name)}, which sells for ${G.Dungeon.sellPrice(eq)} gold</small>`;
+    const gone = [p.gear[it.slot], G.Hero.artifactConflict(p, it)].filter(Boolean);
+    if (!gone.length) return `<button data-act="bag-use" data-i="${i}">Equip</button>`;
+    const names = gone.map(o => esc(o.name)).join(' and '), gold = gone.reduce((a, o) => a + G.Dungeon.sellPrice(o), 0);
+    return `<button class="hold" data-hold="bag-use" data-i="${i}" aria-label="Press and hold to equip, replacing ${names}"><span class="hold-fill"></span><span class="hold-label">Hold to equip</span></button><small class="hold-note">Replaces ${names}, which ${gone.length > 1 ? 'sell' : 'sells'} for ${gold} gold${gone.length > 1 || !p.gear[it.slot] ? ' (you can wear only one artifact)' : ''}</small>`;
   }
 
   function bagPanel(st) {
@@ -860,14 +860,14 @@ window.G = window.G || {};
       const label = { out: 'Out of hearts', bot: 'Bot (plays instantly)', ready: 'Ready', playing: 'Still playing' }[state];
       return `<li class="w-${state}"><b>${esc(p.slot === G.MP.mySlot ? 'You' : p.name)}</b>${p.bot ? botTag(h) : ''}<span>${label}</span></li>`;
     }).join('');
-    // Vote to skip: when everyone but one player is done, the rest can end that player's turn
+    // Vote to skip: when everyone but one player is done (3+ players still in), the rest can hurry that player along
     const humans = G.MP.players.filter(p => !p.bot && G.MP.heroes[p.slot] && G.MP.heroes[p.slot].alive);
     const slow = humans.filter(p => !ready.has(p.slot)), votes = new Set(R && R.room === st.room ? R.votes || [] : []);
     const needed = humans.length - 1, voted = votes.has(G.MP.mySlot);
-    const skip = G.MP.skipAllowed(st.room) && slow.length === 1 && ready.has(G.MP.mySlot) && !(R && R.skipped)
-      ? `<div class="skip-vote"><span>Waiting on <b>${esc(slow[0].name)}</b>. Everyone else can vote to skip the rest of their turn (${votes.size}/${needed}).</span>
+    const skip = G.MP.skipAllowed(st.room) && humans.length >= 3 && slow.length === 1 && ready.has(G.MP.mySlot) && !(R && R.skipped)
+      ? `<div class="skip-vote"><span>Waiting on <b>${esc(slow[0].name)}</b>. Everyone else can vote to hurry them: their clock drops to ${CFG().skipHurrySeconds} seconds (${votes.size}/${needed}).</span>
         <button class="${voted ? 'ghost' : ''}" data-act="skip-vote" ${voted ? 'disabled' : ''}>${voted ? 'You voted' : 'Vote to skip'}</button></div>`
-      : R && R.skipped ? '<p class="hint">Skip vote passed. Their turn is being finished for them.</p>' : '';
+      : R && R.skipped ? `<p class="hint">Skip vote passed. They have ${CFG().skipHurrySeconds} seconds left.</p>` : '';
     return `<section class="screen"><h2>${st.room >= CFG().rooms ? 'The dungeon is behind you' : `Room ${st.room} done`}</h2>
       <p class="lede">${st.room >= CFG().rooms ? 'The tournament starts once everyone gets through room ' + CFG().rooms + '.' : `Room ${st.room + 1} starts as soon as everyone is ready. You can use bag items and look over your gear while you wait.`}</p>
       <ul class="wait-list">${rows}</ul>${skip}

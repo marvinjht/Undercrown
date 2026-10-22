@@ -361,8 +361,8 @@ window.G = window.G || {};
     if (i < 0) return '';
     if (item.kind === 'gear') {
       hero.bag.splice(i, 1);
-      const old = G.Hero.equip(hero, item);   // what you wore is sold automatically
-      if (old) { const g = sellPrice(old); hero.gold += g; return `Equipped ${item.name}, sold ${old.name} for ${g} gold.`; }
+      const olds = G.Hero.equipSwap(hero, item);   // what you wore is sold automatically (and any other artifact)
+      if (olds.length) { const g = olds.reduce((a, o) => a + sellPrice(o), 0); hero.gold += g; return `Equipped ${item.name}, sold ${olds.map(o => o.name).join(' and ')} for ${g} gold.`; }
       return `Equipped ${item.name}.`;
     }
     const c = G.CONSUMABLES[item.cid];
@@ -439,8 +439,7 @@ window.G = window.G || {};
   function take(hero, item) {
     if (item.kind === 'consumable') { hero.bag.push(item); return `took ${item.name}`; }
     if (item.kind === 'relic') { G.Hero.addRelic(hero, item); return `took the ${item.name} relic`; }
-    const old = G.Hero.equip(hero, item);
-    if (old) hero.gold += sellPrice(old);   // the old piece sells automatically
+    for (const old of G.Hero.equipSwap(hero, item)) hero.gold += sellPrice(old);   // the old piece (and any other artifact) sells automatically
     return `took ${item.name}`;
   }
 

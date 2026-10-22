@@ -385,18 +385,19 @@ window.G = window.G || {};
           d.burn = Math.max(d.burnUntil >= t ? d.burn : 0, b); d.burnUntil = Math.max(d.burnUntil, t + fx.boltBurn.secs + 0.01);
           push({ type: 'sear', src: f.id, tgt: d.id });
         }
-        // Exile: Banish knocks the target back and roots it (it can still attack, it just can't move)
-        // A Twincast repeat doesn't knock back again: it extends the root by its length instead (2 seconds in all)
-        if (sp.banish && recastSp && !(d.s.fx && d.s.fx.ccImmune)) {
-          const add = sp.banish.root;
-          d.rootUntil = d.rootUntil > t ? d.rootUntil + add : t + add;
-          push({ type: 'root', src: f.id, tgt: d.id, secs: Math.round((d.rootUntil - t) * 10) / 10, delay: 0, extend: true });
-        } else if (sp.banish && !ccBlocked(d)) {
-          const dir = Math.sign(d.pos - f.pos) || (f.side === 'a' ? 1 : -1);
-          const before = d.pos, wall = displace(d, d.pos + dir * sp.banish.push);
-          const travel = Math.abs((d.dashTo != null ? d.dashTo : before) - before) / 10;   // knockbacks move 10 steps a second
-          d.rootUntil = Math.max(d.rootUntil, t + travel + sp.banish.root);
-          push({ type: 'root', src: f.id, tgt: d.id, secs: sp.banish.root, delay: travel, slam: wall });
+        // Exile: the first Banish marks the target; the next one (at most once per cooldown) knocks it back and roots it.
+        // A rooted enemy can't move but can still attack if it's in range. A Twincast repeat only deals damage.
+        if (sp.banish && !recastSp) {
+          const B = sp.banish;
+          if (d.exileMark !== f) { d.exileMark = f; push({ type: 'exilemark', src: f.id, tgt: d.id }); }
+          else if (t >= (f.banishReady || 0) && !ccBlocked(d)) {
+            d.exileMark = null; f.banishReady = t + (B.cooldown || 0);
+            const dir = Math.sign(d.pos - f.pos) || (f.side === 'a' ? 1 : -1);
+            const before = d.pos, wall = displace(d, d.pos + dir * B.push);
+            const travel = Math.abs((d.dashTo != null ? d.dashTo : before) - before) / 10;   // knockbacks move 10 steps a second
+            d.rootUntil = Math.max(d.rootUntil, t + travel + B.root);
+            push({ type: 'root', src: f.id, tgt: d.id, secs: B.root, delay: travel, slam: wall });
+          }
         }
       }
       if (recastSp) return;
@@ -485,6 +486,7 @@ window.G = window.G || {};
       else if (att.firstCrits > 0) { crit = true; att.firstCrits--; }
       else if (counter && fx.counterCrit) crit = true;
       else crit = roll(att.s.crit);
+      if (fx.noCrit) crit = false;   // Hummingbird: never crits (not even Cheap Shots)
       // Clear-eyed (legendary helmet): some crits land as normal hits
       if (crit && dfx.critGuard && roll(dfx.critGuard)) { crit = false; push({ type: 'critguard', src: def.id }); }
       let raw = att.s.dmg + att.dmgBonus + att.hurtBonus + att.nextHitBonus;

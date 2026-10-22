@@ -338,7 +338,7 @@ window.G = window.G || {};
       if (!S || S.done || S.room !== H.room) return;
       const humans = this.humansIn(), waiting = humans.filter(p => !H.ready[p.slot]);
       const votes = humans.filter(p => S.votes[p.slot] && H.ready[p.slot]).length;
-      if (waiting.length === 1 && votes >= humans.length - 1 && votes > 0) {
+      if (humans.length >= 3 && waiting.length === 1 && votes >= humans.length - 1 && votes > 0) {   // never with only 2 players left
         S.done = true;
         this.cast({ t: 'skip', room: H.room, slot: waiting[0].slot });
         this.hostReadyInfo();
