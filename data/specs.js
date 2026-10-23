@@ -83,9 +83,9 @@ G.SPEC_TREES = {
     t20: { id: 'midas', name: 'Midas', fx: { midas: { per: 25, dmg: 4, hp: 5 } }, desc: '+4 Damage and +5 Health for every 25 gold you hold' },
   },
   duelist: {
-    t10: [{ id: 'riposte', name: 'Riposte', fx: { counterDmg: 8 }, desc: 'Counters deal +8' },
+    t10: [{ id: 'riposte', name: 'Riposte', fx: { parryShield: 20 }, desc: 'Each parry gives you Shield 20' },
           { id: 'footwork', name: 'Footwork', fx: { parryEvery: 3 }, desc: 'Parry every 3rd attack instead of every 4th' }],
-    t15: [{ id: 'read', name: 'Read the Fight', fx: { parryDodge: 2 }, desc: 'Each parry gives +2 Dodge, up to +10' },
+    t15: [{ id: 'read', name: 'Read the Fight', fx: { parrySlow: { spd: 5, max: 15 } }, desc: 'Each parry lowers the attacker’s Attack Speed by 5 for the fight, up to 15' },
           { id: 'disarm', name: 'Disarm', fx: { parryStun: 1 }, desc: 'Parries stun the attacker for 1 second' }],
     t20: { id: 'blademaster', name: 'Blade Master', fx: { counterCrit: 1 }, desc: 'Your counters always crit' },
   },

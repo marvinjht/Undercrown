@@ -589,10 +589,10 @@ window.G = window.G || {};
     duelPair(w, heroes) {
       heroes = heroes || this.heroes;
       const A = heroes[w.a];
-      const a = { hero: A, hp: A.hp };
+      const a = { hero: A, hp: G.Hero.maxHp(A) };   // duels are fought at full health
       let b;
       if (w.ghostOf != null) b = G.Tournament.ghostOf(heroes[w.ghostOf]);
-      else { const B = heroes[w.b]; b = { hero: B, hp: B.hp }; }
+      else { const B = heroes[w.b]; b = { hero: B, hp: G.Hero.maxHp(B) }; }
       return { a, b, ghost: w.ghostOf != null, seed: w.seed };
     },
     onDuels(m) {

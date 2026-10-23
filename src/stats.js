@@ -147,6 +147,7 @@ window.G = window.G || {};
     if (opts.buffs && hero.buffs) {
       const b = hero.buffs;
       s.armor += b.armor || 0; s.ward += b.ward || 0; s.dmg += b.dmg || 0; s.spd += b.spd || 0;
+      s.maxHp += b.hp || 0;   // Bloodrage: max health carried from the last tournament win
       if (b.fullMana) s.startMana = CB.manaMax;
     }
 

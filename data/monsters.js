@@ -47,7 +47,7 @@ G.BOSSES = {
     desc: 'Every hit Chills you. At 3 Chill you freeze solid for 2 seconds (at most once every 6). Stubborn: the freeze ignores the stun limit. Kill it fast or dodge.' },
   wraithKing: { id: 'wraithKing', name: 'The Wraith King', hp: 0.75, hit: 0.8, spd: 8, ward: 4, early: { hp: 0.75, hit: 0.7 },
     minions: { count: 3, id: 'ghoul', name: 'Ghoul', hp: 0.1, hit: 0.16, spd: 10 },
-    fx: { raise: { count: 3, manaGain: 14 } },
+    fx: { raise: { count: 3, manaGain: 16 } },   // 16: raises about 1 second sooner than 14
     desc: 'Fights with 3 ghouls. When his bar fills he raises 3 more. Area damage and burst help.' },
   alphaWolf: { id: 'alphaWolf', name: 'The Alpha Wolf', hp: 0.7, hit: 0.85, spd: 10, bleed: 2, early: { hp: 0.8, hit: 0.75 },
     minions: { count: 3, id: 'wolf', name: 'Shadow Wolf', hp: 0.2, hit: 0.24, spd: 12, fx: { packFade: { every: 6, secs: 3 } } },

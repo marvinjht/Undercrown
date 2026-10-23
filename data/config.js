@@ -2,7 +2,7 @@
 // All stats are flat whole numbers. Chance stats (Crit, Dodge, Stun) mean "out of 100".
 window.G = window.G || {};
 
-G.VERSION = '0.36';   // players in one room must all run the same version
+G.VERSION = '0.37';   // players in one room must all run the same version
 
 G.CONFIG = {
   // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
@@ -35,7 +35,7 @@ G.CONFIG = {
   shrineCost: 16,          // mystery: blood shrine
   arenaHealPct: 0.30,      // heal walking into the tournament (shown as a number)
 
-  poison: { venomStacks: 10, purifyHeal: 10, fightCap: 25 },   // fightCap: most poison you can pick up in one fight
+  poison: { venomStacks: 10, purifyHeal: 10, purifyCleanHeal: 20, fightCap: 25 },   // purifyCleanHeal: the spring's heal when you weren't poisoned;   // fightCap: most poison you can pick up in one fight
 
   phoenix: { burst: 100, burn: 20, burnSeconds: 5, selfBurn: 1, standUp: 25, eggSeconds: 5, eggHpPct: 50 },   // explode, burn them, hide in an egg
   stoneHp: 25,
@@ -122,7 +122,7 @@ G.CONFIG = {
 
   monster: {
     hpBase: 56, hpGrowth: 1.097,
-    hitBase: 7, hitGrowth: 1.082,
+    hitBase: 7, hitGrowth: 1.085,
     elite: { hp: 1.35, hit: 1.15, packExtra: 1 },
     boss:  { hp: 1.6, hit: 1.1 },
     swarmCopy: { hp: 0.35, hit: 0.5 },

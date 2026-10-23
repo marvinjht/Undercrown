@@ -23,7 +23,7 @@ G.AFFIXES = {
   crit:    { base: 6,  suffix: 'of Precision' },
   critDmg: { base: 8,  suffix: 'of Ruin' },
   spd:     { base: 2,  suffix: 'of Haste' },
-  dodge:   { base: 4,  suffix: 'of the Fox' },
+  dodge:   { base: 2,  suffix: 'of the Fox' },
   leech:   { base: 2,  suffix: 'of the Leech', rareOnly: true, weaponOnly: true },
 };
 
@@ -32,7 +32,7 @@ G.TRADEOFFS = {
   heavy:      { name: 'Heavy',      give: { armor: 6 }, cost: { spd: 2 } },
   reckless:   { name: 'Reckless',   give: { dmg: 6 },   cost: { armor: 4 } },
   glass:      { name: 'Glass',      give: { crit: 10 }, cost: { hp: 16 } },
-  nimble:     { name: 'Nimble',     give: { dodge: 6 }, cost: { armor: 2 } },
+  nimble:     { name: 'Nimble',     give: { dodge: 4 }, cost: { armor: 2 } },
   spellguard: { name: 'Spellguard', give: { ward: 6 },  cost: { dmg: 2 } },
   vampiric:   { name: 'Vampiric',   give: { leech: 2 }, cost: { hp: 20 } },
   frenzied:   { name: 'Frenzied',   give: { spd: 4 },   cost: { ward: 4 } },
@@ -71,7 +71,7 @@ G.LEGEND_AFFIXES = {
     shortbow:    { name: 'Volley',     text: 'Every 3rd shot fires a second arrow for half damage', fx: { volley: 3 } },
     longbow:     { name: 'Deadeye',    text: 'Your first shot each fight crits', fx: { firstCrits: 1 } },
     wandFocus:   { name: 'Searing',    text: 'Firebolt burns the target for 5% of its max Health a second for 3 seconds', fx: { boltBurn: { pct: 5, secs: 3 } } },
-    staff:       { name: 'Twincast',   text: 'Your spells cast twice; the second cast deals half damage', fx: { doubleCast: 1 } },
+    staff:       { name: 'Overcharge', text: 'Your spells deal 30% more damage', fx: { spellAmp: 30 } },
   },
 };
 // The legendary affix an item carries (Legendary and Artifact items only)

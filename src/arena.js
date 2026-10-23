@@ -89,6 +89,36 @@ window.G = window.G || {};
       return f;
     }
 
+    // Rebirth fire: flames licking up off a burning fighter
+    flames(f) {
+      for (let i = 0; i < 5; i++) {
+        const x = f.cont.x + (i - 2) * 7 + (Math.random() * 4 - 2), y = f.cont.y + 14;
+        const fl = this.track(this.add.triangle(x, y, 0, 12, 6, 12, 3, 0, i % 2 ? 0xff7a2c : 0xffc46b).setAlpha(0.9));
+        this.tweens.add({ targets: fl, y: y - 30 - Math.random() * 14, scaleX: 0.4, alpha: 0, duration: (520 + i * 60) / this.speed, delay: i * 50 / this.speed, onComplete: () => fl.destroy() });
+      }
+    }
+    // Phoenix Heart: the hero curls up into an egg, then hatches back out (or cracks for good)
+    layEgg(f) {
+      for (const c of f.cont.list) c.setVisible(false);
+      const egg = this.add.image(0, 6, 'fx_egg').setScale(0.2);
+      f.cont.add(egg); f.eggImg = egg;
+      this.tweens.add({ targets: egg, scale: 1, duration: 260 / this.speed, ease: 'Back.easeOut' });
+      this.tweens.add({ targets: egg, angle: { from: -6, to: 6 }, duration: 380, yoyo: true, repeat: -1, delay: 300 / this.speed });
+    }
+    hatchEgg(f) {
+      const egg = f.eggImg; f.eggImg = null;
+      if (egg) {
+        for (let i = 0; i < 6; i++) {
+          const sh = this.track(this.add.image(f.cont.x, f.cont.y + 6, 'fx_shell').setAngle(i * 60));
+          const ang = -Math.PI / 2 + (i - 2.5) * 0.5;
+          this.tweens.add({ targets: sh, x: sh.x + Math.cos(ang) * 46, y: sh.y + Math.sin(ang) * 30 + 30, angle: sh.angle + 200, alpha: 0, duration: 600 / this.speed, onComplete: () => sh.destroy() });
+        }
+        this.tweens.killTweensOf(egg); egg.destroy();
+      }
+      for (const c of f.cont.list) c.setVisible(true);
+      f.cont.setScale(Math.sign(f.cont.scaleX || 1) * f.sc, f.sc);
+    }
+
     begin(cfg) {
       for (const o of this.objs) o.destroy();
       this.objs = []; this.fxg = null; this.ring = null;
@@ -263,13 +293,13 @@ window.G = window.G || {};
           break;
         case 'revive': if (att) {
           this.float(att, e.hatch ? 'HATCHED' : 'REBORN', '#ff8a4c', 20); att.cont.setAlpha(1); att.cont.angle = 0; att.dead = false;
-          if (att.egg) { att.egg = false; att.tint = att.tint0; this.tweens.add({ targets: att.cont, scaleY: att.sc, duration: 200 / this.speed }); }
+          if (att.egg) { att.egg = false; att.tint = att.tint0; this.hatchEgg(att); }
           if (att.tint) att.body.setTint(att.tint); else att.body.clearTint();
         } break;
         case 'egg': if (att) {
-          att.egg = true; att.tint0 = att.tint; att.tint = 0xffc070; att.body.setTint(0xffc070);
+          att.egg = true; att.tint0 = att.tint;
           this.float(att, 'EGG ' + e.secs + 's', '#ffc070', 18);
-          this.tweens.add({ targets: att.cont, scaleY: att.sc * 0.8, duration: 200 / this.speed });
+          this.layEgg(att);
         } break;
         case 'poison': if (def) this.float(def, '+' + e.amount + ' POISON', '#8fdc5a', 12, -22); break;
         case 'chill': if (def) this.float(def, 'CHILL ' + e.stacks, '#a8dcff', 12); break;
@@ -281,7 +311,7 @@ window.G = window.G || {};
           this.tweens.add({ targets: ring, scale: 3.2, alpha: 0, duration: 650 / this.speed, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
           this.cameras.main.shake(220 / this.speed, 0.008);
         } break;
-        case 'burn': if (def) this.float(def, String(e.amount), e.poison ? '#8fdc5a' : '#ff9a3c', 13, -18); break;
+        case 'burn': if (def) { this.float(def, String(e.amount), e.poison ? '#8fdc5a' : '#ff9a3c', 13, -18); if (e.true) this.flames(def); } break;   // Rebirth fire: flames on the burning enemy
         case 'mark': if (def) { this.float(def, 'MARKED', '#c06cff', 15); def.body.setTint(0xc8a0ff); this.time.delayedCall(3000 / this.speed, () => { if (def.body.active && !def.dead) { if (def.tint) def.body.setTint(def.tint); else def.body.clearTint(); } }); } break;
         case 'bash': if (def) { this.float(def, 'SHIELD BASH', '#f0d27a', 14); this.cameras.main.shake(80 / this.speed, 0.003); } break;
         case 'palburst': if (att) { this.float(att, 'HOLY BURST', '#f0d27a', 16); const r = this.track(this.add.image(att.cont.x, att.cont.y, 'fx_ring').setTint(0xf0d27a).setScale(0.3)); this.tweens.add({ targets: r, scale: 2.4, alpha: 0, duration: 520 / this.speed, onComplete: () => r.destroy() }); } break;
@@ -291,6 +321,7 @@ window.G = window.G || {};
         case 'stealth_on': if (att) { this.tweens.add({ targets: att.cont, alpha: 0.22, duration: 160 / this.speed }); if (e.label) this.float(att, e.label === 'Night Lord' ? 'NIGHT LORD' : e.label === 'Fade' ? 'FADE' : 'VANISH', '#b9a7d9', 14); } break;
         case 'stealth_off': if (att) this.tweens.add({ targets: att.cont, alpha: 1, duration: 160 / this.speed }); break;
         case 'death':
+          if (def && def.eggImg) { def.dead = true; def.eggImg.setTint(0x555555); this.tweens.add({ targets: def.cont, alpha: 0.35, duration: 450 / this.speed }); break; }
           if (def) { def.dead = true; def.body.setTint(0x555555); this.tweens.add({ targets: def.cont, alpha: 0.35, angle: def.dir * 80, duration: 450 / this.speed }); }
           break;
         case 'timeout': { const a = F.a; if (a) this.float(a, 'TIME', '#ece3d6', 16); break; }

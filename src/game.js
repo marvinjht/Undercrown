@@ -61,7 +61,10 @@ window.G = window.G || {};
       const turnSlot = m.order[m.turn];
       const picks = {};
       for (const k in m.picks) picks['h' + k] = m.picks[k];
-      s.roundKind = 'shop'; s.phase = 'shop'; s.roundEnds = 0;
+      // A level-up pick (or the heart gem) comes first; the Plunder waits for you
+      const picking = ['spec', 'tree', 'gem'].includes(s.phase);
+      if (picking) s.shopPending = true;
+      else { s.roundKind = 'shop'; s.phase = 'shop'; s.roundEnds = 0; }
       s.shop = { table: m.table, order: m.order.map(sl => 'h' + sl), turn: m.turn, picks, mp: true, tour: m.tour || 0,
         reviewUntil: t + m.reviewMs, reviewDone: m.reviewMs <= 0, reviewSecs: m.tour ? S.tourReviewSeconds : S.reviewSeconds,
         turnStart: m.turnMs ? t - (S.turnSeconds * 1000 - m.turnMs) : t, msg: s.shopMsg || null, turnSlot };
@@ -118,7 +121,7 @@ window.G = window.G || {};
         break;
       }
       if (phase === 'fight') {
-        if (s.fanfareRound !== round.n) { s.fanfareRound = round.n; if (G.Sound) G.Sound.play('fanfare', 1); }
+        if (!s.fanfarePlayed) { s.fanfarePlayed = true; s.fanfareAt = performance.now(); if (G.Sound) G.Sound.play('fanfare', 1); }   // once, when the tournament starts
         const mine = round.pairs.find(p => !p.result && ((p.a && p.a.hero === s.player) || (!p.ghost && p.b && p.b.hero === s.player)));
         const meE = T.entrants.find(e => e.hero === s.player);
         if (mine && meE && !meE.out) { this.mpTourBattle(mine); return; }
@@ -288,24 +291,35 @@ window.G = window.G || {};
       }
       this.nextStep();
     },
-    // Walks through whatever comes after a room: spec/tree picks, heart gem, duel, then the next room
-    nextStep() {
+    // A pending level-up pick (spec at level 5, skill tree at 10/15/20). Returns true if it opened one.
+    showPick() {
       const s = this.s, p = s.player;
-      if (!p.alive) { this.playerOut(s.notice || `You ran out of hearts in room ${s.room}.`); return; }
-      // The heart gem is part of the first boss round
-      if (s.room === CFG().gemRoom && !p.gem && !s.gemDone) {
-        s.phase = 'gem'; s.gemOptions = s.gemOptions || G.Dungeon.gemOptions(p, s.rng);
-        this.startTimer(CFG().roundSeconds); render(); return;
-      }
       const pick = G.Hero.pendingPick(p);
       if (pick && G.Sound) G.Sound.play('levelup');
       if (pick && pick.kind === 'spec') {
         s.phase = 'spec'; s.specOptions = s.specOptions && s.specFor === p.level ? s.specOptions : G.Dungeon.specOptions(p, s.rng); s.specFor = p.level;
-        this.startTimer(CFG().roundSeconds); render(); return;
+        this.startTimer(CFG().roundSeconds); render(); return true;
       }
       if (pick && pick.kind === 'tree') {
         s.phase = 'tree'; s.treeLevel = pick.level;
+        this.startTimer(CFG().roundSeconds); render(); return true;
+      }
+      return false;
+    },
+    // Walks through whatever comes after a room: spec/tree picks, heart gem, duel, then the next room
+    nextStep() {
+      const s = this.s, p = s.player;
+      if (!p.alive) { this.playerOut(s.notice || `You ran out of hearts in room ${s.room}.`); return; }
+      if (this.showPick()) return;
+      // The heart gem is part of the first boss round (after any level-up pick, which comes first)
+      if (s.room === CFG().gemRoom && !p.gem && !s.gemDone) {
+        s.phase = 'gem'; s.gemOptions = s.gemOptions || G.Dungeon.gemOptions(p, s.rng);
         this.startTimer(CFG().roundSeconds); render(); return;
+      }
+      // A Plunder that started while you were picking: back to it
+      if (s.shopPending) {
+        s.shopPending = false;
+        if (s.shop && !s.shopEnded) { s.phase = 'shop'; s.roundEnds = 0; render(); return; }
       }
       // Multiplayer: you're done with this room; the host starts the next one when everyone is
       if (this.mp) { s.phase = 'waiting'; s.roundEnds = 0; G.MP.sendReady(); render(); return; }
@@ -341,7 +355,7 @@ window.G = window.G || {};
           s.phase = 'reward'; break;
         case 'purify': {
           const n = p.poison; p.poison = 0;
-          const h = G.Hero.heal(p, CFG().poison.purifyHeal);
+          const h = G.Hero.heal(p, n ? CFG().poison.purifyHeal : CFG().poison.purifyCleanHeal);   // not poisoned: a bigger heal
           this.completeRoom(n ? `The spring washes away ${n} poison${h ? ` and heals ${h}` : ''}.` : `Clean water${h ? `: +${h} health` : ''}. You weren't poisoned.`);
           return;
         }
@@ -507,7 +521,8 @@ window.G = window.G || {};
       if (this.mp) {
         if (s.phase === 'duelWait') return lock('Wait for your duel pairing.');
         if (s.phase === 'duelIntro' && s.duel && s.duel.goSent) return lock('You’ve gone in. The fight is about to start.');
-        if (tourNow && (s.tourPhase === 'fight' || (this.timeLeft() != null && this.timeLeft() < 1))) return lock('Wait for the break between fights.');
+        const dyeNow = it.kind !== 'gear' && G.CONSUMABLES[it.cid] && G.CONSUMABLES[it.cid].dye;   // Turncoat's Dye works any time you're not in a fight
+        if (tourNow && !dyeNow && (s.tourPhase === 'fight' || (this.timeLeft() != null && this.timeLeft() < 1))) return lock('Wait for the break between fights.');
       }
       const me = tourNow ? s.tour.entrants.find(e => e.hero === p) : null;
       if (tourNow && (!me || me.out)) return;
@@ -535,11 +550,9 @@ window.G = window.G || {};
         s.bagMsg = `${c.name}: +${a} health for your next fight.`;
       } else s.bagMsg = G.Dungeon.useItem(p, it);
       if (me && this.mp) G.MP.sendTourUse(me.hp);
-      if (!this.mp && s.phase === 'duelIntro' && s.duel && s.duel.mine) {
-        const side = s.duel.mine.a.hero === p ? s.duel.mine.a : s.duel.mine.b;
-        if (side && !side.ghost) side.hp = p.hp;   // a potion on the duel card counts
-      }
       if (s.phase === 'doors') for (const d of s.doors) if (d.monster && d.type !== 'wager') d.danger = G.Dungeon.danger(p, d, s.room);   // a wager's odds stay hidden
+      // A Tome during a Plunder that levels you up: the spec or skill-tree pick comes first, then back to the Plunder
+      if (s.phase === 'shop' && s.shop && !s.shop.tour && G.Hero.pendingPick(p) && this.showPick()) { s.shopPending = true; return; }
       render();
     },
     // Selling replaces discarding: anything in the bag can be turned into gold
@@ -896,9 +909,8 @@ window.G = window.G || {};
       const s = this.s, T = s.tour;
       s.notice = null;
       const startRound = T.rounds.length;
-      // A trumpet call when a new round begins
-      const rn = G.Tournament.currentRound(T).n;
-      if (s.fanfareRound !== rn) { s.fanfareRound = rn; if (G.Sound) G.Sound.play('fanfare', 1); }
+      // A trumpet call when the tournament begins
+      if (!s.fanfarePlayed) { s.fanfarePlayed = true; s.fanfareAt = performance.now(); if (G.Sound) G.Sound.play('fanfare', 1); }   // once, when the tournament starts
       let m;
       while ((m = G.Tournament.nextMatch(T)) && T.rounds.length === startRound) {
         const mine = m.a.hero.isPlayer || (!m.ghost && m.b.hero.isPlayer);
@@ -925,7 +937,7 @@ window.G = window.G || {};
           s.battle.done = true;
           // Resolve from the match's own orientation
           const fixed = flip ? { ...res, winner: res.winner === 'a' ? 'b' : 'a', aHp: res.bHp, bHp: res.aHp,
-            bloodrage: res.bloodrage ? { a: res.bloodrage.b, b: res.bloodrage.a } : null } : res;
+            bloodrage: res.bloodrage ? { a: res.bloodrage.b, b: res.bloodrage.a } : null, rageMax: res.rageMax ? { a: res.rageMax.b, b: res.rageMax.a } : null } : res;
           const won = res.winner === 'a' && !res.draw;
           G.Tournament.resolve(T, m, fixed);
           const me = T.entrants.find(e => e.hero.isPlayer);

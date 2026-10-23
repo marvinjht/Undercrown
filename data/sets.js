@@ -12,7 +12,7 @@ G.CLASSES = {
     name: 'Warrior', tint: 0xd9534a, color: '#e0645a',
     two:  { stats: { armor: 2, hp: 10 }, desc: '+2 Armor, +10 Health' },
     four: { stats: { armor: 6, hp: 24 }, secondWind: 20, desc: '+6 Armor, +24 Health, and the first time you drop below half health in a fight you heal 20' },
-    six:  { name: 'Bloodrage', bloodrage: 20, desc: 'Every kill heals you 20. In the tournament, the heal carries into your next match' },
+    six:  { name: 'Bloodrage', bloodrage: { heal: 30, max: 10, rivalMax: 30 }, desc: 'Every kill gives +10 max Health (+30 for killing a rival) and heals you 30. In the tournament, both carry into your next match' },
   },
   mage: {
     name: 'Mage', tint: 0x9b7bff, color: '#a996ff',

@@ -213,6 +213,14 @@ window.G = window.G || {};
     for (const k in MONSTER_DRAW) { const big = !!G.BOSSES[k]; bake(scene, 'monster_' + k, big ? 96 : 64, big ? 96 : 64, MONSTER_DRAW[k]); }
     bake(scene, 'proj_arrow', 32, 8, g => { g.lineStyle(2, 0xe8d8b8).lineBetween(0, 4, 26, 4); g.fillStyle(0xdfe5ea).fillTriangle(24, 0, 24, 8, 32, 4); });
     bake(scene, 'proj_bolt', 20, 20, g => { g.fillStyle(0xffffff, 0.35).fillCircle(10, 10, 10); g.fillStyle(0xffffff).fillCircle(10, 10, 5); });
+    bake(scene, 'fx_egg', 48, 60, g => {   // Phoenix egg
+      g.fillStyle(0x3a2216, 0.35).fillEllipse(24, 56, 34, 7);
+      g.fillStyle(0xf3dcb0).fillEllipse(24, 32, 36, 48);
+      g.fillStyle(0xfff3da, 0.8).fillEllipse(17, 22, 10, 16);
+      g.fillStyle(0xff8a3c).fillCircle(30, 20, 3).fillCircle(15, 38, 2.5).fillCircle(31, 41, 3.5).fillCircle(22, 49, 2).fillCircle(36, 31, 2);
+      g.lineStyle(2, 0xd2662a).strokeEllipse(24, 32, 36, 48);
+    });
+    bake(scene, 'fx_shell', 12, 10, g => { g.fillStyle(0xf3dcb0).fillTriangle(0, 10, 6, 0, 12, 10); g.lineStyle(1, 0xd2662a).strokeTriangle(0, 10, 6, 0, 12, 10); });
     bake(scene, 'fx_ring', 96, 96, g => { g.lineStyle(6, 0xffffff, 0.9).strokeCircle(48, 48, 40); g.fillStyle(0xffffff, 0.15).fillCircle(48, 48, 40); });
   }
 

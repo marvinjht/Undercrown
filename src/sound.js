@@ -101,6 +101,14 @@ window.G = window.G || {};
       noise({ type: 'lowpass', f0: 300, dur: 0.5, vol: 0.25, delay: 1.13 });
       tone({ type: 'sine', f0: 70, f1: 45, dur: 0.6, vol: 0.4, delay: 1.13 });
     },
+    // Player fight: a deep, ominous gong
+    gong: () => {
+      const f = 72;
+      [[1, 2.8, 0.55], [2.76, 2.0, 0.16], [5.4, 1.3, 0.08], [8.93, 0.8, 0.04], [1.5, 2.4, 0.12]].forEach(([m, d, v]) => tone({ type: 'sine', f0: f * m, f1: f * m * 0.985, dur: d, vol: v, a: 0.004 }));
+      noise({ type: 'lowpass', f0: 900, f1: 120, dur: 0.6, vol: 0.35, a: 0.002 });
+      tone({ type: 'sine', f0: 48, f1: 30, dur: 1.6, vol: 0.5, a: 0.01 });
+      tone({ type: 'sine', f0: f * 2.76, f1: f * 2.7, dur: 1.8, vol: 0.05, delay: 0.25 });
+    },
     heart:  () => { tone({ type: 'sine', f0: 160, f1: 60, dur: 0.5, vol: 0.4 }); tone({ type: 'sine', f0: 120, f1: 50, dur: 0.5, vol: 0.3, delay: 0.25 }); },
   };
 

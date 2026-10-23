@@ -66,11 +66,11 @@ window.G = window.G || {};
   }
 
   // ---------- Duels (rooms 10 and 20) ----------
-  // Fight at current health. The winner keeps the health they finish with; the loser loses a heart and comes
-  // back at full health. Past the time limit, both lose a heart.
+  // Both fight at full health. The winner goes back to the health they had before the duel; the loser loses a
+  // heart and comes back at full health. Past the time limit, both lose a heart.
   const Duel = {
     pairs(heroes, rng) {
-      const list = heroes.filter(h => h.alive).map(h => ({ hero: h, hp: h.hp }));
+      const list = heroes.filter(h => h.alive).map(h => ({ hero: h, hp: G.Hero.maxHp(h) }));   // duels are fought at full health
       return makePairs(list, rng, e => e.hero.opponents[e.hero.opponents.length - 1]);
     },
     simulate(pair, rng) { return pvp(pair.a, pair.b, rng, pair.seed); },
@@ -86,8 +86,8 @@ window.G = window.G || {};
         if (e.ghost) continue;
         e.hero.buffs = {};   // elixirs last one fight
         const h = e.hero, won = i === winnerSide && !res.draw;
-        // You keep the health you finish with (only the tournament heals you to full); the loser comes back at full
-        h.hp = Math.max(1, Math.min(e.hp, i === 0 ? res.aHp : res.bHp));
+        // The duel is fought at full health; afterwards you're back at the health you had before it
+        // (h.hp was never touched by the fight). The loser comes back at full health below.
         if (!pair.ghost) h.opponents.push(sides[1 - i].hero.id);
         G.Hero.gainXp(h, won ? X.duelWin : X.duelLoss);
         if (won && !pair.ghost) h.gold += CFG().duel.winGold;
@@ -198,8 +198,16 @@ window.G = window.G || {};
       if (i === wi) {
         e.hp = Math.max(1, hpOf(i));
         // Warrior 6 (Bloodrage): the kill heal carries into the next fight
+        // Warrior 6 (Bloodrage): the kill's max health and heal carry into the next fight
         const rage = res.bloodrage ? res.bloodrage[i === 0 ? 'a' : 'b'] : 0;
-        if (rage) { const add = e.hero.gem === 'gaia' ? 0 : e.hero.gem === 'stone' ? 1 : rage; e.hp = Math.min(e.maxHp, e.hp + add); m.rageHeal = add; }
+        const rmax = res.rageMax ? res.rageMax[i === 0 ? 'a' : 'b'] : 0;
+        if (rage || rmax) {
+          const stone = e.hero.gem === 'stone';
+          const more = stone ? 0 : rmax;   // Heart of Stone keeps its fixed health
+          if (more) e.hero.buffs = { ...(e.hero.buffs || {}), hp: more };
+          const add = e.hero.gem === 'gaia' ? 0 : stone ? 1 : rage + more;
+          e.hp = Math.min(e.maxHp + more, e.hp + add); m.rageHeal = add;
+        }
       } else {
         e.hero.hearts = Math.max(0, e.hero.hearts - 1);
         const opp = sides[1 - i];

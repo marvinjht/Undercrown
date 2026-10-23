@@ -89,7 +89,7 @@ window.G = window.G || {};
     }
     // The fight is between the main fighters: allies don't keep it going
     const mainB = () => fighters.filter(f => f.side === 'b' && f.alive && !f.ally);
-    const result = { revived: { a: false, b: false }, goldStolen: 0, bloodrage: { a: 0, b: 0 }, phoenixWin: null };
+    const result = { revived: { a: false, b: false }, goldStolen: 0, bloodrage: { a: 0, b: 0 }, rageMax: { a: 0, b: 0 }, phoenixWin: null };
     const POISON_CAP = (G.CONFIG.poison && G.CONFIG.poison.fightCap) || 50;
     const PVP = opts.pvp ? G.CONFIG.arena.damageMult : 1;   // duels and the tournament: half damage
     const pending = [];   // delayed actions (Echo recasts)
@@ -125,16 +125,21 @@ window.G = window.G || {};
     }
     const push = (e, ...fs) => { e.t = t; e.h = snap(...fs); events.push(e); };
     const foes = f => fighters.filter(x => x.alive && x.side !== f.side);
-    // Heroes go for the first enemy they can see (wolves that fade out are skipped while another is visible)
-    // Monsters go for the closest of you (your ghouls stand in front); you're the target when nothing else is near
+    // Everyone goes for the weakest enemy first: the lowest max health (at the start of the fight) it can see.
+    // Ties keep the old order: heroes take the first in line, monsters the closest.
+    const weakest = (list, f) => {
+      let best = null;
+      for (const x of list) {
+        if (!best || x.maxHp0 < best.maxHp0 || (x.maxHp0 === best.maxHp0 && f.side === 'b' && Math.abs(x.pos - f.pos) < Math.abs(best.pos - f.pos))) best = x;
+      }
+      return best;
+    };
     const target = f => {
       if (f.side === 'b') {
         if (!A.alive) return null;
-        let best = A, bd = Math.abs(A.pos - f.pos) - 0.01;
-        for (const x of fighters) if (x.ally && x.side === 'a' && x.alive && !x.invis) { const d = Math.abs(x.pos - f.pos); if (d < bd) { best = x; bd = d; } }
-        return best;
+        return weakest(fighters.filter(x => x.side === 'a' && x.alive && (x === A || (x.ally && !x.invis))), f);
       }
-      const fs = foes(f); return fs.find(x => !x.invis) || fs[0] || null;
+      const fs = foes(f); return weakest(fs.filter(x => !x.invis), f) || fs[0] || null;
     };
 
     // Grave Salt: the strongest one among your enemies cuts your healing by its %
@@ -259,6 +264,7 @@ window.G = window.G || {};
           return;
         }
         def.egg = true; def.eggUntil = t + (PX.eggSeconds || 5);
+        // The egg never attacks. The Rebirth fire it set on the enemies keeps burning (that's the explosion, not the egg).
         def.hp = Math.max(1, Math.floor(def.maxHp * (PX.eggHpPct || 50) / 100));
         def.shield = 0; def.mana = 0; def.nextAtk = Infinity; def.selfBurnNext = Infinity;
         def.invis = false; def.bleedUntil = -1; def.burnUntil = -1; def.dashTo = null;
@@ -276,8 +282,13 @@ window.G = window.G || {};
       // Warrior 6: Bloodrage
       const afx = att && att.s.fx;
       if (afx && afx.bloodrage && att.alive) {
-        result.bloodrage[att.side] += afx.bloodrage;
-        const h = heal(att, afx.bloodrage);
+        const BR = afx.bloodrage, rival = !!opts.pvp && !def.ally && !def.owner;
+        const gain = rival ? BR.rivalMax : BR.max;
+        att.maxHp += gain; att.hp += gain;   // the new max health arrives full
+        result.bloodrage[att.side] += BR.heal;
+        result.rageMax[att.side] += gain;
+        push({ type: 'heal', src: att.id, amount: gain, label: `+${gain} max` }, att);
+        const h = heal(att, BR.heal);
         if (h) push({ type: 'heal', src: att.id, amount: h, label: 'Bloodrage' }, att);
       }
       if (def.split) {
@@ -354,12 +365,13 @@ window.G = window.G || {};
         }
         return;
       }
+      if (!recastSp) f.mana = 0;   // the bar empties the moment the spell goes off
       const tgts = (sp.aoe ? foes(f) : [target(f)].filter(Boolean)).filter(x => !x.invis);
       push({ type: 'cast', src: f.id, name: sp.name + (recastSp ? ' (Twincast)' : ''), aoe: sp.aoe, tgts: tgts.map(x => x.id) }, f);
       const scrit = fx.spellCrit && roll(f.s.crit);
       for (const d of tgts) {
         if (!d.alive) continue;
-        const raw = Math.round(sp.dmg * (recastSp ? 0.5 : 1)) * (scrit ? 2 : 1);   // Twincast: the repeat deals half
+        const raw = Math.round(sp.dmg * (recastSp ? 0.5 : 1) * (1 + (fx.spellAmp || 0) / 100)) * (scrit ? 2 : 1);   // Overcharge: +30% spell damage
         const r = damage(d, Math.max(CB.minHit, raw - spellCut(f, d)), f);
         push({ type: 'spellhit', src: f.id, tgt: d.id, amount: r.dealt, absorbed: r.absorbed, name: sp.name, crit: !!scrit }, d);
         afterDamage(d, f);
@@ -439,6 +451,7 @@ window.G = window.G || {};
       if (att.sureHits > 0) att.sureHits--;
       if (def.invis && !fx.trueStrike) { push({ type: 'hidden', src: att.id, tgt: def.id }); return 0; }
       const dfx = fxOf(def);
+      const shieldUp = def.shield > 0;   // no poison gets through a Shield
       const smoke = def.smokeUntil >= t && dfx.smokeDodge ? dfx.smokeDodge : 0;
       if (!sure && !def.egg && roll(Math.min(CB.dodgeCap + smoke, (def.s.dodge || 0) + def.parryDodge + smoke))) {
         // Parrying (legendary saber): the dodge becomes a parry that strikes back, stuns and heals
@@ -470,7 +483,8 @@ window.G = window.G || {};
         def.incoming++;
         if (def.incoming % (dfx.parryEvery || DU.every) === 0) {
           push({ type: 'parry', src: att.id, tgt: def.id });
-          if (dfx.parryDodge) def.parryDodge = Math.min(10, def.parryDodge + dfx.parryDodge);
+          if (dfx.parrySlow && !(att.s.fx && att.s.fx.ccImmune)) { att.parrySlow = Math.min(dfx.parrySlow.max, (att.parrySlow || 0) + dfx.parrySlow.spd); push({ type: 'slowed', src: def.id, tgt: att.id }); }
+          if (dfx.parryShield) { def.shield += dfx.parryShield; push({ type: 'shieldup', src: def.id, amount: dfx.parryShield, label: 'Riposte' }, def); }
           if (dfx.parryStun) stun(def, att, 1);
           strike(def, att, true);
           return 0;
@@ -556,7 +570,7 @@ window.G = window.G || {};
       }
       // Snake bites: poison that stays after the fight (up to the cap per fight)
       // Shadow: Poisoned Blade. Every hit poisons (up to the cap); poison hurts during the fight too
-      if (fx.bladePoison && def.alive && !def.egg && !dfx.poisonImmune && def.fpoison < fx.bladePoison.cap) {
+      if (fx.bladePoison && def.alive && !def.egg && !shieldUp && !dfx.poisonImmune && def.fpoison < fx.bladePoison.cap) {
         def.fpoison = Math.min(fx.bladePoison.cap, def.fpoison + 1);
         if (def.nextPoison === Infinity) def.nextPoison = t + 2;
         if (opts.pvp) def.bladePoison = def.fpoison;   // a duel's poison stays with the loser and winner alike
@@ -569,7 +583,7 @@ window.G = window.G || {};
         if (!att.markUsed && def.alive) { att.markUsed = true; def.mark = { by: att, dmg: 0, until: t + 3 }; push({ type: 'mark', src: att.id, tgt: def.id }); }
       }
       // Snakes: only critical bites poison
-      if (att.s.poison && crit && def.alive && def === A && !dfx.poisonImmune && def.poisonGain < POISON_CAP) {
+      if (att.s.poison && crit && def.alive && def === A && !shieldUp && !dfx.poisonImmune && def.poisonGain < POISON_CAP) {
         const add = Math.min(att.s.poison, POISON_CAP - def.poisonGain);
         def.poisonGain += add;
         push({ type: 'poison', src: att.id, tgt: def.id, amount: add, total: def.poisonGain });
@@ -704,6 +718,7 @@ window.G = window.G || {};
         if (!tg) continue;
         const d = Math.abs(tg.pos - f.pos);
         if (f.rootUntil > t) continue;   // Exile's Banish: rooted fighters can't walk (they can still attack in range)
+        if (tg.dashTo != null && f.s.fx && f.s.fx.pull) continue;   // Guillotine: wait for the pulled enemy to land instead of walking into it
         if (d > f.range + 1e-6) {
           const step = Math.min((CB.moveSpeed + ((f.s.fx && f.s.fx.moveBonus) || 0)) * CB.dt, d - f.range);   // Swift (legendary boots)
           f.pos += tg.pos > f.pos ? step : -step;
@@ -748,7 +763,7 @@ window.G = window.G || {};
         // Poison in a fight (Poisoned Blade): its stacks as damage every 2 seconds
         if (f.fpoison > 0 && t >= f.nextPoison) {
           f.nextPoison = t + 2;
-          const r = damage(f, f.fpoison, null);
+          const r = damage(f, f.s.gem === 'stone' ? 1 : f.fpoison, null);   // Heart of Stone: poison only ever deals 1
           push({ type: 'burn', tgt: f.id, amount: r.dealt, poison: true }, f);
           afterDamage(f, null);
           if (!f.alive) continue;
@@ -772,7 +787,7 @@ window.G = window.G || {};
           if (bt !== f.beamTarget) { f.beamTarget = bt; f.beamSec = 0; }   // a new target starts the ramp over
           f.beamSec++;
           const tg = target(f);
-          if (tg && !tg.invis) { const B = ffx.beam; const d = Math.min(B.cap, B.start + B.step * (f.beamSec - 1)); push({ type: 'beam', src: f.id, tgt: tg.id, power: d }); fxHit(f, tg, d, 'Heartlight'); }
+          if (tg && !tg.invis) { const B = ffx.beam; const d = Math.round(Math.min(B.cap, B.start + B.step * (f.beamSec - 1))); push({ type: 'beam', src: f.id, tgt: tg.id, power: d }); fxHit(f, tg, d, 'Heartlight'); }
         }
         // Quakestep: stomp every few seconds
         if (t >= f.nextStomp) {
@@ -865,6 +880,7 @@ window.G = window.G || {};
         if (fx.dodgeHaste) { f.haste = f.haste.filter(x => x > t); spd += f.haste.length * fx.dodgeHaste.spd; }
         spd += f.hitStacks;   // Relentless: counts past the Attack Speed cap
         if (f.slowUntil > t) spd = Math.max(CB.minSpd, spd - f.slowSpd);   // Dirty Fighting
+        if (f.parrySlow) spd = Math.max(CB.minSpd, spd - f.parrySlow);   // Read the Fight (Duelist)
         if (f.frenzyUntil >= t) spd = (spd - f.s.spd + (f.s.spdUncapped || f.s.spd)) * 2;   // Hummingbird: ignores the Attack Speed cap while active
         if (f.sunderUntil >= t && f.sunderFx) spd *= 1 - f.sunderFx.slow;
         if (f.mired) spd *= 1 - f.mired * (f.mirePct || 8) / 100;   // Mire Beast
@@ -900,7 +916,7 @@ window.G = window.G || {};
     return {
       events, tracks, fighters: meta, winner, timeout, duration: t,
       aHp: Math.max(0, A.hp), bHp: B0 ? Math.max(0, B0.hp) : 0,
-      revived: result.revived, goldStolen: result.goldStolen, bloodrage: result.bloodrage, phoenixWin: result.phoenixWin, draw: !!result.draw,
+      revived: result.revived, goldStolen: result.goldStolen, bloodrage: result.bloodrage, rageMax: result.rageMax, phoenixWin: result.phoenixWin, draw: !!result.draw,
       poison: A.alive ? A.poisonGain : 0,
       bladePoison: { a: A.bladePoison || 0, b: B0 ? B0.bladePoison || 0 : 0 },
     };

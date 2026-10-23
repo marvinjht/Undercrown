@@ -821,7 +821,7 @@ window.G = window.G || {};
     const opp = m.a.hero && m.a.hero.isPlayer ? m.b : m.a;
     return `<section class="screen"><h2>Duel</h2>
       ${rivalBlock(opp)}
-      <p class="lede">Everyone still in is paired up. ${opp.ghost ? `You're the odd one out, so you face a ghost: a half-strength copy of ${esc(opp.of.name)}. Losing to it still costs a heart.` : `You face <b>${esc(opp.hero.name)}</b>. The loser loses a heart.`} You fight at your current health and keep what you finish with; the loser comes back at full. Past one minute, both lose a heart.</p>
+      <p class="lede">Everyone still in is paired up. ${opp.ghost ? `You're the odd one out, so you face a ghost: a half-strength copy of ${esc(opp.of.name)}. Losing to it still costs a heart.` : `You face <b>${esc(opp.hero.name)}</b>. The loser loses a heart.`} Both of you fight at full health. Win and you go back to the health you had before; the loser comes back at full. Past one minute, both lose a heart.</p>
       ${others ? `<div class="round"><h4>Other duels</h4><ul>${others}</ul></div>` : ''}
       <p class="hint">You can drink potions and elixirs now, before the fight. Not once it starts.</p>
       ${d.goSent ? `<p class="waiting">Locked in. The fight is starting…</p>`
@@ -1359,6 +1359,8 @@ window.G = window.G || {};
   function startBattleView(st) {
     const b = st.battle, slot = document.getElementById('arena-slot');
     const lines = [];
+    // Every player fight opens with a gong (after the tournament fanfare, the first time)
+    if ((b.duel || b.tour) && !b.gonged && G.Sound) { b.gonged = true; const late = b.tour && G.Game.s && G.Game.s.fanfareAt && performance.now() - G.Game.s.fanfareAt < 1500; setTimeout(() => G.Sound.play('gong', 1), late ? 1700 : 0); }
     G.Arena.onSpeed = n => { const t = document.getElementById('speed-tag'); if (t) { t.textContent = n + 'x speed'; t.classList.add('fast'); } };
     G.Arena.start(slot, {
       result: b.res, visual: b.visual, mirror: !!b.mirror, names: b.names || null,
@@ -1486,7 +1488,7 @@ window.G = window.G || {};
     document.addEventListener('pointerdown', () => { if (G.Game.mp) G.Game.markActive(); }, true);
     document.addEventListener('keydown', () => { if (G.Game.mp) G.Game.markActive(); }, true);
     // Press and hold: equipping over worn gear
-    const HOLD_MS = 800;
+    const HOLD_MS = 500;
     let hold = null;
     const startHold = el => {
       cancelHold();

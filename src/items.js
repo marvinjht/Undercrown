@@ -334,7 +334,11 @@ window.G = window.G || {};
     }
     const cpool = [opts.tome ? 'potion' : 'greater', 'antidote', 'tome', 'dye', ...G.BUFF_IDS];   // no Greater Potions in the tournament
     if (opts.tome) cpool.push('tome', 'tome');
-    for (let i = 0; i < nCons; i++) items.push(rollConsumable(Math.max(room, 15), rng, cpool));
+    for (let i = 0; i < nCons; i++) {
+      const c = rollConsumable(Math.max(room, 15), rng, cpool);
+      items.push(c);
+      if (c.cid === 'dye') for (let j = cpool.length - 1; j >= 0; j--) if (cpool[j] === 'dye') cpool.splice(j, 1);   // at most one Dye per Plunder
+    }
     items.unshift(rollRelic(null, rng));   // every Plunder has one relic
     return items;
   }

@@ -147,7 +147,7 @@ window.G = window.G || {};
     rest:     { title: 'Campfire', text: () => `Recover ${CFG().restHeal} health. Does not clear poison.` },
     mystery:  { title: 'Unknown',  text: () => 'Could be a gift, could be a fight.' },
     venom:    { title: 'Venom Cache', text: () => `Take an uncommon or better item, but gain ${CFG().poison.venomStacks} poison.` },
-    purify:   { title: 'Purifying Spring', text: () => `Clears all poison and heals ${CFG().poison.purifyHeal}.` },
+    purify:   { title: 'Purifying Spring', text: () => `Clears all poison and heals ${CFG().poison.purifyHeal}. Not poisoned? It heals ${CFG().poison.purifyCleanHeal} instead.` },
     shop:     { title: 'Plunder', text: () => 'A shared pile of loot. Free picks for everyone, weakest first.' },
     merchant: { title: 'Merchant', text: () => 'No fight. Spend gold on gear and potions, or sell blood.' },
     forge:    { title: 'Forge',    text: () => `No fight. Strengthen an item (${CFG().forge.upgradeCost} gold) or add a random affix to one (${CFG().forge.affixCost} gold).` },
@@ -349,7 +349,7 @@ window.G = window.G || {};
   function tickPoison(hero, room) {
     if (!hero.alive || hero.poison <= 0) return 0;
     if (G.Hero.poisonImmune(hero)) { hero.poison = 0; return 0; }
-    const dmg = hero.poison;
+    const dmg = hero.gem === 'stone' ? 1 : hero.poison;   // Heart of Stone: poison only ever deals 1
     hero.hp -= dmg;
     if (hero.hp <= 0) { hero.hp = 0; logHeart(hero, room, 'poison'); G.Hero.loseHeart(hero, room); }
     return dmg;
@@ -581,7 +581,7 @@ window.G = window.G || {};
         G.Hero.addPoison(hero, CFG().poison.venomStacks);
         return `opened a venom cache, ${autoLoot(hero, G.Loot.offer(hero, room, 'shrine', rng), room, false)}`;
       }
-      case 'purify': { const n = hero.poison; hero.poison = 0; G.Hero.heal(hero, CFG().poison.purifyHeal); return n ? `washed away ${n} poison` : 'drank from a clean spring'; }
+      case 'purify': { const n = hero.poison; hero.poison = 0; G.Hero.heal(hero, n ? CFG().poison.purifyHeal : CFG().poison.purifyCleanHeal); return n ? `washed away ${n} poison` : 'drank from a clean spring'; }
       case 'shop': return soloShop(hero, room, rng);
       case 'merchant': return 'visited a merchant, ' + aiMerchant(hero, room, rng);
       case 'mystery': {
