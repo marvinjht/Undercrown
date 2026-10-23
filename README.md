@@ -1,4 +1,4 @@
-# Undercrown (v0.2)
+# Undercrown
 
 v0.2 adds multiplayer with friends: create a room, share the 5-letter code, up to 6 players, bots (labeled BOT) fill empty seats.
 - src/net.js: transports. Supabase Realtime broadcast for online play; add ?net=local to the address to test with several tabs in one browser.
@@ -40,7 +40,25 @@ Earlier versions are kept in git as the tags `v1` to `v4`.
 ## Run it
 
 Open `index.html` in a browser (needs internet once, to load Phaser and fonts from their CDNs).
-No build step, no server. Scripts are plain `<script>` files on purpose, so double-clicking works.
+No build step. Scripts are plain `<script>` files on purpose, so double-clicking works for single player.
+
+## The game server (multiplayer)
+
+`server/` is the multiplayer server: it hosts rooms, runs the bots, the room clock, Plunder, duel pairings and the
+tournament, and runs every fight between players so every screen sees the same fight. It also serves the game.
+It needs no packages:
+
+```
+node server/index.js            # http://localhost:8080  (PORT=... to change)
+```
+
+Open http://localhost:8080 in a few browser windows to play against yourself. `render.yaml` deploys it to Render's
+free plan. Once it's online, put its address in `SERVER_URL` in `src/net.js` so copies of the game hosted
+elsewhere (itch.io, claude.ai) use it. The messages between game and server are in `docs/PROTOCOL.md`; a Godot
+version of the game would speak the same messages.
+
+Address options for testing: `?server=http://localhost:8080` (use that server), `?net=p2p` (the older
+player-hosted rooms over Supabase), `?net=local` (rooms between tabs of one browser).
 
 ## Folder layout
 
@@ -70,6 +88,14 @@ src/
   game.js           single-player run state and actions
   ui.js             screens, panels, tooltips
 tools/balance.js    headless balance test: `node tools/balance.js 500`
+tools/meta.js       headless meta test: `node tools/meta.js 1000`
+server/             the multiplayer game server (Node.js, no packages)
+  index.js          web server: the game files, /health and the /ws WebSocket
+  room.js           one room: lobby, room clock, bots, Plunder, duels, tournament, match record
+  rules.js          loads data/ and the rule files of src/ (the same files the browser runs)
+  ws.js             a small built-in WebSocket implementation
+docs/PROTOCOL.md    every message between the game and the server
+render.yaml         Render deployment (free web service)
 ```
 
 ## Swapping in your own art
@@ -92,9 +118,9 @@ tools/balance.js    headless balance test: `node tools/balance.js 500`
 
 All of these numbers live in `data/config.js` under `loot`.
 
-## Ready for multiplayer later
+## How the rules and the screen are split
 
 - Fights are fully decided by `src/combat.js` from two stat blocks and a seed. The arena only
-  plays the result back, so a server can run every fight and all players watch the same thing.
-- Nothing in `src/` except `arena.js`, `ui.js`, `game.js` and `placeholders.js` touches the page,
-  so the rules can run on a server (e.g. a Supabase Edge Function) unchanged.
+  plays the result back, which is how the server runs every player fight and everyone watches the same thing.
+- Nothing in `src/` except `arena.js`, `ui.js`, `game.js`, `mp.js`, `net.js`, `sound.js`, `main.js` and
+  `placeholders.js` touches the page, so `server/rules.js` runs the rules unchanged.

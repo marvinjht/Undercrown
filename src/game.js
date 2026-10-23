@@ -75,7 +75,7 @@ window.G = window.G || {};
     // Your duel pairing from the host (canonical sides; mirrored = you're side b)
     mpDuel(w, mirrored) {
       const s = this.s;
-      s.duel = { pairs: [], w, mine: w ? G.MP.duelPair(w) : null, mirrored, goSent: false };
+      s.duel = { pairs: [], w, mine: w ? G.MP.duelPair(w) : null, mirrored, goSent: false, room: s.room };
       if (!w) { s.roundKind = 'after'; this.nextStep(); return; }
       s.phase = 'duelIntro'; s.roundKind = 'duel';
       this.startTimer(CFG().duelIntroSeconds);
@@ -133,9 +133,10 @@ window.G = window.G || {};
     mpTourBattle(m) {
       const s = this.s;
       const mirrored = !m.ghost && m.b.hero === s.player;
-      const res = m.spec ? G.Tournament.pvpFrom(m.spec, m.seed) : G.Tournament.pvp(m.a, m.b, null, m.seed);   // the host's frozen fight
+      // The server's finished fight (or, in player-hosted rooms, the host's frozen inputs played out here)
+      const res = m.res || (m.spec ? G.Tournament.pvpFrom(m.spec, m.seed) : G.Tournament.pvp(m.a, m.b, null, m.seed));
       const nmB0 = m.ghost ? m.b.name : m.b.hero.name;
-      G.MP.sendFight({ title: `Tournament: ${m.a.hero.name} vs ${nmB0}`, names: { a: m.a.hero.name, b0: nmB0 }, visual: { a: visualFor(m.a.hero), b0: m.ghost ? { ...visualFor(m.b.of), ghost: true } : visualFor(m.b.hero) } });
+      G.MP.sendFight({ title: `Tournament: ${m.a.hero.name} vs ${nmB0}`, names: { a: m.a.hero.name, b0: nmB0 }, visual: { a: visualFor(m.a.hero), b0: m.ghost ? { ...visualFor(m.b.of), ghost: true } : visualFor(m.b.hero) }, res: m.res || null });
       const nameB = m.ghost ? m.b.name : m.b.hero.name;
       s.battle = {
         tour: true, match: m, res, mirror: mirrored,
@@ -663,7 +664,8 @@ window.G = window.G || {};
           s.duel.goSent = true; s.roundEnds = 0; G.MP.sendDuelLock();
           const d = s.duel;
           clearTimeout(d.waitTimer);
-          d.waitTimer = setTimeout(() => { if (this.s === s && s.phase === 'duelIntro' && s.duel === d) this.mpDuelFight(null, d.w); }, 15000);   // the host went quiet
+          // The host went quiet: fight it out here (player-hosted rooms only; the game server always sends the fight)
+          if (!G.MP.serverMode) d.waitTimer = setTimeout(() => { if (this.s === s && s.phase === 'duelIntro' && s.duel === d) this.mpDuelFight(null, d.w); }, 15000);
           render();
         }
         return;
@@ -699,16 +701,17 @@ window.G = window.G || {};
       render();
     },
 
-    mpDuelFight(spec, w) {
+    // served: the finished fight from the game server. Every screen plays exactly that; nothing is simulated here.
+    mpDuelFight(spec, w, served) {
       const s = this.s;
       if (s.phase !== 'duelIntro' || !s.duel) return;
       clearTimeout(s.duel.waitTimer);
       s.duel.mine = G.MP.duelPair(s.duel.w);
       const m = s.duel.mine, mirrored = s.duel.mirrored;
-      // The host's frozen fight: both players (and anyone watching) see and settle the same one
-      const res = spec ? G.Tournament.pvpFrom(spec, s.duel.w.seed) : G.Duel.simulate(m, s.rng);
+      // The server's (or the host's frozen) fight: both players and anyone watching see and settle the same one
+      const res = served || (spec ? G.Tournament.pvpFrom(spec, s.duel.w.seed) : G.Duel.simulate(m, s.rng));
       const nmB = m.ghost ? m.b.name : m.b.hero.name;
-      G.MP.sendFight({ title: `Duel: ${m.a.hero.name} vs ${nmB}`, names: { a: m.a.hero.name, b0: nmB }, visual: { a: visualFor(m.a.hero), b0: m.ghost ? { ...visualFor(m.b.of), ghost: true } : visualFor(m.b.hero) } });
+      G.MP.sendFight({ title: `Duel: ${m.a.hero.name} vs ${nmB}`, names: { a: m.a.hero.name, b0: nmB }, visual: { a: visualFor(m.a.hero), b0: m.ghost ? { ...visualFor(m.b.of), ghost: true } : visualFor(m.b.hero) }, res: served || null });
       const nameB = m.ghost ? m.b.name : m.b.hero.name, oppName = mirrored ? m.a.hero.name : nameB;
       s.battle = {
         duel: true, res, mirror: mirrored, names: { a: mirrored ? m.a.hero.name : 'You', b0: mirrored ? 'You' : nameB },

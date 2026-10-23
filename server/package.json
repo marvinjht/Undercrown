@@ -1,0 +1,8 @@
+{
+  "name": "undercrown-server",
+  "private": true,
+  "description": "Undercrown game server: hosts multiplayer rooms, runs every player fight, serves the game files. No packages needed.",
+  "main": "index.js",
+  "scripts": { "start": "node index.js" },
+  "engines": { "node": ">=18" }
+}

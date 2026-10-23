@@ -923,15 +923,15 @@ window.G = window.G || {};
     const m = ms[tourWatchIndex(ms)];
     if (!m || m.seed == null) return;   // seeds arrive when the round's fights start
     const nmA = m.a.hero.isPlayer ? 'You' : m.a.hero.name, nmB = m.ghost ? m.b.name : m.b.hero.isPlayer ? 'You' : m.b.hero.name;
-    if (m.spec) G.Tournament.pvpFrom(m.spec, m.seed); else G.Tournament.pvp(m.a, m.b, null, m.seed);
-    playSpectate({ args: G._lastArgs, names: { a: nmA, b0: nmB }, title: `${nmA} vs ${nmB}`, slot: -1,
+    if (!m.res) { if (m.spec) G.Tournament.pvpFrom(m.spec, m.seed); else G.Tournament.pvp(m.a, m.b, null, m.seed); }
+    playSpectate({ ...(m.res ? { res: m.res } : { args: G._lastArgs }), names: { a: nmA, b0: nmB }, title: `${nmA} vs ${nmB}`, slot: -1,
       visual: { a: G.visualFor(m.a.hero), b0: m.ghost ? { ...G.visualFor(m.b.of), ghost: true } : G.visualFor(m.b.hero) } });
   }
   function playSpectate(m) {
     const el = document.getElementById('spec-arena');
     const st = G.Game.s;
     if (!el || !st || st.phase === 'battle') { if (st && st.phase !== 'battle') render(); return; }
-    const res = G.simulateFight(...m.args);
+    const res = m.res || G.simulateFight(...m.args);   // a server fight arrives finished
     const b = { res, names: m.names };
     const lines = [];
     const t = document.getElementById('spec-title'), h = G.MP.heroes[m.slot];
@@ -995,8 +995,8 @@ window.G = window.G || {};
       return `<section class="screen end"><h2>${won ? 'You are the last one standing' : `${esc(T.champion.hero.name)} wins the tournament`}</h2>
         <p class="lede">${T.entrants.length === 1 ? 'Everyone else ran out of hearts in the dungeon.' : won ? 'Thirty rooms, a tournament, and nobody could stop you.' : 'You made it to the end. Next time, the crown.'}</p>
         ${placements(T)}${roundsList(T)}
-        ${G.Game.mp && G.MP.isHost && G.MP.saveStatus ? `<p class="hint save-status">Match database: ${G.MP.saveStatus === 'saved' ? 'this match was saved.' : G.MP.saveStatus === 'saving' ? 'saving…' : esc(G.MP.saveStatus)}</p>` : ''}
-        <div class="row-actions">${G.Game.mp ? (G.MP.isHost ? '<button class="enter" data-act="mp-rematch">Play again (same room)</button><button class="ghost" data-act="mp-leave">Leave</button>'
+        ${G.Game.mp && (G.MP.isHost || G.MP.serverMode) && G.MP.saveStatus ? `<p class="hint save-status">Match database: ${G.MP.saveStatus === 'saved' ? 'this match was saved.' : G.MP.saveStatus === 'saving' ? 'saving…' : esc(G.MP.saveStatus)}</p>` : ''}
+        <div class="row-actions">${G.Game.mp ? (G.MP.isOwner() ? '<button class="enter" data-act="mp-rematch">Play again (same room)</button><button class="ghost" data-act="mp-leave">Leave</button>'
           : '<p class="waiting">The host can start a rematch in this room.</p><button class="ghost" data-act="mp-leave">Leave</button>') : '<button class="enter" data-act="title">Play again</button>'}</div></section>`;
     }
     const m = G.Tournament.nextMatch(T);
@@ -1054,12 +1054,12 @@ window.G = window.G || {};
   function savedName() { try { return localStorage.getItem('uc-name') || ''; } catch (e) { return ''; } }
   function lobbyScreen() {
     const M = G.MP;
-    if (M.status === 'connecting') return `<div class="title-screen lobby"><h2>Connecting…</h2><p class="lede">${M.isHost ? 'Opening your room.' : `Looking for room ${esc(M.code)}.`}</p>
+    if (M.status === 'connecting') return `<div class="title-screen lobby"><h2>Connecting…</h2><p class="lede">${M.wantsHost ? 'Opening your room.' : `Looking for room ${esc(M.code)}.`}${M.serverMode ? ' If the game server was asleep, this can take up to a minute.' : ''}</p>
       <div class="row-actions"><button class="ghost" data-act="mp-leave">Cancel</button></div></div>`;
     if (M.status === 'error') return `<div class="title-screen lobby"><h2>Couldn’t join</h2><p class="warn">${esc(M.error || 'Something went wrong.')}</p>
       <div class="row-actions"><button data-act="mp-leave">Back</button></div></div>`;
     const L = M.lobby || { slots: [] };
-    const isHost = M.isHost;
+    const isHost = M.isOwner();
     const slots = [];
     for (let i = 0; i < 8; i++) {
       const s = L.slots[i];
@@ -1104,8 +1104,26 @@ window.G = window.G || {};
           <button data-act="mp-join">Join</button>
         </div>
         <p class="hint">Up to 8 players. Bots (labeled BOT) fill empty seats up to 6.</p>
+        ${serverHint()}
       </section>
     </div>`;
+  }
+  // The game server sleeps when nobody has played for a while (free hosting). Opening the title screen wakes it,
+  // so it's usually up by the time you make or join a room.
+  let serverState = null;   // null | 'waking' | 'up'
+  function serverHint() {
+    if (G.Net.mode() !== 'server') return '';
+    if (!serverState) {
+      serverState = 'waking';
+      const t0 = Date.now();
+      const poll = () => G.Net.wake().then(ok => {
+        if (ok) { serverState = 'up'; const el = document.getElementById('server-hint'); if (el) el.outerHTML = serverHint(); return; }
+        if (Date.now() - t0 < 90000) setTimeout(poll, 3000);
+      });
+      poll();
+    }
+    return serverState === 'up' ? '<p class="hint" id="server-hint">Game server: online.</p>'
+      : '<p class="hint" id="server-hint">Game server: waking up (it sleeps when nobody is playing; this can take up to a minute)…</p>';
   }
 
   function roomFromUrl() { try { return (new URLSearchParams(location.search).get('room') || '').toUpperCase(); } catch (e) { return ''; } }
@@ -1255,7 +1273,7 @@ window.G = window.G || {};
       if (watchFightKey !== f.at) {
         watchFightKey = f.at;
         pop.querySelector('.wp-ftitle').textContent = f.title || (vst.battle && vst.battle.title) || 'Fight';
-        const res = G.simulateFight(...f.args), b = { res, names: f.names }, lines = [], ol = pop.querySelector('.wp-log');
+        const res = f.res || G.simulateFight(...f.args), b = { res, names: f.names }, lines = [], ol = pop.querySelector('.wp-log');
         ol.innerHTML = '';
         G.WatchArena.start(pop.querySelector('.wp-arena'), { result: res, visual: f.visual, names: f.names, mirror: !!f.mirror,
           onEvent: e => { const l = logLine(e, b); if (!l) return; lines.push(l); ol.innerHTML = lines.slice(-4).map(x => `<li>${esc(x)}</li>`).join(''); } });

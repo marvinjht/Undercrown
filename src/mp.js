@@ -1,5 +1,11 @@
 // Multiplayer with friends through a room code.
 //
+// With the game server (G.Net.mode() === 'server', the default once it's online): the server is the host. It runs
+// the room clock, the bots, Plunder, duel pairings and the tournament, and it runs every fight between players and
+// sends the finished result, so every screen plays back the same fight (server/room.js, docs/PROTOCOL.md).
+// Everyone's isHost is false; the room's creator is its owner (ownerCid) and gets the Start and Play again buttons.
+//
+// Without it (?net=p2p or ?net=local), the room creator's game is the host:
 // Who decides what:
 //   Every player runs their own dungeon: doors, fights, loot, picks. Their browser is the authority on their hero.
 //   The host (whoever made the room) also runs: the bots, the room clock (a new room starts when everyone is
@@ -45,22 +51,30 @@ window.G = window.G || {};
     inMatch() { return this.status === 'match'; },
 
     // ---------- Connecting ----------
-    async create(name) { return this._open(code6(), name, true); },
+    async create(name) { return this._open(G.Net.mode() === 'server' ? 'NEW' : code6(), name, true); },
     async join(code, name) { return this._open(String(code || '').trim().toUpperCase(), name, false); },
     async _open(code, name, host) {
       if (!code) { this.status = 'error'; this.error = 'Enter a room code.'; update(); return; }
       this.leave(true);
-      this.status = 'connecting'; this.error = null; this.code = code; this.isHost = host;
+      this.serverMode = G.Net.mode() === 'server';
+      this.status = 'connecting'; this.error = null; this.code = this.serverMode && host ? '' : code; this.isHost = host && !this.serverMode; this.wantsHost = host;
       this.name = (name || '').trim().slice(0, 14) || (host ? 'Host' : 'Player');
       try { localStorage.setItem('uc-name', this.name); } catch (e) { /* ignore */ }
       this.cid = 'c' + Math.random().toString(36).slice(2, 9);
       update();
       try {
-        this.t = await G.Net.connect(code, msg => this.onMessage(msg));
+        this.t = await G.Net.connect(code, msg => this.onMessage(msg), {
+          // The connection to the server dropped and came back: say who we are again
+          onReconnect: () => { if (this.t && this.status !== 'ended') this.t.send({ t: 'rejoin', cid: this.cid, code: this.code, name: this.name, v: G.VERSION, room: G.Game.s ? G.Game.s.room : null, from: this.cid }); },
+          onLost: () => { if (this.status !== 'ended' && this.status !== 'idle') this.end('Lost the connection to the game server.'); },
+        });
       } catch (e) {
         this.status = 'error'; this.error = e.message || 'Could not connect.'; update(); return;
       }
-      if (host) {
+      if (this.serverMode) {
+        // The server makes the room (and its code) or puts us in one; its lobby message tells us which
+        this.send(host ? { t: 'create', cid: this.cid, name: this.name, v: G.VERSION } : { t: 'join', code, cid: this.cid, name: this.name, v: G.VERSION });
+      } else if (host) {
         this.lobby = { slots: [{ cid: this.cid, name: this.name }, ...Array(MAX - 1).fill(null)], hostCid: this.cid, v: G.VERSION };
         this.status = 'lobby';
         this.send({ t: 'lobby', lobby: this.lobby });
@@ -87,6 +101,8 @@ window.G = window.G || {};
       if (!silent) update();
     },
     send(msg) { if (this.t) { msg.from = this.cid; this.t.send(msg); } },
+    // The room's creator: Start and Play again (the host in player-hosted rooms, the owner on the server)
+    isOwner() { return this.serverMode ? !!(this.lobby && this.lobby.ownerCid === this.cid) : this.isHost; },
     // Host: send to everyone, including itself
     cast(msg) { this.send(msg); this.onMessage({ ...msg, from: this.cid }); },
 
@@ -125,8 +141,15 @@ window.G = window.G || {};
         }
         case 'ping': break;
         case 'version':
-          if (m.cid === this.cid && this.status === 'connecting') { this.status = 'error'; this.error = `The host is on version ${m.v} and you're on ${G.VERSION}. Both of you refresh the game page, then try again.`; update(); }
+          if (m.cid === this.cid && this.status === 'connecting') {
+            this.status = 'error';
+            this.error = this.serverMode ? `The game server is on version ${m.v} and this page is on ${G.VERSION}. Refresh the page (or download the latest build), then try again.`
+              : `The host is on version ${m.v} and you're on ${G.VERSION}. Both of you refresh the game page, then try again.`;
+            update();
+          }
           break;
+        case 'joinError': if (m.cid === this.cid && this.status === 'connecting') { this.status = 'error'; this.error = m.reason; update(); } break;
+        case 'saved': this.saveStatus = m.status; update(); break;
         case 'rematch': this.onRematch(m); break;
         case 'duelGo': this.onDuelGo(m); break;
         case 'duelLock': if (this.isHost) this.onDuelLock(m); break;
@@ -138,6 +161,8 @@ window.G = window.G || {};
         case 'lobby':
           if (this.isHost && m.from !== this.cid) break;
           this.lobby = m.lobby; this.seen[m.lobby.hostCid] = now();
+          if (m.lobby.code) this.code = m.lobby.code;
+          if (this.serverMode && this.status === 'match') break;   // a reconnect mid-match: nothing to change
           if (this.status === 'connecting') {
             if (m.lobby.slots.some(s => s && s.cid === this.cid)) this.status = 'lobby';
             else if (m.lobby.started) { this.status = 'error'; this.error = 'That match has already started.'; }
@@ -209,6 +234,7 @@ window.G = window.G || {};
 
     // Host presses Start: fill empty seats with bots
     hostStart() {
+      if (this.serverMode) { if (this.isOwner()) this.send({ t: 'startReq' }); return; }
       if (!this.isHost || !this.lobby || this.lobby.started) return;
       const L = this.lobby;
       const used = new Set(L.slots.filter(Boolean).map(s => s.name));
@@ -229,6 +255,7 @@ window.G = window.G || {};
 
     // Back to the lobby with everyone still here, same room code
     hostRematch() {
+      if (this.serverMode) { if (this.isOwner()) this.send({ t: 'rematchReq' }); return; }
       if (!this.isHost || !this.lobby) return;
       const L = this.lobby, n = now();
       const here = this.players.filter(p => !p.bot && (p.cid === this.cid || (this.seen[p.cid] && n - this.seen[p.cid] < 15000)));
@@ -359,6 +386,7 @@ window.G = window.G || {};
       const s = G.Game.s;
       if (!s) return;
       if (!s.player.alive) { s.room = m.n; update(); return; }   // spectating
+      if (this.serverMode && s.room === m.n && s.phase !== 'waiting') return;   // a catch-up after a reconnect: already in this room
       G.Game.mpRoom(m.n);
     },
     allWire() { const o = {}; for (const p of this.players) o[p.slot] = heroWire(this.heroes[p.slot]); return o; },
@@ -572,7 +600,7 @@ window.G = window.G || {};
     onDuelFight(m) {
       const s = G.Game.s;
       if (!s || s.room !== m.room) return;
-      if (m.w.a === this.mySlot || m.w.b === this.mySlot) G.Game.mpDuelFight(m.spec, m.w);
+      if (m.w.a === this.mySlot || m.w.b === this.mySlot) G.Game.mpDuelFight(m.spec, m.w, m.res || null);
     },
     hostResolveDuelsFor(slot) {
       for (const w of this.H.duels.wire) if ((w.a === slot || w.b === slot) && !this.H.duels.done[w.a]) this.hostResolveDuel(w);
@@ -600,6 +628,7 @@ window.G = window.G || {};
       const s = G.Game.s;
       if (!s || s.room !== m.room) return;
       if (!s.player.alive) { update(); return; }
+      if (this.serverMode && s.duel && s.duel.room === m.room && s.phase !== 'waiting') return;   // already have these pairings
       const w = m.pairs.find(p => p.a === this.mySlot || p.b === this.mySlot);
       G.Game.mpDuel(w || null, !!w && w.b === this.mySlot);
     },
@@ -730,7 +759,7 @@ window.G = window.G || {};
       const entrants = w.entrants.map(e => (ent[e.slot] = { hero: heroes[e.slot], hp: e.hp, maxHp: e.maxHp, out: e.out, place: e.place, before: e.before, heal: e.heal, power: 0 }));
       const rounds = w.rounds.map(r => ({ n: r.n, pairs: r.pairs.map(p => {
         const a = ent[p.a], b = p.ghostOf != null ? G.Tournament.ghostOf(heroes[p.ghostOf]) : ent[p.b];
-        const m = { a, b, ghost: p.ghostOf != null, seed: p.seed, result: p.result, draw: p.draw, suddenDeath: p.suddenDeath, rageHeal: p.rageHeal, snap: p.snap, spec: p.spec || null };
+        const m = { a, b, ghost: p.ghostOf != null, seed: p.seed, result: p.result, draw: p.draw, suddenDeath: p.suddenDeath, rageHeal: p.rageHeal, snap: p.snap, spec: p.spec || null, res: p.res || null };
         m.winner = p.winner === 'a' ? a : p.winner === 'b' ? b : null;
         m.lostHearts = (p.lostHearts || []).map(sl => ent[sl]).filter(Boolean);
         m.lostHeart = m.lostHearts[0] || null;
@@ -855,10 +884,11 @@ window.G = window.G || {};
     // ---------- Spectating ----------
     // Every fight you play is sent out as its exact inputs; anyone watching you replays it.
     watch: null, lastFight: {},
+    // meta.res: a finished fight from the server (player fights); watchers play it back as it is
     sendFight(meta) {
-      if (!this.inMatch() || !G._lastArgs) return;
+      if (!this.inMatch() || (!meta.res && !G._lastArgs)) return;
       const me = this.heroes[this.mySlot];
-      this.send({ t: 'fight', slot: this.mySlot, room: G.Game.s.room, args: JSON.parse(JSON.stringify(G._lastArgs)), at: now(),
+      this.send({ t: 'fight', slot: this.mySlot, room: G.Game.s.room, ...(meta.res ? { res: meta.res } : { args: JSON.parse(JSON.stringify(G._lastArgs)) }), at: now(),
         title: meta.title, names: meta.names || { a: me.name }, visual: meta.visual, mirror: !!meta.mirror });
     },
     onFight(m) {
