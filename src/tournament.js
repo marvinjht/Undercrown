@@ -15,7 +15,7 @@ window.G = window.G || {};
     s.dmg = Math.max(2, 2 * Math.round(s.dmg * H.dmgMult / 2));
     s.holy = half(s.holy); s.bleed = half(s.bleed); s.shield = half(s.shield);
     if (s.spell) s.spell = { ...s.spell, dmg: Math.max(2, 2 * Math.round(s.spell.dmg * H.dmgMult / 2)) };
-    s.gem = null;   // a ghost doesn't explode or turn to stone
+    s.gem = null; s.janus = null;   // a ghost doesn't explode, turn to stone or bring a hologram
     return { s, name: 'Ghost of ' + (hero.isPlayer ? 'You' : hero.name), hp: s.maxHp, sprite: 'hero', tint: hero.tint, ghost: true, of: hero };
   }
   const strongest = (heroes, except) => heroes.filter(h => h !== except).sort((a, b) => G.Hero.power(b) - G.Hero.power(a))[0] || except;

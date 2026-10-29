@@ -77,6 +77,17 @@ window.G = window.G || {};
     firebolt: () => { noise({ type: 'lowpass', f0: 600, f1: 2400, dur: 0.3, vol: 0.4 }); tone({ type: 'sawtooth', f0: 220, f1: 440, dur: 0.25, vol: 0.06 }); },
     meteor: () => { noise({ type: 'lowpass', f0: 3000, f1: 200, dur: 0.6, vol: 0.5, a: 0.02 }); tone({ type: 'sine', f0: 90, f1: 30, dur: 0.7, vol: 0.6, delay: 0.25 }); },
     arcane: () => { [523, 659, 784, 1046].forEach((f, i) => tone({ type: 'sine', f0: f, dur: 0.25, vol: 0.09, delay: i * 0.04 })); noise({ f0: 4000, q: 4, dur: 0.3, vol: 0.06 }); },
+    // Weapon spells
+    deepcut: () => { [0, 0.07].forEach(d => noise({ f0: 4200, f1: 1600, q: 1.2, dur: 0.09, vol: 0.32, delay: d })); tone({ type: 'sawtooth', f0: 1800, f1: 2600, dur: 0.12, vol: 0.05, delay: 0.1 }); },
+    feint:  () => { noise({ type: 'bandpass', f0: 600, f1: 2600, q: 1.5, dur: 0.22, vol: 0.18 }); tone({ type: 'sine', f0: 700, f1: 1100, dur: 0.18, vol: 0.06, delay: 0.05 }); },
+    bashready: () => { tone({ type: 'triangle', f0: 520, dur: 0.18, vol: 0.12 }); tone({ type: 'triangle', f0: 780, dur: 0.22, vol: 0.08, delay: 0.06 }); noise({ f0: 2400, q: 3, dur: 0.05, vol: 0.12 }); },
+    cleave: () => { noise({ type: 'bandpass', f0: 300, f1: 3000, q: 0.7, dur: 0.28, vol: 0.4 }); tone({ type: 'triangle', f0: 260, f1: 120, dur: 0.2, vol: 0.12, delay: 0.12 }); },
+    decimate: () => { noise({ f0: 1600, f1: 300, q: 0.8, dur: 0.22, vol: 0.5 }); tone({ type: 'sine', f0: 110, f1: 35, dur: 0.45, vol: 0.7, delay: 0.08 }); tone({ type: 'square', f0: 140, f1: 60, dur: 0.18, vol: 0.12, delay: 0.08 }); },
+    quake:  () => { tone({ type: 'sine', f0: 70, f1: 28, dur: 0.8, vol: 0.8 }); noise({ type: 'lowpass', f0: 700, f1: 80, dur: 0.7, vol: 0.55, a: 0.01 }); tone({ type: 'square', f0: 55, f1: 40, dur: 0.4, vol: 0.08, delay: 0.1 }); },
+    dawn:   () => { [523, 659, 784, 1047, 1319].forEach((f, i) => tone({ type: 'sine', f0: f, dur: 0.5 - i * 0.05, vol: 0.07, delay: i * 0.06 })); },
+    rebuke: () => { tone({ type: 'triangle', f0: 392, dur: 0.6, vol: 0.12 }); tone({ type: 'sine', f0: 784, dur: 0.5, vol: 0.06 }); tone({ type: 'sine', f0: 1176, dur: 0.35, vol: 0.03 }); },
+    retreat: () => { noise({ type: 'lowpass', f0: 900, f1: 300, dur: 0.18, vol: 0.25 }); tone({ type: 'triangle', f0: 500, f1: 900, dur: 0.1, vol: 0.06, delay: 0.04 }); },
+    triple: () => { [0, 0.07, 0.14].forEach(d => { tone({ type: 'triangle', f0: 240, f1: 150, dur: 0.1, vol: 0.2, delay: d }); noise({ type: 'highpass', f0: 2800, dur: 0.1, vol: 0.1, delay: d + 0.02 }); }); },
     heal:   () => { tone({ type: 'sine', f0: 880, dur: 0.16, vol: 0.07 }); tone({ type: 'sine', f0: 1320, dur: 0.2, vol: 0.05, delay: 0.05 }); },
     shield: () => { tone({ type: 'triangle', f0: 400, f1: 300, dur: 0.12, vol: 0.12 }); noise({ f0: 900, q: 3, dur: 0.08, vol: 0.12 }); },
     dodge:  () => { noise({ type: 'highpass', f0: 1500, f1: 4000, dur: 0.12, vol: 0.12 }); },
@@ -118,7 +129,8 @@ window.G = window.G || {};
     greatAxe: 'chop', greatHammer: 'thud', mace: 'thud', maceShield: 'thud',
     shortbow: 'bow', longbow: 'bow', wandFocus: 'zap', staff: 'zap',
   };
-  const SPELL_SFX = { Firebolt: 'firebolt', Meteor: 'meteor', 'Arcane Blast': 'arcane' };
+  const SPELL_SFX = { Firebolt: 'firebolt', Meteor: 'meteor', 'Arcane Blast': 'arcane', 'Deep Cut': 'deepcut', Feint: 'feint', 'Shield Bash': 'bashready',
+    Cleave: 'cleave', Decimate: 'decimate', Quake: 'quake', Dawnbringer: 'dawn', Rebuke: 'rebuke', Retreat: 'retreat', 'Triple Shot': 'triple' };
 
   const files = {};
   function playFile(name, path) {

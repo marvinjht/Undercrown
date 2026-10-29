@@ -26,14 +26,16 @@ window.G = window.G || {};
       if (!bossPlan) planBosses(rng ? rng.int(0, 1e9) : 1);
       return G.BOSSES[bossPlan[room]] || G.BOSSES.boneKing;
     }
-    return rng.pick(G.MONSTERS.filter(m => room >= m.minRoom && room <= m.maxRoom));
+    // The room's phase (morning, evening, night) decides the pool
+    const pool = G.phaseOf(room).pool;
+    return rng.pick(G.MONSTERS.filter(m => pool.includes(m.id)));
   }
 
   function statBlock(def, room, mult) {
-    const M = CFG().monster;
+    const M = CFG().monster, P = (M.phase && M.phase[G.phaseOf(room).id]) || { hp: 1, hit: 1 };
     return {
-      maxHp: even(M.hpBase * Math.pow(M.hpGrowth, room - 1) * def.hp * mult.hp),
-      dmg: even(M.hitBase * Math.pow(M.hitGrowth, room - 1) * def.hit * mult.hit),
+      maxHp: even(M.hpBase * Math.pow(M.hpGrowth, room - 1) * def.hp * mult.hp * P.hp),
+      dmg: even(M.hitBase * Math.pow(M.hitGrowth, room - 1) * def.hit * mult.hit * P.hit),
       spd: def.spd, atkSpd: def.spd / 10,
       armor: def.armor ? even(def.armor * (1 + (room - 1) / 20)) : 0,
       ward: def.ward ? even(def.ward * (1 + (room - 1) / 20)) : 0,
@@ -239,7 +241,9 @@ window.G = window.G || {};
     if (deaths >= 3 || frac > 0.8) level = 'Deadly';
     else if (deaths >= 1 || frac > 0.45) level = 'High';
     else if (frac > 0.2) level = 'Medium';
-    return { level, avgLoss: Math.round(avg) };
+    // Threat, 1 to 5 skulls: what everyone sees. Janus's Eye also sees the estimate itself.
+    const skulls = deaths >= 3 || frac > 0.8 ? 5 : deaths >= 1 || frac > 0.6 ? 4 : frac > 0.4 ? 3 : frac > 0.2 ? 2 : 1;
+    return { level, avgLoss: Math.round(avg), skulls, winPct: Math.round(100 * (n - deaths) / n) };
   }
 
   function goldFor(kind, hero, rng) {
@@ -337,8 +341,10 @@ window.G = window.G || {};
       return war ? `opened the Spoils of war: ${what}${tail}` : `took ${it.name}${tail}`;
     }
     if (opt.stat) {
-      hero.bonus = hero.bonus || {};
-      for (const k in opt.stat) hero.bonus[k] = (hero.bonus[k] || 0) + opt.stat[k];
+      G.Hero.withMaxChange(hero, () => {
+        hero.bonus = hero.bonus || {};
+        for (const k in opt.stat) hero.bonus[k] = (hero.bonus[k] || 0) + opt.stat[k];
+      });
       return `took the ${opt.title.toLowerCase()}`;
     }
     return '';
@@ -476,7 +482,7 @@ window.G = window.G || {};
     }
   }
   function autoGem(hero, opts) {
-    const pref = ['pure', 'gaia', 'devil', 'phoenix', 'vulture', 'stone'];
+    const pref = ['pure', 'gaia', 'devil', 'phoenix', 'janus', 'vulture', 'stone'];
     const pick = pref.find(g => opts.includes(g)) || opts[0];
     G.Hero.setGem(hero, pick);
     return pick;
@@ -529,7 +535,7 @@ window.G = window.G || {};
   // Rewards after a won fight (XP and gold always; then gear or spoils). AI, and the player when time runs out.
   function autoReward(hero, kind, room, rng) {
     const k = kind === 'wager' ? 'fight' : kind;
-    G.Hero.gainXp(hero, CFG().xp[k] || CFG().xp.fight);
+    G.Hero.gainXp(hero, G.Hero.fightXp(hero, CFG().xp[k] || CFG().xp.fight));
     hero.gold += goldFor(k, hero, rng);
     if (gearDrops(hero, k, rng)) return autoLoot(hero, G.Loot.offer(hero, room, k, rng), room);
     return autoSpoils(hero, spoilsOptions(hero, room, rng));
@@ -553,7 +559,7 @@ window.G = window.G || {};
         // Out of time: half the gold and XP, no items
         hero.gold = Math.max(0, hero.gold - bet);
         const k = kind === 'wager' ? 'fight' : kind;
-        G.Hero.gainXp(hero, Math.round((CFG().xp[k] || CFG().xp.fight) / 2));
+        G.Hero.gainXp(hero, G.Hero.fightXp(hero, Math.round((CFG().xp[k] || CFG().xp.fight) / 2)));
         hero.gold += 2 * Math.round(goldFor(k, hero, rng) / 4);
         return `ran out of time against ${nm}`;
       }
@@ -572,7 +578,7 @@ window.G = window.G || {};
         const F = CFG().forge;
         const it = ['weapon', ...G.SLOTS].map(sl => hero.gear[sl]).find(x => canStrengthen(x));
         let txt = '';
-        if (it && hero.gold >= F.upgradeCost) { hero.gold -= F.upgradeCost; forgeStrengthen(it); txt = `strengthened ${it.name}`; }
+        if (it && hero.gold >= F.upgradeCost) { hero.gold -= F.upgradeCost; G.Hero.withMaxChange(hero, () => forgeStrengthen(it)); txt = `strengthened ${it.name}`; }
         const af = G.SLOTS.map(sl => hero.gear[sl]).find(x => x && !x.affixed);
         if (af && hero.gold >= F.affixCost + 20) { hero.gold -= F.affixCost; forgeAffix(af, rng); txt += `${txt ? ' and ' : ''}forged a bonus onto ${af.name}`; }
         return txt || 'looked at the forge';
@@ -631,6 +637,7 @@ window.G = window.G || {};
   function aiRoom(hero, room) {
     const rng = hero.rng;
     if (!hero.alive) return;
+    G.Hero.recordPast(hero, room);
     if (roomKind(room) === 'duel' || roomKind(room) === 'tournament') return;   // duels are run for everyone at once
     const hearts = hero.hearts;
     tickPoison(hero, room);

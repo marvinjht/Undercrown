@@ -33,6 +33,15 @@ G.MONSTERS = [
   { id: 'cultist',  name: 'Blood Cultist',    minRoom: 20, maxRoom: 30, hp: 1.0, hit: 0.9, spd: 12, leech: 4, ward: 4 },
 ];
 
+// Phases of the dungeon: each draws its fights (and elites) from its own pool, so early rooms meet easier monsters.
+// Bosses, duels and the tournament aren't part of this. A monster's minRoom/maxRoom above no longer matter.
+G.MONSTER_PHASES = [
+  { id: 'morning', name: 'Morning', from: 1,  to: 10, pool: ['rat', 'slime', 'skeleton', 'wolf'] },
+  { id: 'evening', name: 'Evening', from: 11, to: 20, pool: ['snake', 'goblin', 'thief', 'skeletonArcher', 'disciple'] },
+  { id: 'night',   name: 'Night',   from: 21, to: 30, pool: ['disciple', 'orc', 'golem', 'wraith', 'slimeElite', 'troll', 'ogre', 'cultist'] },
+];
+G.phaseOf = room => G.MONSTER_PHASES.find(p => room >= p.from && room <= p.to) || G.MONSTER_PHASES[G.MONSTER_PHASES.length - 1];
+
 // The Jester: only ever behind a Wager door. One hit pops it, and it explodes on you (CONFIG.wager.jesterBlast).
 G.JESTER = { id: 'jester', name: 'The Jester', hp: 0.01, hit: 0, spd: 1, scale: 0.9, fx: { noAttack: 1 } };
 

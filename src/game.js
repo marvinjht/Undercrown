@@ -207,6 +207,7 @@ window.G = window.G || {};
     startRoom() {
       const s = this.s, p = s.player;
       s.roundKind = 'room';
+      G.Hero.recordPast(p, s.room);   // Janus's Eye remembers your build
       const before = this.heartsSnapshot();
       const dmg = G.Dungeon.tickPoison(p, s.room);
       if (dmg) say(s, `Poison deals ${dmg} damage.`);
@@ -425,13 +426,13 @@ window.G = window.G || {};
         return;
       }
       const k = b.kind === 'wager' ? G.Dungeon.fightKind(b.door) : b.kind;
-      const fullXp = CFG().xp[k] || CFG().xp.fight;
+      const fullXp = G.Hero.fightXp(p, CFG().xp[k] || CFG().xp.fight);
       const lv = G.Hero.gainXp(p, out === 'timeout' ? Math.round(fullXp / 2) : fullXp);
-      const xpNote = `+${CFG().xp[k] || CFG().xp.fight} XP${lv.length ? ` (you reached level ${p.level})` : ''}`;
+      const xpNote = `+${out === 'timeout' ? Math.round(fullXp / 2) : fullXp} XP${lv.length ? ` (you reached level ${p.level})` : ''}`;
       if (out === 'timeout') {
         // Out of time: half the gold and XP, no items
         p.gold = Math.max(0, p.gold - bet);
-        const halfXp = Math.round((CFG().xp[k] || CFG().xp.fight) / 2);
+        const halfXp = Math.round(fullXp / 2);
         const g = 2 * Math.round(G.Dungeon.goldFor(k, p, s.rng) / 4);
         p.gold += g;
         this.completeRoom([...notes, `Time ran out before either side fell. Half rewards: ${g} gold, +${halfXp} XP, no items.${bet ? ' The bet is lost.' : ''}`].join(' '));
@@ -501,10 +502,10 @@ window.G = window.G || {};
       const it = p.gear[slot];
       if (s.phase !== 'forge' || !it) return;
       if (kind === 'strengthen' && !f.strengthened && G.Dungeon.canStrengthen(it) && p.gold >= F.upgradeCost) {
-        p.gold -= F.upgradeCost; G.Dungeon.forgeStrengthen(it); f.strengthened = true;
+        p.gold -= F.upgradeCost; G.Hero.withMaxChange(p, () => G.Dungeon.forgeStrengthen(it)); f.strengthened = true;
         f.msg = `The smith hammers your ${it.name} stronger.`;
       } else if (kind === 'affix' && !f.affixed && !it.affixed && p.gold >= F.affixCost) {
-        p.gold -= F.affixCost; const r = G.Dungeon.forgeAffix(it, s.rng); f.affixed = true;
+        p.gold -= F.affixCost; const r = G.Hero.withMaxChange(p, () => G.Dungeon.forgeAffix(it, s.rng)); f.affixed = true;
         f.msg = r ? `The smith adds a random affix to your ${it.name}: +${r.v} ${G.STAT_INFO[r.k].label}.` : '';
       }
       const max = G.Hero.maxHp(p); if (p.hp > max) p.hp = max;
@@ -572,10 +573,7 @@ window.G = window.G || {};
       if (G.Supply.left(cls) <= 0) { s.bagMsg = `No ${G.CLASSES[cls].name} pieces are left in the set supply.`; render(); return; }
       const old = it.set;
       p.bag.splice(bi, 1);
-      const before = G.Hero.maxHp(p);
-      it.set = cls;
-      const after = G.Hero.maxHp(p);
-      if (after !== before) p.hp = Math.max(1, Math.min(after, p.hp + Math.max(0, after - before)));
+      G.Hero.withMaxChange(p, () => { it.set = cls; });
       s.dye = null;
       s.bagMsg = `${it.name} now counts as ${G.CLASSES[cls].name} instead of ${G.CLASSES[old].name}.`;
       if (this.mp) G.MP.sendSnap();

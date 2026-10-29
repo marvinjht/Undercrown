@@ -124,15 +124,20 @@ window.G = window.G || {};
     if (fx.minRange === 'near' && (s.range === 'melee' || s.range === 'reach')) s.range = 'near';
     if (fx.meleeStaff) delete fx.pointBlank;   // Inferno fights up close anyway
 
-    // Spell: the stronger of the weapon's spell and Arcane Blast
-    const cands = [];
-    if (W && W.spell && !fx.noSpell) cands.push(fx.banish ? { name: 'Banish', aoe: false, dmg: t.spellDmg, banish: fx.banish } : { name: W.spell.name, aoe: W.spell.aoe, dmg: t.spellDmg });
-    if (fx.sunder) cands.push({ name: 'Sunder', aoe: false, dmg: fx.sunder.dmg, sunder: true });
-    if (fx.arcane) cands.push({ name: 'Arcane Blast', aoe: true, dmg: fx.arcane });
-    if (cands.length) {
-      s.spell = cands.sort((a, b) => b.dmg - a.dmg || (b.aoe ? 1 : 0) - (a.aoe ? 1 : 0))[0];
-      s.spell = { ...s.spell, dmg: s.spell.dmg + (fx.spellBonus || 0) };
-    }
+    // Spell: every weapon casts its own at full mana (Exile casts Banish, Spellbrand Sunder, Inferno nothing).
+    // Mage pieces add Arcane Blast, which goes off along with the weapon's spell (or alone, with no weapon spell).
+    // The Mage 4-piece bonus adds to every spell that deals damage.
+    const bonusDmg = fx.spellBonus || 0;
+    const isDmg = sp => !sp.kind || sp.kind === 'damage';
+    let wsp = null;
+    if (W && W.spell && !fx.noSpell) wsp = fx.banish ? { name: 'Banish', aoe: false, dmg: t.spellDmg || 0, banish: fx.banish } : { ...W.spell, dmg: t.spellDmg || 0 };
+    if (fx.sunder) wsp = { name: 'Sunder', aoe: false, dmg: fx.sunder.dmg, sunder: true };
+    const arc = fx.arcane ? { name: 'Arcane Blast', aoe: true, dmg: fx.arcane + bonusDmg } : null;
+    if (wsp) { s.spell = isDmg(wsp) ? { ...wsp, dmg: wsp.dmg + bonusDmg } : wsp; s.arcane = arc; }
+    else if (arc) s.spell = arc;
+
+    // Janus's Eye: a hologram of you from 10 rooms ago fights beside you, at half of everything
+    if (hero.gem === 'janus' && !opts.noJanus) s.janus = janusStats(hero);
 
     // Specializations
     if (hero.spec === 'juggernaut') { s.maxHp += G.SPECS.juggernaut.params.hp; s.armor += G.SPECS.juggernaut.params.armor; }
@@ -204,7 +209,13 @@ window.G = window.G || {};
     let off = (hit * (1 + s.crit / 100) + s.critDmg * s.crit / 100) * s.atkSpd + s.bleed * Math.min(1, s.atkSpd * 3);
     if (s.spell && s.manaGain > 0) {
       const secs = (G.CONFIG.combat.manaMax - Math.min(99, s.startMana)) / s.manaGain / s.atkSpd;
-      off += s.spell.dmg * (s.spell.aoe ? 1.4 : 1) / Math.max(1, secs);
+      // What a cast is worth, in damage: damage spells by their numbers, the others as rough hit equivalents
+      const sp = s.spell, k = sp.kind;
+      let v = !k || k === 'damage' ? sp.dmg * (sp.aoe ? 1.4 : 1) + (sp.bleedMult ? s.bleed * 3 : 0)
+        : k === 'deepCut' ? hit * sp.crits : k === 'cleave' ? hit * 1.4 : k === 'triple' ? hit * 1.5
+        : k === 'quake' || k === 'bash' ? hit * 1.2 : k === 'nextHeal' ? sp.heal * 0.8 : k === 'feint' ? hit * 1.1 : hit * 0.6;
+      if (s.arcane) v += s.arcane.dmg * 1.4;
+      off += v / Math.max(1, secs);
     }
     if (s.cleave) off *= 1.15;
     if (s.fx.doubleShot) off *= 1.2;
@@ -235,9 +246,31 @@ window.G = window.G || {};
   }
 
   // Raising max health never heals you; lowering it can't leave you above the new max
+  // Janus's Eye: the build you had `lag` rooms ago (the closest record at or before then), halved
+  function janusStats(hero) {
+    const J = C().janus, past = hero.past || {}, now = hero.roomNow || 0;
+    const keys = Object.keys(past).map(Number).filter(r => r <= now - J.lag);
+    if (!keys.length) return null;
+    const old = past[Math.max(...keys)];
+    const then = { ...hero, ...JSON.parse(JSON.stringify(old)), gem: null, past: null, buffs: {}, bag: [] };
+    const s = compute(then, { noJanus: true });
+    const h = x => Math.max(0, 2 * Math.round((x || 0) * J.mult / 2));
+    for (const k of ['armor', 'ward', 'crit', 'critDmg', 'dodge', 'leech', 'shield', 'bleed', 'stun', 'holy', 'pierce']) s[k] = h(s[k]);
+    s.maxHp = Math.max(10, h(s.maxHp)); s.dmg = Math.max(2, h(s.dmg));
+    if (s.spell && s.spell.dmg) s.spell = { ...s.spell, dmg: Math.max(2, h(s.spell.dmg)) };
+    if (s.arcane) s.arcane = { ...s.arcane, dmg: Math.max(2, h(s.arcane.dmg)) };
+    s.fx = { ...s.fx }; delete s.fx.ghoulSummon;   // a hologram doesn't raise its own ghouls
+    s.gem = null; s.hologram = true; s.fromRoom = Math.max(...keys);
+    return s;
+  }
+
+  // Anything that changes max health: gaining max health heals you by the gain (120 -> 130 max heals 10);
+  // losing it only keeps your health under the new max
   function withMaxChange(hero, fn) {
+    const before = compute(hero).maxHp;
     const r = fn();
     const after = compute(hero).maxHp;
+    if (after > before && hero.alive !== false) hero.hp += after - before;
     hero.hp = Math.max(1, Math.min(after, hero.hp));
     return r;
   }
@@ -288,9 +321,12 @@ window.G = window.G || {};
     equipSwap(hero, item) {
       const other = this.artifactConflict(hero, item);
       const out = [];
-      if (other) withMaxChange(hero, () => { hero.gear[other.slot] = null; });
-      const old = this.equip(hero, item);
-      if (old) out.push(old);
+      withMaxChange(hero, () => {   // one change, so only a net gain in max health heals
+        if (other) hero.gear[other.slot] = null;
+        const old = hero.gear[item.slot] || null;
+        hero.gear[item.slot] = item;
+        if (old) out.push(old);
+      });
       if (other) out.push(other);
       return out;
     },
@@ -331,6 +367,16 @@ window.G = window.G || {};
       return Math.round(amount);
     },
     maxHp(hero) { return compute(hero).maxHp; },
+    // Janus's Eye keeps a short history of your build, one record per room (the last 11)
+    recordPast(hero, room) {
+      hero.roomNow = room;
+      hero.past = hero.past || {};
+      hero.past[room] = JSON.parse(JSON.stringify({ gear: hero.gear, level: hero.level, bonus: hero.bonus || {}, spec: hero.spec, treePicks: hero.treePicks || {}, relics: hero.relics || {}, gold: hero.gold }));
+      for (const k of Object.keys(hero.past)) if (+k < room - 10) delete hero.past[k];
+    },
+    // XP from a monster fight (Janus's Eye: half)
+    fightXp(hero, n) { return hero.gem === 'janus' ? Math.round(n * C().janus.xpMult) : n; },
+    withMaxChange(hero, fn) { return withMaxChange(hero, fn); },
     power(hero) { return power(compute(hero)); },
     powerWith(hero, item) {
       if (item.kind === 'relic') {
@@ -379,11 +425,13 @@ window.G = window.G || {};
       const jr = (hero.relics || {}).journal;   // Dead Man's Journal
       if (jr && G.RELICS.journal) n += G.RELICS.journal.fx(jr).xpBonus;
       hero.xp += n;
-      while (hero.level < L.max && hero.xp >= this.xpToNext(hero.level)) {
-        hero.xp -= this.xpToNext(hero.level);
-        hero.level++;
-        reached.push(hero.level);
-      }
+      withMaxChange(hero, () => {   // the max health from leveling comes with a heal
+        while (hero.level < L.max && hero.xp >= this.xpToNext(hero.level)) {
+          hero.xp -= this.xpToNext(hero.level);
+          hero.level++;
+          reached.push(hero.level);
+        }
+      });
       if (hero.level >= L.max) hero.xp = 0;
       return reached;
     },

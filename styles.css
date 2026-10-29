@@ -145,6 +145,13 @@ button.enter { font-size: 20px; padding: 14px 28px; border-color: var(--ember); 
 .door-text { color: var(--muted); font-size: 15px; }
 .danger { align-self: center; font: 600 12px var(--f-mono); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--line); text-transform: uppercase; letter-spacing: .06em; }
 .d-low { color: var(--up); } .d-medium { color: #e6c35c; } .d-high { color: #ef8a4a; } .d-deadly { color: #ff5b4a; border-color: #6b2620; }
+.threat { display: inline-flex; gap: 2px; align-items: center; padding: 4px 6px; }
+.threat i { display: inline-flex; width: 16px; height: 16px; }
+.threat .skull { width: 16px; height: 16px; }
+.threat i.off { color: rgba(236, 227, 214, .14); }
+.threat.t-1 i.on { color: var(--up); } .threat.t-2 i.on { color: #c9d36a; } .threat.t-3 i.on { color: #e6c35c; }
+.threat.t-4 i.on { color: #ef8a4a; } .threat.t-5 i.on { color: #ff5b4a; } .threat.t-5 { border-color: #6b2620; }
+.art-confirm { font-size: 12px; margin: 4px 0; }
 
 .ico { width: 24px; height: 24px; display: block; }
 .ico.big { width: 54px; height: 54px; }

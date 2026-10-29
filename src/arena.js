@@ -55,10 +55,12 @@ window.G = window.G || {};
     track(o) { this.objs.push(o); return o; }
 
     makeFighter(m) {
-      const vis = (this.cfg.visual && this.cfg.visual[m.id]) || {};
+      // Janus's Eye: the hologram looks like its owner, in see-through cyan
+      const vis = m.hologram ? { ...((this.cfg.visual && this.cfg.visual[m.ownerId]) || {}), tint: 0x7fd8e8, ghost: false }
+        : (this.cfg.visual && this.cfg.visual[m.id]) || {};
       const side = m.side;
       let texture = m.sprite || 'hero';
-      if (!m.ally && (texture === 'hero' || side === 'a')) texture = vis.look ? 'hero_' + vis.look : 'hero';
+      if (m.hologram || (!m.ally && (texture === 'hero' || side === 'a'))) texture = vis.look ? 'hero_' + vis.look : 'hero';
       if (!this.textures.exists(texture)) texture = 'hero';
       const lane = side === 'a' ? (m.ally ? (this.allyIdx++ % 2 ? 262 : 138) : 200) : LANES[this.laneIdx++ % LANES.length];
       const body = this.add.image(0, 0, texture);
@@ -86,6 +88,10 @@ window.G = window.G || {};
         hp: m.hp, maxHp: m.maxHp, shield: m.shield, maxShield: Math.max(1, m.shield), mana: m.mana, hasMana: m.hasMana, dead: false, gone: false, tint };
       this.F[m.id] = f;
       this.placeFighter(f);
+      if (m.hologram) {   // flickers like a projection
+        cont.setAlpha(0.5);
+        this.tweens.add({ targets: cont, alpha: { from: 0.32, to: 0.62 }, duration: 260, yoyo: true, repeat: -1, ease: 'Stepped', easeParams: [3] });
+      }
       return f;
     }
 
@@ -205,6 +211,114 @@ window.G = window.G || {};
       }
     }
 
+    // ---------- Weapon spell effects ----------
+    // Each weapon spell gets its own look so you can tell what just went off. Returns true if it drew one.
+    spellFx(f, e) {
+      const sp = this.speed, x = f.cont.x, y = f.cont.y, dir = f.dir, F = this.F;
+      const ring = (tint, from, to, ms, yy = y, alpha = 0.9) => {
+        const r = this.track(this.add.image(x, yy, 'fx_ring').setTint(tint).setScale(from).setAlpha(alpha));
+        this.tweens.add({ targets: r, scale: to, alpha: 0, duration: ms / sp, ease: 'Cubic.easeOut', onComplete: () => r.destroy() });
+        return r;
+      };
+      const arc = (cx, cy, rad, a0, a1, color, width, ms) => {
+        const g = this.track(this.add.graphics());
+        g.lineStyle(width, color, 0.95).beginPath().arc(cx, cy, rad, a0, a1, false).strokePath();
+        g.lineStyle(Math.max(2, width / 3), 0xffffff, 0.8).beginPath().arc(cx, cy, rad - width / 3, a0 + 0.1, a1 - 0.1, false).strokePath();
+        this.tweens.add({ targets: g, alpha: 0, duration: ms / sp, ease: 'Quad.easeIn', onComplete: () => g.destroy() });
+        return g;
+      };
+      const tg = e.tgts && e.tgts.length ? F[e.tgts[0]] : null;
+      switch (e.name) {
+        case 'Deep Cut': {   // two red slashes cross on the caster's blades
+          this.float(f, 'DEEP CUT', '#ff5a4a', 15);
+          for (const s of [-1, 1]) {
+            const g = this.track(this.add.graphics());
+            g.lineStyle(4, 0xff3b2f, 1).lineBetween(x - 16, y - 14 * s, x + 16, y + 14 * s);
+            g.lineStyle(1.5, 0xffd0c8, 1).lineBetween(x - 14, y - 12 * s, x + 14, y + 12 * s);
+            this.tweens.add({ targets: g, alpha: 0, duration: 450 / sp, delay: (s > 0 ? 70 : 0) / sp, onComplete: () => g.destroy() });
+          }
+          f.body.setTint(0xff8a80); this.time.delayedCall(260 / sp, () => { if (f.body.active && !f.dead) { if (f.tint) f.body.setTint(f.tint); else f.body.clearTint(); } });
+          return true;
+        }
+        case 'Feint': {   // a fading afterimage slides away while you sidestep
+          this.float(f, 'FEINT', '#9fe3ff', 15);
+          const ghost = this.track(this.add.image(x, y, f.body.texture.key).setTint(0x9fe3ff).setAlpha(0.55).setScale(f.cont.scaleX, f.cont.scaleY));
+          this.tweens.add({ targets: ghost, x: x + 34 * dir, alpha: 0, duration: 420 / sp, ease: 'Quad.easeOut', onComplete: () => ghost.destroy() });
+          this.tweens.add({ targets: f, dy: -10, duration: 120 / sp, yoyo: true });
+          return true;
+        }
+        case 'Shield Bash': {   // the shield lights up gold: the next hit stuns
+          this.float(f, 'SHIELD BASH READY', '#f0d27a', 13);
+          ring(0xf0d27a, 0.25, 0.75, 380);
+          const glow = this.add.circle(10 * dir, 2, 13, 0xffe08a, 0.55);
+          f.cont.add(glow);
+          this.tweens.add({ targets: glow, alpha: 0, scale: 1.5, duration: 900 / sp, onComplete: () => glow.destroy() });
+          return true;
+        }
+        case 'Cleave': {   // a wide steel arc sweeps in front
+          this.float(f, 'CLEAVE', '#e8e2d4', 15);
+          this.swing(f);
+          arc(x + 14 * dir, y + 4, 70, dir > 0 ? -1.1 : Math.PI - 1.0, dir > 0 ? 1.0 : Math.PI + 1.1, 0xd9d2c3, 9, 380);
+          return true;
+        }
+        case 'Decimate': {   // a huge red crescent slams the target; blood flies
+          this.float(f, 'DECIMATE', '#ff4a3a', 17);
+          this.swing(f);
+          if (tg) { arc(tg.cont.x - 10 * dir, tg.cont.y, 46, -1.5, 1.5, 0xc0281c, 12, 420); this.blood(tg, false); }
+          this.cameras.main.shake(180 / sp, 0.008);
+          return true;
+        }
+        case 'Quake': {   // the ground cracks: brown shockwaves roll out
+          this.float(f, 'QUAKE', '#d8a868', 17);
+          for (let i = 0; i < 3; i++) {
+            const w = this.track(this.add.ellipse(x, y + 28, 30, 10).setStrokeStyle(4, i ? 0x8a6a48 : 0xd8a868, 0.95));
+            this.tweens.add({ targets: w, scaleX: 9 - i * 2, scaleY: 3 - i * 0.6, alpha: 0, duration: (560 + i * 120) / sp, delay: i * 70 / sp, ease: 'Cubic.easeOut', onComplete: () => w.destroy() });
+          }
+          for (let i = 0; i < 8; i++) {
+            const rock = this.track(this.add.rectangle(x + (Math.random() * 120 - 60), y + 26, 5, 5, 0x6b5a46));
+            this.tweens.add({ targets: rock, y: rock.y - 20 - Math.random() * 22, alpha: 0, duration: 520 / sp, ease: 'Quad.easeOut', onComplete: () => rock.destroy() });
+          }
+          this.cameras.main.shake(320 / sp, 0.014);
+          return true;
+        }
+        case 'Dawnbringer': {   // a small sunrise over the caster: the next hit heals
+          this.float(f, 'DAWNBRINGER', '#ffe08a', 14);
+          const sun = this.track(this.add.circle(x, y - 46, 9, 0xffe08a, 0.95));
+          const rays = this.track(this.add.graphics());
+          rays.lineStyle(2, 0xffd34d, 0.9);
+          for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; rays.lineBetween(x + Math.cos(a) * 13, y - 46 + Math.sin(a) * 13, x + Math.cos(a) * 22, y - 46 + Math.sin(a) * 22); }
+          this.tweens.add({ targets: [sun, rays], alpha: 0, y: '-=14', duration: 800 / sp, ease: 'Sine.easeIn', onComplete: () => { sun.destroy(); rays.destroy(); } });
+          return true;
+        }
+        case 'Rebuke': {   // a white-gold rune flashes on the caster
+          this.float(f, 'REBUKE', '#fff1c4', 14);
+          ring(0xfff1c4, 0.2, 0.6, 320);
+          const g = this.track(this.add.graphics());
+          g.lineStyle(3, 0xf0d27a, 1).strokeCircle(x, y, 18).lineBetween(x, y - 18, x, y + 18).lineBetween(x - 18, y, x + 18, y);
+          this.tweens.add({ targets: g, alpha: 0, angle: 45, duration: 600 / sp, onComplete: () => g.destroy() });
+          return true;
+        }
+        case 'Retreat': {   // a dust puff where you stood
+          this.float(f, 'RETREAT', '#cfe0b0', 13);
+          for (let i = 0; i < 6; i++) {
+            const c = this.track(this.add.circle(x + (Math.random() * 16 - 8), y + 24, 6 + Math.random() * 5, 0xb6a888, 0.6));
+            this.tweens.add({ targets: c, x: c.x + (Math.random() * 30 - 15) + 16 * dir, y: c.y - 8, scale: 1.8, alpha: 0, duration: 480 / sp, onComplete: () => c.destroy() });
+          }
+          return true;
+        }
+        case 'Triple Shot': {   // three glowing arrows fan out
+          this.float(f, 'TRIPLE SHOT', '#a8e08c', 14);
+          for (let i = -1; i <= 1; i++) {
+            const p = this.track(this.add.image(x + 18 * dir, y + i * 6, 'proj_arrow').setTint(0xd6ffb0).setScale(1.2));
+            p.rotation = dir > 0 ? i * 0.18 : Math.PI + i * 0.18;
+            this.tweens.add({ targets: p, x: x + 130 * dir, y: y + i * 36, alpha: 0, duration: 260 / sp, ease: 'Quad.easeIn', onComplete: () => p.destroy() });
+          }
+          return true;
+        }
+      }
+      return false;
+    }
+
     flash(f) {
       f.body.setTintFill(0xffffff);
       this.time.delayedCall(70 / this.speed, () => {
@@ -239,6 +353,7 @@ window.G = window.G || {};
           break;
         case 'cast': {
           if (!att) break;
+          if (this.spellFx(att, e)) break;   // weapon spells have their own look
           this.float(att, e.echo ? 'ECHO' : e.name.toUpperCase(), '#c9b8ff', e.echo ? 13 : 15);
           const ring = this.track(this.add.image(att.cont.x, att.cont.y, 'fx_ring').setTint(0xa18cff).setScale(0.3).setAlpha(0.9));
           this.tweens.add({ targets: ring, scale: 0.9, alpha: 0, duration: 400 / this.speed, onComplete: () => ring.destroy() });
@@ -250,7 +365,7 @@ window.G = window.G || {};
           const ring = this.track(this.add.image(def.cont.x, def.cont.y, 'fx_ring').setTint(0xff8a4c).setScale(0.2));
           this.tweens.add({ targets: ring, scale: 0.8, alpha: 0, duration: 380 / this.speed, onComplete: () => ring.destroy() });
           this.flash(def);
-          this.float(def, String(e.amount), '#c9b8ff', 20);
+          this.float(def, String(e.amount), e.phys ? '#ffb36b' : '#c9b8ff', 20);   // physical spells (Decimate) in orange, magic in violet
           break;
         }
         case 'dodge': if (att && def) { if (att.m.range === 'melee' || att.m.range === 'reach') this.swing(att); this.float(def, 'DODGE', '#cfe8ff', 14); this.tweens.add({ targets: def, dy: -16, duration: 110 / this.speed, yoyo: true }); } break;
@@ -322,6 +437,7 @@ window.G = window.G || {};
         case 'stealth_off': if (att) this.tweens.add({ targets: att.cont, alpha: 1, duration: 160 / this.speed }); break;
         case 'death':
           if (def && def.eggImg) { def.dead = true; def.eggImg.setTint(0x555555); this.tweens.add({ targets: def.cont, alpha: 0.35, duration: 450 / this.speed }); break; }
+          if (def && def.m.hologram) this.tweens.killTweensOf(def.cont);
           if (def) { def.dead = true; def.body.setTint(0x555555); this.tweens.add({ targets: def.cont, alpha: 0.35, angle: def.dir * 80, duration: 450 / this.speed }); }
           break;
         case 'timeout': { const a = F.a; if (a) this.float(a, 'TIME', '#ece3d6', 16); break; }

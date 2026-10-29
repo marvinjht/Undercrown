@@ -2,7 +2,7 @@
 // All stats are flat whole numbers. Chance stats (Crit, Dodge, Stun) mean "out of 100".
 window.G = window.G || {};
 
-G.VERSION = '0.39';   // players in one room must all run the same version
+G.VERSION = '0.40';   // players in one room must all run the same version
 
 G.CONFIG = {
   // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
@@ -37,11 +37,12 @@ G.CONFIG = {
 
   poison: { venomStacks: 10, purifyHeal: 10, purifyCleanHeal: 20, fightCap: 25 },   // purifyCleanHeal: the spring's heal when you weren't poisoned;   // fightCap: most poison you can pick up in one fight
 
-  phoenix: { burst: 100, burn: 20, burnSeconds: 5, selfBurn: 1, standUp: 25, eggSeconds: 5, eggHpPct: 50 },   // explode, burn them, hide in an egg
+  phoenix: { burst: 100, burn: 20, burnSeconds: 5, selfBurn: 2, standUp: 25, eggSeconds: 5, eggHpPct: 50 },   // explode, burn them, hide in an egg
+  janus: { lag: 10, mult: 0.5, xpMult: 0.5 },   // Janus's Eye: the hologram is you from this many rooms ago, at this much of everything
   stoneHp: 25,
   stoneGrace: 5,           // Heart of Stone: hits deal 1 for this many seconds, at most 2 for the same again, then at most stoneCrack
   stoneCrack: 3,
-  stoneSlow: 15,           // Heart of Stone: enemies attack this % slower
+  stoneSlow: 3,            // Heart of Stone: enemies attack with this much less Attack Speed
   devilTaken: 1.5,         // Devil's Tooth: damage taken multiplier
   pureBlood: { hp: 50, dmg: 2, heal: 50 },           // Heart of Stone: each hit deals 1 more than the last, up to this
   gaiaShield: 100,
@@ -126,6 +127,8 @@ G.CONFIG = {
     elite: { hp: 1.35, hit: 1.15, packExtra: 1 },
     boss:  { hp: 1.6, hit: 1.1 },
     swarmCopy: { hp: 0.35, hit: 0.5 },
+    // Each phase's monsters get these on top (their pools differ in toughness, and weapons now cast spells)
+    phase: { morning: { hp: 1.1, hit: 1.1 }, evening: { hp: 1.35, hit: 1.3 }, night: { hp: 1.15, hit: 1.15 } },
   },
 
   combat: {

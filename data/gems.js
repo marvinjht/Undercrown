@@ -5,11 +5,11 @@ G.GEMS = {
   phoenix: {
     name: 'Phoenix Heart', color: '#ff8a4c',
     up: 'On death: explode for 100 true damage, and every enemy burns for 100 more over 5 seconds. You become an egg for 5 seconds (half health, can’t attack or dodge). If every enemy dies first, you hatch at 25 health and win.',
-    cost: 'In every fight you take 1 burn damage a second.',
+    cost: 'In every fight you take 2 burn damage a second.',
   },
   stone: {
     name: 'Heart of Stone', color: '#a8a39a',
-    up: 'Hits on your health deal at most 1 for the first 5 seconds of a fight, at most 2 for the next 5, then at most 3 for the rest. Enemies attack 15% slower.',
+    up: 'Hits on your health deal at most 1 for the first 5 seconds of a fight, at most 2 for the next 5, then at most 3 for the rest. Enemies attack with 3 less Attack Speed.',
     cost: 'Max Health becomes 25 (gear Health ignored). Every heal restores exactly 1. Shields still take full hits.',
   },
   pure: {
@@ -27,10 +27,15 @@ G.GEMS = {
     up: 'Deal double damage.',
     cost: 'Take 50% more damage.',
   },
+  janus: {
+    name: 'Janus’s Eye', color: '#7fd8e8',
+    up: 'See the estimated outcome of every fight before you pick a door. From room 11, a hologram of you as you were 10 rooms ago fights beside you in every fight (half its health, damage and other stats).',
+    cost: 'You get half the XP from monster fights.',
+  },
   gaia: {
     name: 'Gaia’s Embrace', color: '#6fbf5a',
     up: 'Start every fight with Shield 100. While any Shield holds, heal 5 a second (the one healing Gaia allows).',
     cost: 'No healing of any kind, including the tournament heal. Coming back after losing a heart still restores you.',
   },
 };
-G.GEM_ORDER = ['phoenix', 'stone', 'pure', 'vulture', 'devil', 'gaia'];
+G.GEM_ORDER = ['phoenix', 'stone', 'pure', 'vulture', 'devil', 'gaia', 'janus'];

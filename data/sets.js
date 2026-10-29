@@ -16,8 +16,8 @@ G.CLASSES = {
   },
   mage: {
     name: 'Mage', tint: 0x9b7bff, color: '#a996ff',
-    two:  { stats: { manaGain: 6 }, arcane: 20, desc: 'Attacks add 6 mana. At 100, cast Arcane Blast: 20 magic to every enemy' },
-    four: { stats: { manaGain: 16, startMana: 40 }, arcane: 24, spellBonus: 12, desc: 'Attacks add 16 mana, start fights at 40 mana, spells deal +12' },
+    two:  { stats: { manaGain: 10 }, arcane: 20, desc: 'Attacks add 10 mana. Every spell you cast also sets off Arcane Blast: 20 magic to every enemy' },
+    four: { stats: { manaGain: 16, startMana: 40 }, arcane: 24, spellBonus: 15, desc: 'Attacks add 16 mana, start fights at 40 mana, spells that deal damage deal +15' },
     six:  { name: 'Echo', echo: 1, desc: 'Every spell casts again 1 second later for half damage' },
   },
   archer: {

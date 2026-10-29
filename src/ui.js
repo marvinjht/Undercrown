@@ -171,7 +171,8 @@ window.G = window.G || {};
     if (s.critDmg) ext.push(cell('Crit Dmg', s.critDmg, I.critDmg.desc));
     for (const k of ['shield', 'holy', 'pierce', 'leech', 'bleed', 'stun']) if (s[k] > 0) ext.push(cell(I[k].label, s[k], I[k].desc, '',
       k === 'stun' ? { at: false, text: `Stun limit: after a stun, the target can't be stunned again for ${CB.stunImmune} seconds. Stubborn stuns ignore it.` } : null));
-    if (s.spell && s.manaGain > 0) ext.push(cell('Spell', `${s.spell.dmg}`, `At 100 mana you cast ${s.spell.name}: ${s.spell.dmg} magic damage to ${s.spell.aoe ? 'every enemy' : 'one enemy'}.`, `${s.manaGain} mana per attack${s.startMana ? `, start fights at ${s.startMana}` : ''}.`));
+    if (s.spell && s.manaGain > 0) ext.push(cell('Spell', !s.spell.kind || s.spell.kind === 'damage' ? `${s.spell.dmg}` : s.spell.name,
+      `At 100 mana you cast ${spellDesc(s.spell, s)}${s.arcane ? ` Your Mage pieces add Arcane Blast: ${s.arcane.dmg} magic damage to every enemy.` : ''}`, `${s.manaGain} mana per attack${s.startMana ? `, start fights at ${s.startMana}` : ''}.`));
     return `<div class="statcols ${compact ? 'compact' : ''}">
       <div><h4>Defense</h4><ul>${def.join('')}</ul></div>
       <div><h4>Offense</h4><ul>${off.join('')}</ul></div>
@@ -331,11 +332,36 @@ window.G = window.G || {};
   }
 
   // Equipping over a worn piece destroys it, so it takes a press and hold. An empty slot is a plain click.
+  // What a spell does, in a sentence (stats panel and tooltips)
+  function spellDesc(sp, s) {
+    const k = sp.kind;
+    if (!k || k === 'damage') return `${sp.name}: ${sp.dmg} ${sp.phys ? 'physical' : 'magic'} damage to ${sp.aoe ? 'every enemy' : 'one enemy'}${sp.bleedMult ? `, and a bleed ${sp.bleedMult} times your Bleed` : ''}.`;
+    if (k === 'deepCut') return `${sp.name}: your next ${sp.crits} attacks crit.`;
+    if (k === 'feint') return `${sp.name}: the next attack aimed at you misses${s && s.fx && s.fx.riposte ? ' (and sets off Riposte)' : ''}.`;
+    if (k === 'bash') return `${sp.name}: your next hit stuns for ${sp.stun} second (Stubborn).`;
+    if (k === 'cleave') return `${sp.name}: a full-damage swing at every enemy within reach.`;
+    if (k === 'quake') return `${sp.name}: stuns every enemy within ${sp.reach} steps for ${sp.stun} second (Stubborn).`;
+    if (k === 'nextHeal') return `${sp.name}: your next hit heals you ${sp.heal}.`;
+    if (k === 'rebuke') return `${sp.name}: your next hit lowers the target's Attack Speed by ${sp.spd} for ${sp.secs} seconds.`;
+    if (k === 'retreat') return `${sp.name}: you hop ${sp.steps} step back.`;
+    if (k === 'triple') return `${sp.name}: an arrow at up to ${sp.arrows} enemies, or one arrow for +${sp.single} when there's only one.`;
+    return sp.name + '.';
+  }
+  G.spellDesc = spellDesc;
+
+  let artConfirm = -1;   // the bag slot whose artifact swap is waiting for a confirm
   function bagUseBtn(p, it, i) {
     if (it.kind !== 'gear') return `<button data-act="bag-use" data-i="${i}">Use</button>`;
     const gone = [p.gear[it.slot], G.Hero.artifactConflict(p, it)].filter(Boolean);
     if (!gone.length) return `<button data-act="bag-use" data-i="${i}">Equip</button>`;
     const names = gone.map(o => esc(o.name)).join(' and '), gold = gone.reduce((a, o) => a + G.Dungeon.sellPrice(o), 0);
+    // Giving up an artifact: a click, then a confirm (it's one of a kind and sells for good)
+    const art = gone.find(o => o.rarity === 'artifact');
+    if (art) {
+      if (artConfirm !== i) return `<button data-act="bag-art" data-i="${i}">Replace artifact…</button><small class="hold-note">Replaces ${names}${gone.length > 1 || !p.gear[it.slot] ? ' (you can wear only one artifact)' : ''}</small>`;
+      return `<p class="warn art-confirm">Your ${esc(art.name)} will be sold${gone.length > 1 ? `, along with ${esc(gone.find(o => o !== art).name)},` : ''} for ${gold} gold. You can't get it back.</p>
+        <button class="enter" data-act="bag-use" data-i="${i}">Confirm: replace it</button><button class="ghost" data-act="bag-art-cancel" data-i="${i}">Cancel</button>`;
+    }
     return `<button class="hold" data-hold="bag-use" data-i="${i}" aria-label="Press and hold to equip, replacing ${names}"><span class="hold-fill"></span><span class="hold-label">Hold to equip</span></button><small class="hold-note">Replaces ${names}, which ${gone.length > 1 ? 'sell' : 'sells'} for ${gold} gold${gone.length > 1 || !p.gear[it.slot] ? ' (you can wear only one artifact)' : ''}</small>`;
   }
 
@@ -452,7 +478,8 @@ window.G = window.G || {};
       pips.push(`<i class="pip k-${kind} ${cls}" ${tip(`<div class="tt-title">Room ${r}: ${info.name}</div><p>${info.text}${extra}</p>`)}>${info.icon ? G.Art.icon(info.icon) : ''}</i>`);
     }
     const kindNow = G.Dungeon.roomKind(Math.min(st.room, CFG().tournamentRoom));
-    let roomLabel = `Room ${st.room} <small>of ${CFG().tournamentRoom}${kindNow !== 'doors' ? ' · ' + ROOM_INFO[kindNow].name : ''}</small>`;
+    const phase = st.room <= CFG().rooms ? G.phaseOf(st.room) : null;   // Morning, Evening, Night
+    let roomLabel = `Room ${st.room} <small>of ${CFG().tournamentRoom}${phase ? ' · ' + phase.name : ''}${kindNow !== 'doors' ? ' · ' + ROOM_INFO[kindNow].name : ''}</small>`;
     if (st.room > CFG().rooms) roomLabel = 'Tournament';
     else if (st.phase === 'spec' || st.phase === 'tree') roomLabel = `Level up <small>after room ${st.room}</small>`;
     else if (st.phase === 'gem') roomLabel = `Heart gem <small>after room ${st.room}</small>`;
@@ -539,12 +566,21 @@ window.G = window.G || {};
   }
 
   // ---------- Stage screens ----------
-  const DANGER_TIP = '<div class="tt-title">Danger</div><p>An estimate from a few practice fights against these enemies with your current gear, health and bag buffs.</p>';
+  const DANGER_TIP = '<div class="tt-title">Danger</div><p>Janus’s Eye: an estimate from a few practice fights against these enemies with your current gear, health and bag buffs.</p>';
+  const THREAT_TIP = '<div class="tt-title">Threat</div><p>How dangerous this fight looks for you right now, from 1 skull (easy) to 5 (you may well lose). Janus’s Eye shows the full estimate.</p>';
+  const SKULL = '<svg viewBox="0 0 24 24" class="skull" aria-hidden="true"><path fill="currentColor" d="M12 2C7 2 3.5 5.6 3.5 10.2c0 2.7 1.2 4.6 3 5.9V19a1 1 0 0 0 1 1h1.5v-2h2v2h2v-2h2v2h1.5a1 1 0 0 0 1-1v-2.9c1.8-1.3 3-3.2 3-5.9C20.5 5.6 17 2 12 2zM8.5 13.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm7 0a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/></svg>';
+  // The danger badge on a door: skulls for everyone; the full estimate with Janus's Eye
+  function dangerBadge(dg, p) {
+    if (!dg) return '';
+    if (p && p.gem === 'janus') return `<span class="danger d-${dg.level.toLowerCase()}" ${tip(DANGER_TIP + `<p class="tt-extra">Won ${dg.winPct}% of practice fights; average health lost: ${dg.avgLoss}</p>`)}>${dg.level} · ~${dg.avgLoss} dmg · ${dg.winPct}% win</span>`;
+    const n = dg.skulls || 1;
+    return `<span class="danger threat t-${n}" ${tip(THREAT_TIP)} aria-label="Threat ${n} of 5">${Array.from({ length: 5 }, (_, i) => `<i class="${i < n ? 'on' : 'off'}">${SKULL}</i>`).join('')}</span>`;
+  }
 
   function doorsScreen(st) {
     const doors = st.doors.map((d, i) => {
       const info = G.Dungeon.doorInfo(d);
-      const dg = d.danger ? `<span class="danger d-${d.danger.level.toLowerCase()}" ${tip(DANGER_TIP + `<p class="tt-extra">Average health lost: ${d.danger.avgLoss}</p>`)}>${d.danger.level} danger · ~${d.danger.avgLoss} dmg</span>` : '';
+      const dg = dangerBadge(d.danger, st.player);
       const icon = 'door_' + d.type;
       return `<div class="door door-${d.type}">
         <button class="door-btn" data-act="door" data-i="${i}">
@@ -1410,7 +1446,8 @@ window.G = window.G || {};
     const el = e.target.closest('[data-act]');
     if (!el || el.disabled) return;
     const a = el.dataset.act, Gm = G.Game;
-    if (a !== 'bag-menu') bagOpen = -1;
+    if (a !== 'bag-menu' && a !== 'bag-art' && a !== 'bag-art-cancel') bagOpen = -1;
+    if (a !== 'bag-art') artConfirm = -1;
     switch (a) {
       case 'start': Gm.newRun(); break;
       case 'mp-create': { const n = ($('#mp-name') || {}).value || ''; if (!n.trim()) { toast(el, 'Enter your name first'); break; } G.MP.create(n); break; }
@@ -1443,6 +1480,8 @@ window.G = window.G || {};
         if (G.Game.s && G.Game.s.phase === 'battle') { toast(el, 'Can’t use during combat!'); break; }
         bagOpen = bagOpen === +el.dataset.i ? -1 : +el.dataset.i; render(); break;
       case 'bag-use': Gm.useBag(+el.dataset.i); break;
+      case 'bag-art': artConfirm = +el.dataset.i; render(); break;
+      case 'bag-art-cancel': render(); break;
       case 'bag-sell': Gm.sellBag(+el.dataset.i); break;
       case 'dye-item': Gm.dyeItem(el.dataset.id); break;
       case 'dye-class': Gm.dyeClass(el.dataset.cls); break;

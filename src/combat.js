@@ -72,7 +72,8 @@ window.G = window.G || {};
       tracks[f.id] = [[t, pos]];
       meta.push({ id: f.id, side, name: spec.name, sprite: spec.sprite, tint: spec.tint, scale: spec.scale || 1,
         maxHp: f.maxHp, hp: f.hp, shield: f.shield, mana: f.mana, hasMana: !!(s.spell && s.manaGain > 0),
-        bornAt: t, ally: !!spec.ally, look: spec.look || null, weapon: spec.weapon || null, range: s.range || 'melee', type: s.type || 'phys' });
+        bornAt: t, ally: !!spec.ally, look: spec.look || null, weapon: spec.weapon || null, range: s.range || 'melee', type: s.type || 'phys',
+        hologram: !!spec.hologram, ownerId: spec.owner ? spec.owner.id : null });
       return f;
     }
 
@@ -86,6 +87,13 @@ window.G = window.G || {};
         const gs = allyStats(Math.max(4, 2 * Math.round(owner.s.maxHp * GS.hpPct / 200)), Math.max(2, 2 * Math.round(owner.s.dmg * GS.dmgPct / 200)));
         mk(owner.side, { s: gs, name: 'Ghoul', sprite: 'monster_ghoul', ally: true, owner, scale: 0.8 }, owner.pos + (owner.side === 'a' ? 0.5 : -0.5));
       }
+    }
+    // Janus's Eye: a hologram of the wearer from 10 rooms ago fights beside them (enemies can hit it like anyone)
+    for (const owner of fighters.slice()) {
+      const J = owner.s.janus;
+      if (!J || owner.ally) continue;
+      mk(owner.side, { s: J, name: owner.side === 'a' && !opts.pvp ? 'Past You' : `${owner.name} (past)`, sprite: 'hero', ally: true, owner, hologram: true },
+        owner.pos + (owner.side === 'a' ? -0.6 : 0.6));
     }
     // The fight is between the main fighters: allies don't keep it going
     const mainB = () => fighters.filter(f => f.side === 'b' && f.alive && !f.ally);
@@ -104,7 +112,8 @@ window.G = window.G || {};
     const wardOf = f => (f.egg ? 0 : Math.max(0, (f.s.ward || 0) - sunderShred(f)));
     const armorOf = f => (f.egg ? 0 : Math.max(0, (f.s.armor || 0) - (f.shredUntil >= t ? f.shred : 0) - sunderShred(f)));
     // Spell damage: Magic Resist cuts it, unless the caster deals physical damage (Inferno), then Armor does
-    const spellCut = (f, d) => (f.s.fx && f.s.fx.physical ? Math.max(0, armorOf(d) - (f.s.pierce || 0)) : wardOf(d));
+    // What a spell loses to the target's defenses: Armor (minus Pierce) for physical spells, Magic Resist otherwise
+    const spellCut = (f, d, sp) => ((sp && sp.phys) || (f.s.fx && f.s.fx.physical) ? Math.max(0, armorOf(d) - (f.s.pierce || 0)) : wardOf(d));
     // A Phoenix egg has none of its owner's stats or effects
     const fxOf = f => (f.egg ? {} : (f.s.fx || {}));
     // Unbound: crowd control just bounces off and makes you angrier
@@ -366,16 +375,35 @@ window.G = window.G || {};
         return;
       }
       if (!recastSp) f.mana = 0;   // the bar empties the moment the spell goes off
+      const dmgSpell = !sp.kind || sp.kind === 'damage';
+      if (dmgSpell) castDamage(f, sp, recastSp); else utilitySpell(f, sp);
+      if (recastSp) return;
+      if (f.s.arcane && f.alive) castDamage(f, f.s.arcane);   // Mage pieces: Arcane Blast goes off with every spell
+      f.mana = 0;
+      if (fx.primedMana && !f.primedUsed) { f.primedUsed = true; f.mana = fx.primedMana; }
+      if (fx.spellShield) { f.shield += fx.spellShield; push({ type: 'shieldup', src: f.id, amount: fx.spellShield }, f); }
+      if (fx.empower) f.empower = fx.empower.hits;
+      if (fx.echo && dmgSpell) pending.push({ at: t + 1, f, sp });
+      if (fx.doubleCast && dmgSpell) pending.push({ at: t + 0.4, f, sp, recast: true });   // Twincast
+      if (fx.spellHeal) { const h = heal(f, fx.spellHeal); if (h) push({ type: 'heal', src: f.id, amount: h }, f); }
+      if (fx.spellStack) f.dmgBonus += fx.spellStack;
+    }
+
+    // A spell that deals damage (Firebolt, Meteor, Banish, Sunder, Arcane Blast, Decimate)
+    function castDamage(f, sp, recastSp) {
+      const fx = f.s.fx || {};
       const tgts = (sp.aoe ? foes(f) : [target(f)].filter(Boolean)).filter(x => !x.invis);
-      push({ type: 'cast', src: f.id, name: sp.name + (recastSp ? ' (Twincast)' : ''), aoe: sp.aoe, tgts: tgts.map(x => x.id) }, f);
+      push({ type: 'cast', src: f.id, name: sp.name + (recastSp ? ' (Twincast)' : ''), aoe: sp.aoe, tgts: tgts.map(x => x.id), phys: !!sp.phys }, f);
       const scrit = fx.spellCrit && roll(f.s.crit);
       for (const d of tgts) {
         if (!d.alive) continue;
         const raw = Math.round(sp.dmg * (recastSp ? 0.5 : 1) * (1 + (fx.spellAmp || 0) / 100)) * (scrit ? 2 : 1);   // Overcharge: +30% spell damage
-        const r = damage(d, Math.max(CB.minHit, raw - spellCut(f, d)), f);
-        push({ type: 'spellhit', src: f.id, tgt: d.id, amount: r.dealt, absorbed: r.absorbed, name: sp.name, crit: !!scrit }, d);
+        const r = damage(d, Math.max(CB.minHit, raw - spellCut(f, d, sp)), f);
+        push({ type: 'spellhit', src: f.id, tgt: d.id, amount: r.dealt, absorbed: r.absorbed, name: sp.name, crit: !!scrit, phys: !!sp.phys }, d);
         afterDamage(d, f);
         if (!d.alive) continue;
+        // Decimate (Great Axe): a bleed several times your Bleed
+        if (sp.bleedMult && !recastSp) { applyBleed(d, (f.s.bleed || 0) * sp.bleedMult, f); push({ type: 'bleedup', src: f.id, tgt: d.id }); }
         // Spellbrand: Sunder slows and lowers resistances
         if (sp.sunder) {
           const S = fx.sunder;
@@ -412,15 +440,39 @@ window.G = window.G || {};
           }
         }
       }
-      if (recastSp) return;
-      f.mana = 0;
-      if (fx.primedMana && !f.primedUsed) { f.primedUsed = true; f.mana = fx.primedMana; }
-      if (fx.spellShield) { f.shield += fx.spellShield; push({ type: 'shieldup', src: f.id, amount: fx.spellShield }, f); }
-      if (fx.empower) f.empower = fx.empower.hits;
-      if (fx.echo) pending.push({ at: t + 1, f, sp });
-      if (fx.doubleCast) pending.push({ at: t + 0.4, f, sp, recast: true });   // Twincast
-      if (fx.spellHeal) { const h = heal(f, fx.spellHeal); if (h) push({ type: 'heal', src: f.id, amount: h }, f); }
-      if (fx.spellStack) f.dmgBonus += fx.spellStack;
+    }
+
+    // The weapon spells that do something other than deal spell damage
+    function utilitySpell(f, sp) {
+      const tg = target(f);
+      push({ type: 'cast', src: f.id, name: sp.name, kind: sp.kind, aoe: false, tgts: tg ? [tg.id] : [] }, f);
+      const near = reach => foes(f).filter(x => x.alive && !x.invis && Math.abs(x.pos - f.pos) <= reach + 1e-6);
+      switch (sp.kind) {
+        case 'deepCut': f.firstCrits += sp.crits; break;                       // Daggers: the next attacks crit
+        case 'feint': f.feint = true; break;                                    // Saber: the next attack at you misses
+        case 'bash': f.bashNext = true; break;                                  // Sword & Shield: the next hit stuns
+        case 'nextHeal': f.healNext = (f.healNext || 0) + sp.heal; break;      // Mace: the next hit heals
+        case 'rebuke': f.rebukeNext = sp; break;                                // Mace & Shield: the next hit slows
+        case 'cleave':                                                          // Longsword: hit everyone within reach
+          for (const x of near(f.range)) { if (!f.alive) break; if (x.alive) strike(f, x, false); }
+          break;
+        case 'quake':                                                           // Great Hammer: stun everyone close by
+          for (const x of near(sp.reach)) stun(f, x, sp.stun, true);
+          break;
+        case 'retreat': {                                                       // Shortbow: hop back
+          if (f.rootUntil > t) break;
+          const dir = tg ? (Math.sign(tg.pos - f.pos) || 1) : (f.side === 'a' ? 1 : -1);
+          displace(f, f.pos - dir * sp.steps);
+          break;
+        }
+        case 'triple': {                                                        // Longbow: up to 3 arrows, or one strong one
+          if (!tg) break;
+          const others = foes(f).filter(x => x !== tg && x.alive && !x.invis).sort((a, b) => Math.abs(a.pos - f.pos) - Math.abs(b.pos - f.pos)).slice(0, sp.arrows - 1);
+          if (!others.length) { f.nextHitBonus += sp.single; strike(f, tg, false); }
+          else for (const x of [tg, ...others]) { if (!f.alive) break; if (x.alive) strike(f, x, false); }
+          break;
+        }
+      }
     }
 
     // Mage 6: Echo recasts the spell for half damage, without using mana
@@ -432,7 +484,7 @@ window.G = window.G || {};
       push({ type: 'cast', src: f.id, name: sp.name + ' (Echo)', aoe: sp.aoe, tgts: tgts.map(x => x.id), echo: true }, f);
       for (const d of tgts) {
         if (!d.alive) continue;
-        const r = damage(d, Math.max(CB.minHit, half - spellCut(f, d)), f);
+        const r = damage(d, Math.max(CB.minHit, half - spellCut(f, d, sp)), f);
         push({ type: 'spellhit', src: f.id, tgt: d.id, amount: r.dealt, absorbed: r.absorbed, name: sp.name }, d);
         afterDamage(d, f);
       }
@@ -453,7 +505,9 @@ window.G = window.G || {};
       const dfx = fxOf(def);
       const shieldUp = def.shield > 0;   // no poison gets through a Shield
       const smoke = def.smokeUntil >= t && dfx.smokeDodge ? dfx.smokeDodge : 0;
-      if (!sure && !def.egg && roll(Math.min(CB.dodgeCap + smoke, (def.s.dodge || 0) + def.parryDodge + smoke))) {
+      const feinted = def.feint && !fx.trueStrike && !def.egg;   // Feint (Saber): this one misses for sure
+      if (feinted) def.feint = false;
+      if (feinted || (!sure && !def.egg && roll(Math.min(CB.dodgeCap + smoke, (def.s.dodge || 0) + def.parryDodge + smoke)))) {
         // Parrying (legendary saber): the dodge becomes a parry that strikes back, stuns and heals
         if (dfx.dodgeParry && !counter && def.alive) {
           push({ type: 'parry', src: att.id, tgt: def.id });
@@ -462,7 +516,7 @@ window.G = window.G || {};
           if (att.alive) strike(def, att, true);
           return 0;
         }
-        push({ type: 'dodge', src: att.id, tgt: def.id });
+        push({ type: 'dodge', src: att.id, tgt: def.id, feint: feinted });
         if (dfx.afterDodge) def.nextHitBonus = dfx.afterDodge;
         if (dfx.riposte) def.riposte = true;   // Saber: the next hit deals +50%
         // Skirmisher: dodging speeds you up
@@ -546,7 +600,9 @@ window.G = window.G || {};
       if (!def.egg && def.s.fx && def.s.fx.hurtStack) def.hurtBonus = Math.min(def.s.fx.hurtCap, def.hurtBonus + def.s.fx.hurtStack);
       // Life on Hit, plus Paladin 6: Consecration (holy damage heals you), plus crit heals
       const low = att.hp < att.maxHp / 2;
-      const lifeOnHit = (att.s.leech || 0) * (fx.lowLeechDouble && low ? 2 : 1) + (att.s.spec === 'bloodthirst' ? Math.floor(r.dealt * BT.pct / 100) : 0) + (fx.consecrate ? holyPart : 0) + (crit && fx.critHeal ? fx.critHeal : 0)
+      // Grave Salt on the target: less Life on Hit
+      const salt = dfx.leechCut || 0;
+      const lifeOnHit = Math.max(0, (att.s.leech || 0) - salt) * (fx.lowLeechDouble && low ? 2 : 1) + (att.s.spec === 'bloodthirst' ? Math.floor(r.dealt * BT.pct / 100) : 0) + (fx.consecrate ? holyPart : 0) + (crit && fx.critHeal ? fx.critHeal : 0)
         + (fx.capHeal && att.hurtBonus >= (fx.hurtCap || 0) ? fx.capHeal : 0);
       if (lifeOnHit > 0) { const h = heal(att, lifeOnHit); if (h) push({ type: 'heal', src: att.id, amount: h }, att); }
       // Ghoulgrip ghouls: their hits heal you for half
@@ -558,9 +614,11 @@ window.G = window.G || {};
         push({ type: 'thorns', src: def.id, tgt: att.id, amount: rb.dealt }, att);
         afterDamage(att, def);
       }
-      if (att.s.healEvery && att.hitsLanded % att.s.healEvery.n === 0) {
-        const h = heal(att, att.s.healEvery.amount);
-        if (h) push({ type: 'heal', src: att.id, amount: h }, att);
+      // Weapon spells that power up the next hit: Dawnbringer heals, Rebuke slows
+      if (!counter && att.healNext) { const h = heal(att, att.healNext); att.healNext = 0; push({ type: 'heal', src: att.id, amount: h, label: 'Dawnbringer', spell: true }, att); }
+      if (!counter && att.rebukeNext && def.alive) {
+        const R = att.rebukeNext; att.rebukeNext = null;
+        if (!(dfx.ccImmune && ccBlocked(def))) { def.slowUntil = t + R.secs; def.slowSpd = Math.max(def.slowUntil > t ? (def.slowSpd || 0) : 0, R.spd); push({ type: 'slowed', src: att.id, tgt: def.id, label: 'Rebuke' }); }
       }
       if (crit && fx.critMana) addMana(att, fx.critMana);
       // Thieves take gold on every hit and keep fighting
@@ -639,8 +697,9 @@ window.G = window.G || {};
       }
       if (def.alive) {
         if (roll(att.s.stun) || (fx.fourthStun && att.hitsLanded % fx.fourthStun === 0)) stun(att, def, crit ? CB.critStun : 1);   // a crit stun lasts longer
-        // Sword & Shield: Shield Bash every few hits (ignores the stun limit, so it combos)
-        if (def.alive && fx.bash && att.hitsLanded % fx.bash === 0 && !counter) {
+        // Sword & Shield: Shield Bash, the spell, stuns with the next hit (ignores the stun limit, so it combos)
+        if (def.alive && !counter && (att.bashNext || (fx.bash && att.hitsLanded % fx.bash === 0))) {
+          att.bashNext = false;
           push({ type: 'bash', src: att.id, tgt: def.id }); stun(att, def, 1, true);
           if (fx.bashShield) { att.shield += fx.bashShield; push({ type: 'shieldup', src: att.id, amount: fx.bashShield, label: 'Bastion' }, att); }   // Bastion (legendary sword & shield)
         }
@@ -887,7 +946,7 @@ window.G = window.G || {};
         // Point blank: Longbow and Staff slow down with an enemy right next to them
         if (fx.pointBlank && Math.abs(tg.pos - f.pos) <= 1 + 1e-6) spd *= 1 - fx.pointBlank / 100;
         // Heart of Stone: its wearer's enemies attack slower
-        if (tg.s.gem === 'stone' && !tg.egg) spd *= 1 - (G.CONFIG.stoneSlow || 15) / 100;
+        if (tg.s.gem === 'stone' && !tg.egg) spd = Math.max(CB.minSpd, spd - (G.CONFIG.stoneSlow || 3));
         f.nextAtk = t + 10 / spd;
         attack(f);
       }

@@ -138,6 +138,8 @@ window.G = window.G || {};
     const W = D.weaponType ? G.WEAPONS[D.weaponType] : null;
     // Fixed numbers. An artifact weapon's hitting power is set to a late-dungeon rare's (same for everyone, every match).
     const st = { ...D.stats };
+    // An artifact weapon casts its weapon type's spell: it takes the type's mana (and spell damage) unless it sets its own
+    if (W && W.bonus) for (const k of ['manaGain', 'spellDmg']) if (st[k] == null && W.bonus[k] && !(D.fx && D.fx.noSpell)) st[k] = W.bonus[k];
     if (W) for (const k of ['dmg', 'spellDmg', 'holy', 'bleed']) if (st[k]) st[k] = value(k, st[k], G.RARITY.rare, G.CONFIG.artifact.tier);
     if (st.dmg && D.dmgPct) st.dmg = Math.max(2, 2 * Math.round(st.dmg * D.dmgPct / 200));   // e.g. Hummingbird: 10% less Damage
     return { id: G.uid('item'), kind: 'gear', slot: D.slot, rarity: 'artifact', artifact: id, room: 0, tier: G.CONFIG.artifact.tier,
