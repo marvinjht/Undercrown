@@ -18,7 +18,7 @@ window.G = window.G || {};
   // The game server's address once it's online (for example 'https://undercrown.onrender.com'). Empty = no server yet.
   // ?server=<address> in the page address overrides it (testing), and a page served by the game server itself
   // always uses that server.
-  const SERVER_URL = '';
+  const SERVER_URL = 'https://undercrown-e04u.onrender.com';
 
   function serverUrl() {
     try {
