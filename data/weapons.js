@@ -50,7 +50,7 @@ G.WEAPONS = {
   greatHammer: {
     classes: ['warrior', 'paladin'],
     name: 'Great Hammer', range: 'melee', type: 'phys', dmg: 24, spd: 6, bonus: { stun: 20, manaGain: 25 }, stubborn: true,
-    spell: { name: 'Quake', kind: 'quake', stun: 1, reach: 2 },
+    spell: { name: 'Quake', kind: 'quake', stun: 2, reach: 2 },
     trait: 'Crushing: hits can stun the target for 1 second, or 2 seconds on a critical hit. Casts Quake: stuns every enemy within 2 steps for 1 second (Stubborn).',
     blurb: 'Slowest weapon, biggest hits, punches through armor.',
     bases: ['Stone Maul', 'Ironbound Warhammer', 'Mountainbreaker'],
