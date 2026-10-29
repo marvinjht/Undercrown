@@ -19,6 +19,7 @@ const ACTS = {
   playerShopPick: ['shop'], playerShopPass: ['shop'], shopBuy: ['merchant'], leaveMerchant: ['merchant'],
   seeEnding: ['dead'], markActive: null,
 };
+const FIGHT_GRACE = 4;   // seconds past a fight's playback before the server ends it for a player who isn't watching
 const MP_ACTS = { startWatching: 1, stopWatching: 1, sendSkipVote: 1 };
 // What a paused twin (its player is away and a bot plays their hero) still hears
 const PAUSED_OK = new Set(['players', 'kick', 'end', 'saved', 'watch', 'view', 'fight', 'snap', 'ping', 'bye']);
@@ -71,7 +72,23 @@ class Twin {
     MP.t = { kind: 'server', send: msg => T.toRoom(msg), close() {} };
     MP.onMessage(JSON.parse(JSON.stringify(startMsg)));   // makes the heroes and starts the game, exactly as a browser would
     // The browser's clock tick (round timers, Plunder review) runs here now
-    this.beat = setInterval(() => { if (!T.dead && !T.paused) T.safe(() => G.Game.tick()); }, 250);
+    this.beat = setInterval(() => { if (!T.dead && !T.paused) T.safe(() => { G.Game.tick(); T.fightClock(); }); }, 250);
+  }
+
+  // Fights never wait on the browser. A tab in the background stops animating, so it may never say it finished
+  // watching; the server ends each fight once its playback time is over (plus a little grace), watched or not.
+  // A passed skip vote leaves a player in a fight at most skipHurrySeconds more.
+  fightClock() {
+    const G = this.G, s = G.Game.s, b = s && s.battle;
+    if (!b || b.done || s.phase !== 'battle' || typeof b.onDone !== 'function') { this.fight = null; return; }
+    const n = Date.now(), C = G.CONFIG;
+    if (!this.fight || this.fight.b !== b) {
+      const E = (b.res && b.res.events) || [], end = (E.length ? E[E.length - 1].t : 0) + 1.1;   // the arena's own playback rule:
+      const fast = C.combat.fastAfter, play = Math.min(end, fast) + Math.max(0, end - fast) / 2;   // double speed after fastAfter
+      this.fight = { b, endAt: n + (play + FIGHT_GRACE) * 1000, hurried: false };
+    }
+    if (s.skipRoom === s.room && !this.fight.hurried) { this.fight.hurried = true; this.fight.endAt = Math.min(this.fight.endAt, n + C.skipHurrySeconds * 1000); }
+    if (n >= this.fight.endAt) { this.fight = null; b.onDone(); this.changed(); }
   }
 
   safe(fn) { try { fn(); } catch (e) { console.error(`twin ${this.room.code}/${this.slot}:`, e && e.stack || e); } }

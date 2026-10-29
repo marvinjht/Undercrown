@@ -54,7 +54,7 @@ Once the match starts (`start`), a client's connection carries only these, plus 
 
 | Direction | Message | Fields | Meaning |
 | --- | --- | --- | --- |
-| C → S | `act` | `fn, args, mp` | A button press: `fn` is a game action and `args` up to 3 plain values (numbers, short ids). `mp: true` for `startWatching`, `stopWatching`, `sendSkipVote`. `battleEnd` = the fight on screen finished playing. |
+| C → S | `act` | `fn, args, mp` | A button press: `fn` is a game action and `args` up to 3 plain values (numbers, short ids). `mp: true` for `startWatching`, `stopWatching`, `sendSkipVote`. `battleEnd` = the fight on screen finished playing (optional: the server ends every fight itself once its playback time is over plus 4 seconds, so a background tab never holds up the room; a passed skip vote cuts a fight to 10 seconds). |
 | S → C | `state` | `now, full, render, me, s, del, mp, heroes, sounds` | Your game's state: only what changed since the last one (`full`: everything, after a reconnect). |
 
 `act` functions and the screen (`s.phase`) each is accepted on: `chooseDoor` (doors), `pickWeapon` (armory), `takeItem`,
