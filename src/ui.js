@@ -249,7 +249,7 @@ window.G = window.G || {};
   function classTiers(c, n) {
     const C = G.CLASSES[c], on = tierOn(n);
     const row = (k, label, text) => `<p class="tier ${on[k] ? 'on' : 'off'}"><b>${label}:</b> ${esc(text)}.${on[k] ? ' <span class="tier-tag">Active</span>' : ''}</p>`;
-    return row('two', '2 pieces', C.two.desc) + row('four', '4 pieces', C.four.desc + '. Your color and look change') + row('six', `6 pieces, ${C.six.name}`, C.six.desc);
+    return row('two', '2 pieces', C.two.desc) + row('four', '4 pieces', C.four.desc) + row('six', `6 pieces, ${C.six.name}`, C.six.desc);
   }
   function setTip(hero, c) {
     const st = G.Stats.sets(hero), n = st.counts[c] || 0, C = G.CLASSES[c];
@@ -295,7 +295,7 @@ window.G = window.G || {};
     }).join('');
     return `<div class="sg-card" role="dialog" aria-modal="true" aria-label="Set guide">
       <div class="sg-top"><h3>Set guide</h3><button class="ghost" data-act="set-guide-close">Close</button></div>
-      <p class="lede">Gear with a class tag counts toward that class. All 6 slots count, weapon included. 2 pieces give a small bonus; 4 add a bigger one and change your look; 6 add the capstone (bonuses stack). Wearing 4 of one class and 2 of another unlocks that pair's hybrid instead of a capstone. A single piece gives nothing. Every match shares ${CFG().supplyPerClass} pieces of each class.</p>
+      <p class="lede">Gear with a class tag counts toward that class. All 6 slots count, weapon included. 2 pieces give a small bonus; 4 add a bigger one; 6 add the capstone (bonuses stack). Wearing 4 of one class and 2 of another unlocks that pair's hybrid instead of a capstone. A single piece gives nothing. Every match shares ${CFG().supplyPerClass} pieces of each class.</p>
       <div class="sg-grid">${classes}</div>
       <h4 class="sg-h">Hybrids (4 of one + 2 of another)</h4><ul class="sg-hy">${hy}</ul></div>`;
   }
@@ -340,7 +340,7 @@ window.G = window.G || {};
     if (k === 'feint') return `${sp.name}: the next attack aimed at you misses${s && s.fx && s.fx.riposte ? ' (and sets off Riposte)' : ''}.`;
     if (k === 'bash') return `${sp.name}: your next hit stuns for ${sp.stun} second${sp.stun === 1 ? "" : "s"} (Stubborn).`;
     if (k === 'cleave') return `${sp.name}: a full-damage swing at every enemy within reach.`;
-    if (k === 'quake') return `${sp.name}: stuns every enemy within ${sp.reach} steps for ${sp.stun} second${sp.stun === 1 ? "" : "s"} (Stubborn).`;
+    if (k === 'quake') return `${sp.name}: stuns every enemy within ${sp.reach} steps for ${sp.stun} second${sp.stun === 1 ? "" : "s"}${sp.limitDmg ? `; an enemy that can’t be stunned again yet takes ${sp.limitDmg} damage instead` : ""}.`;
     if (k === 'nextHeal') return `${sp.name}: your next hit heals you ${sp.heal}.`;
     if (k === 'rebuke') return `${sp.name}: your next hit lowers the target's Attack Speed by ${sp.spd} for ${sp.secs} seconds.`;
     if (k === 'retreat') return `${sp.name}: you hop ${sp.steps} step back.`;

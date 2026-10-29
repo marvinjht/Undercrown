@@ -457,7 +457,13 @@ window.G = window.G || {};
           for (const x of near(f.range)) { if (!f.alive) break; if (x.alive) strike(f, x, false); }
           break;
         case 'quake':                                                           // Great Hammer: stun everyone close by
-          for (const x of near(sp.reach)) stun(f, x, sp.stun, true);
+          for (const x of near(sp.reach)) {
+            if (t < x.stunImmuneUntil && !(x.s.fx && x.s.fx.stunImmune) && sp.limitDmg) {   // can't be stunned again yet: take damage instead
+              const r = damage(x, Math.max(CB.minHit, sp.limitDmg - spellCut(f, x, { phys: true })), f);
+              push({ type: 'spellhit', src: f.id, tgt: x.id, amount: r.dealt, absorbed: r.absorbed, name: sp.name, phys: true }, x);
+              afterDamage(x, f);
+            } else stun(f, x, sp.stun);
+          }
           break;
         case 'retreat': {                                                       // Shortbow: hop back
           if (f.rootUntil > t) break;
