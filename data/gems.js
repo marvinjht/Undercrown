@@ -29,7 +29,7 @@ G.GEMS = {
   },
   janus: {
     name: 'Janus’s Eye', color: '#7fd8e8',
-    up: 'See the estimated outcome of every fight before you pick a door. From room 11, a hologram of you as you were 10 rooms ago fights beside you in every fight (half its health, damage and other stats).',
+    up: 'See the estimated outcome of every fight before you pick a door. From room 6, a hologram of you as you were 5 rooms ago (with the weapon you had then) fights beside you in every fight (half its health, damage and other stats).',
     cost: 'You get half the XP from monster fights.',
   },
   gaia: {

@@ -136,7 +136,7 @@ window.G = window.G || {};
     if (wsp) { s.spell = isDmg(wsp) ? { ...wsp, dmg: wsp.dmg + bonusDmg } : wsp; s.arcane = arc; }
     else if (arc) s.spell = arc;
 
-    // Janus's Eye: a hologram of you from 10 rooms ago fights beside you, at half of everything
+    // Janus's Eye: a hologram of you from a few rooms ago fights beside you, at half of everything
     if (hero.gem === 'janus' && !opts.noJanus) s.janus = janusStats(hero);
 
     // Specializations
@@ -261,6 +261,8 @@ window.G = window.G || {};
     if (s.arcane) s.arcane = { ...s.arcane, dmg: Math.max(2, h(s.arcane.dmg)) };
     s.fx = { ...s.fx }; delete s.fx.ghoulSummon;   // a hologram doesn't raise its own ghouls
     s.gem = null; s.hologram = true; s.fromRoom = Math.max(...keys);
+    const w = old.gear && old.gear.weapon;   // the hologram carries the weapon you had back then
+    s.weaponVis = w ? 'weapon_' + w.weaponType : null;
     return s;
   }
 
@@ -372,7 +374,7 @@ window.G = window.G || {};
       hero.roomNow = room;
       hero.past = hero.past || {};
       hero.past[room] = JSON.parse(JSON.stringify({ gear: hero.gear, level: hero.level, bonus: hero.bonus || {}, spec: hero.spec, treePicks: hero.treePicks || {}, relics: hero.relics || {}, gold: hero.gold }));
-      for (const k of Object.keys(hero.past)) if (+k < room - 10) delete hero.past[k];
+      for (const k of Object.keys(hero.past)) if (+k < room - C().janus.lag) delete hero.past[k];
     },
     // XP from a monster fight (Janus's Eye: half)
     fightXp(hero, n) { return hero.gem === 'janus' ? Math.round(n * C().janus.xpMult) : n; },

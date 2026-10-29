@@ -56,7 +56,7 @@ window.G = window.G || {};
 
     makeFighter(m) {
       // Janus's Eye: the hologram looks like its owner, in see-through cyan
-      const vis = m.hologram ? { ...((this.cfg.visual && this.cfg.visual[m.ownerId]) || {}), tint: 0x7fd8e8, ghost: false }
+      const vis = m.hologram ? { ...((this.cfg.visual && this.cfg.visual[m.ownerId]) || {}), tint: 0x7fd8e8, ghost: false, weapon: m.weapon }
         : (this.cfg.visual && this.cfg.visual[m.id]) || {};
       const side = m.side;
       let texture = m.sprite || 'hero';

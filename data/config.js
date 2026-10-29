@@ -2,7 +2,7 @@
 // All stats are flat whole numbers. Chance stats (Crit, Dodge, Stun) mean "out of 100".
 window.G = window.G || {};
 
-G.VERSION = '0.40';   // players in one room must all run the same version
+G.VERSION = '0.41';   // players in one room must all run the same version
 
 G.CONFIG = {
   // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
@@ -38,7 +38,7 @@ G.CONFIG = {
   poison: { venomStacks: 10, purifyHeal: 10, purifyCleanHeal: 20, fightCap: 25 },   // purifyCleanHeal: the spring's heal when you weren't poisoned;   // fightCap: most poison you can pick up in one fight
 
   phoenix: { burst: 100, burn: 20, burnSeconds: 5, selfBurn: 2, standUp: 25, eggSeconds: 5, eggHpPct: 50 },   // explode, burn them, hide in an egg
-  janus: { lag: 10, mult: 0.5, xpMult: 0.5 },   // Janus's Eye: the hologram is you from this many rooms ago, at this much of everything
+  janus: { lag: 5, mult: 0.5, xpMult: 0.5 },   // Janus's Eye: the hologram is you from this many rooms ago, at this much of everything
   stoneHp: 25,
   stoneGrace: 5,           // Heart of Stone: hits deal 1 for this many seconds, at most 2 for the same again, then at most stoneCrack
   stoneCrack: 3,
@@ -60,7 +60,7 @@ G.CONFIG = {
   sell: { grey: 4, green: 12, rare: 30, legendary: 45, artifact: 60, consumablePct: 50 },
 
   shop: {
-    reviewSeconds: 10,  // everyone looks over the table before picks start
+    reviewSeconds: 5,   // everyone looks over the table before picks start
     tourReviewSeconds: 3,   // the same, for the Tournament Plunder between rounds
     turnSeconds: 20,    // each player's turn to pick
     aiPickDelay: 1.4,

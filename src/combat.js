@@ -88,11 +88,11 @@ window.G = window.G || {};
         mk(owner.side, { s: gs, name: 'Ghoul', sprite: 'monster_ghoul', ally: true, owner, scale: 0.8 }, owner.pos + (owner.side === 'a' ? 0.5 : -0.5));
       }
     }
-    // Janus's Eye: a hologram of the wearer from 10 rooms ago fights beside them (enemies can hit it like anyone)
+    // Janus's Eye: a hologram of the wearer from a few rooms ago fights beside them (enemies can hit it like anyone)
     for (const owner of fighters.slice()) {
       const J = owner.s.janus;
       if (!J || owner.ally) continue;
-      mk(owner.side, { s: J, name: owner.side === 'a' && !opts.pvp ? 'Past You' : `${owner.name} (past)`, sprite: 'hero', ally: true, owner, hologram: true },
+      mk(owner.side, { s: J, name: owner.side === 'a' && !opts.pvp ? 'Past You' : `${owner.name} (past)`, sprite: 'hero', ally: true, owner, hologram: true, weapon: J.weaponVis || null },
         owner.pos + (owner.side === 'a' ? -0.6 : 0.6));
     }
     // The fight is between the main fighters: allies don't keep it going
