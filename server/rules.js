@@ -9,17 +9,16 @@ const FILES = ['data/config.js', 'data/weapons.js', 'data/armor.js', 'data/relic
   'data/consumables.js', 'data/specs.js', 'data/monsters.js',
   'src/rng.js', 'src/stats.js', 'src/items.js', 'src/combat.js', 'src/dungeon.js', 'src/tournament.js'];
 
-let scripts = null;
-function compile() {
-  scripts = FILES.map(f => new vm.Script(fs.readFileSync(path.join(ROOT, f), 'utf8'), { filename: f }));
-}
+const compiled = {};
+const script = f => compiled[f] || (compiled[f] = new vm.Script(fs.readFileSync(path.join(ROOT, f), 'utf8'), { filename: f }));
 
-function loadRules() {
-  if (!scripts) compile();
-  const ctx = { console, Math, Date, JSON };
+// extra: more game files to load after the rules (a player's twin also runs src/mp.js and src/game.js);
+// globals: what those files expect from a browser (timers, a do-nothing document...)
+function loadRules(extra, globals) {
+  const ctx = { console, Math, Date, JSON, ...(globals || {}) };
   ctx.window = ctx;
   vm.createContext(ctx);
-  for (const s of scripts) s.runInContext(ctx);
+  for (const f of FILES.concat(extra || [])) script(f).runInContext(ctx);
   ctx.G.uidPrefix = 'sv';   // item ids the server makes (Plunder tables) never clash with players' own
   return ctx.G;
 }

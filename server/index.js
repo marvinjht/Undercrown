@@ -99,7 +99,7 @@ attach(httpServer, '/ws', sock => {
 setInterval(() => {
   const n = Date.now();
   for (const [code, r] of rooms) {
-    if (!r.conns.size && r.emptySince && n - r.emptySince > 10 * 60 * 1000) { if (r.H) { clearInterval(r.H.plunderTimer); clearTimeout(r.H.tourTimer); clearTimeout(r.H.duelTimer); } rooms.delete(code); continue; }
+    if (!r.conns.size && r.emptySince && n - r.emptySince > 10 * 60 * 1000) { r.dispose(); rooms.delete(code); continue; }
     try { r.tick(); } catch (e) { console.error('room', code, e); }
   }
 }, 2500);

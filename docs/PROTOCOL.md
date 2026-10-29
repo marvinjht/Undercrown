@@ -1,31 +1,30 @@
-# Undercrown server protocol (stage 1)
+# Undercrown server protocol (stage 2)
 
 This is the contract between a game client (the HTML game today, a Godot client later) and the Undercrown game
-server (`server/`). Any client that speaks these messages can play in the same rooms.
+server (`server/`).
 
 ## Who decides what
 
-| Decided by the server | Still decided by each player's game (until stage 2) |
+Everything in a server match is decided on the server. A client shows what the server says and sends button presses.
+
+| On the server | In the player's client |
 | --- | --- |
-| Room codes, seats, who owns the room | Doors, monster fights, loot, merchant, forge |
-| Bots (their whole run) | Level-up picks, heart gem, bag use |
-| The room clock: when each room starts and ends | The player's own hero (sent as snapshots) |
-| Skip votes, kicks for inactivity, bots taking over dropped players | |
-| Plunder tables, pick order and turns | |
-| Duel pairings, and **every duel fight** | |
-| The tournament bracket, **every tournament fight**, tournament hearts | |
+| Room codes, seats, bots, the room clock, skip votes, kicks | Drawing the screens and playing back fights |
+| **Each player's whole run**: doors, monster fights, loot, gold, the merchant, the forge, level-ups, the heart gem, potions, gear swaps, selling | Sending button presses (`act`) |
+| Plunder, duels, the tournament, and every fight between players | Spectating (which player or fight you look at) |
 | The match record saved to the database | |
 
-The server runs every fight between players and sends the **finished result**. Clients only play it back. This is
-what keeps every screen in agreement.
+Each human in a match gets a **twin** on the server (`server/twin.js`): the same game code the browser runs
+(`src/game.js` and `src/mp.js` on top of the rules), owned by the server. The room talks to twins with the room
+messages below, exactly as it used to talk to browsers; twins send the client its **state**. Nothing a client changes
+on its own side reaches its hero.
 
-Stage 2 moves the rest of the left column to the server (loot, gold, Plunder picks applied server-side, level-ups).
 Stage 3 adds matchmaking.
 
 ## Connecting
 
 - WebSocket: `wss://<server>/ws` (`ws://` locally). One JSON object per text message.
-- `GET /health` returns `{ "ok": true, "version": "0.38", "rooms": 3 }`. Free hosting sleeps when idle; calling this
+- `GET /health` returns `{ "ok": true, "version": "0.43", "rooms": 3 }`. Free hosting sleeps when idle; calling this
   wakes it (the title screen does).
 - The server also serves the game itself at `/`.
 - Every client message carries `from` (the client's id). Every server message carries `from: "server"`.
@@ -47,6 +46,36 @@ Stage 3 adds matchmaking.
 - **Duel pair** (`w`): `{ a: slot, b: slot | null, ghostOf: slot | null, seed }`. `ghostOf` set = side b is a ghost of
   that player.
 - **Player**: `{ slot, cid, name, bot, botWas?, tint, kicked? }`. `slot` 0–7 is the seat.
+
+## Your game: act and state (in a match)
+
+Once the match starts (`start`), a client's connection carries only these, plus the lobby messages (`lobby`, `rematch`,
+`end`, `kick`, `saved`, `ping`, `version`). The room messages further down are between the room and the twins.
+
+| Direction | Message | Fields | Meaning |
+| --- | --- | --- | --- |
+| C → S | `act` | `fn, args, mp` | A button press: `fn` is a game action and `args` up to 3 plain values (numbers, short ids). `mp: true` for `startWatching`, `stopWatching`, `sendSkipVote`. `battleEnd` = the fight on screen finished playing. |
+| S → C | `state` | `now, full, render, me, s, del, mp, heroes, sounds` | Your game's state: only what changed since the last one (`full`: everything, after a reconnect). |
+
+`act` functions and the screen (`s.phase`) each is accepted on: `chooseDoor` (doors), `pickWeapon` (armory), `takeItem`,
+`takeGold` (reward), `takeSpoils` (spoils), `mysteryAct` (mystery), `chooseSpec` (spec), `chooseTree` (tree), `chooseGem`
+(gem), `placeBet` (wager), `forgeAct`, `leaveForge` (forge), `startDuelFight` (duelIntro), `playerShopPick`,
+`playerShopPass` (shop), `shopBuy`, `leaveMerchant` (merchant), `seeEnding` (dead), and on any screen `useBag`, `sellBag`,
+`dyeItem`, `dyeClass`, `dyeCancel`, `markActive`. Anything else is ignored.
+
+`state` fields:
+- `now`: the server's clock. Times in the state (`s.roundEnds`, `s.shop.reviewUntil`, `s.shop.turnStart`,
+  `s.goldPop.at`) are on it.
+- `s`: changed top-level fields of the game state (`G.Game.s`: `phase`, `room`, `doors`, `offer`, `battle`, `shop`,
+  `duel`, `tour`, `notice`, …); `del`: fields that are gone. Heroes inside them come as `{ "$hero": "h3" }`: point those
+  at your own copies (`me` for your slot, `heroes` for the rest).
+- `me`: your hero, field by field (only changed fields; `$gone` lists removed ones).
+- `heroes`: everyone else's heroes, the same way, by seat (without their build history).
+- `mp`: `players`, `mySlot`, `readyInfo`, `saveStatus`, `watchers`, `lastTourWire`, and per seat (only changed
+  seats) `views` (screens of players you watch) and `lastFight` (their latest fight).
+- `s.battle.res`: the finished fight to play. `"$same"` = the one you already have.
+- `sounds`: sounds to play (`[name, volume]`).
+- `render`: the game redrew its screen (otherwise a light refresh is enough). A fight that's playing keeps playing.
 
 ## Lobby
 
@@ -75,6 +104,9 @@ Server → client:
 | `ping` | | Every 2.5 seconds. |
 
 ## Rooms 1–29
+
+From here on, "C" is a player's **twin** (their game on the server), not their browser. A browser that sends any of
+the C → S messages below itself is ignored.
 
 | Direction | Message | Fields | Meaning |
 | --- | --- | --- | --- |
@@ -141,8 +173,9 @@ The server settles the round when every connected player in it has sent `tourDon
 ## Reconnecting
 
 If the connection drops, the client reconnects and sends `rejoin` with its `cid`, `code` and current `room`. The
-server answers with `lobby`, `players`, and anything missed: the current `room` (if the client is behind), the
-current Plunder, the duel pairings and an already-run duel fight, or the tournament state.
+server answers with `lobby` and a `full` state: the twin kept playing (its clock kept running). Away longer than 45
+seconds, a bot plays the hero from where the twin left it; on `rejoin` the twin takes the hero back from the bot and
+carries on from the current room.
 
 ## Versions
 

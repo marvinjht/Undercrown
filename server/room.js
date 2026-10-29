@@ -2,18 +2,27 @@
 // duel pairings and the tournament, and it runs every fight between players. Fights go out as finished results
 // (every hit, cast and death with its timing), so every screen plays back exactly the same fight.
 //
-// Stage 1 (this file): room flow and player fights live here. Each player's own dungeon run (doors, monster fights,
-// loot) still happens in their game and arrives as hero snapshots; that moves here in stage 2.
+// Stage 2: each player's own dungeon run (doors, monster fights, loot, gold, level-ups) runs here too, in their twin
+// (twin.js): the same game code their browser used to run. The room talks to twins the way it used to talk to browsers;
+// browsers only send button presses (act) and show the state their twin sends (state).
 // Message names match docs/PROTOCOL.md.
 'use strict';
 const { loadRules } = require('./rules');
+const { Twin } = require('./twin');
 
 const MAX = 8;          // seats in a room
 const BOT_FILL = 6;     // bots fill empty seats up to this many players
 const DROP_MS = 45000;  // a player silent this long in a match: a bot plays for them until they're back
 const LOBBY_DROP_MS = 12000;
 const now = () => Date.now();
+// UC_FAST=1 (automated tests only): short Plunder reviews, tournament breaks and room clocks (rooms and twins alike)
+function fastConfig(G) { if (process.env.UC_FAST === '1') { const C = G.CONFIG; C.shop.reviewSeconds = 1; C.tourBreakSeconds = 3; C.tourIntroExtra = 0; C.roundSeconds = 12; } }
 const clone = o => JSON.parse(JSON.stringify(o));
+// In a match, a player's browser only hears these from the room; everything else goes to their twin,
+// which sends the browser its state
+const CLIENT_OK = new Set(['lobby', 'start', 'rematch', 'end', 'kick', 'saved', 'ping', 'version', 'joinError']);
+// Messages that only a twin may send for a player (their browser can't speak for their hero)
+const TWIN_ONLY = new Set(['snap', 'ready', 'pick', 'duelLock', 'tourUse', 'tourDone', 'fight', 'view', 'watch', 'skipVote', 'duelGo']);
 
 class Room {
   constructor(code, server) {
@@ -29,18 +38,36 @@ class Room {
     this.seen = {};           // cid -> last time we heard from them
     this.lobby = { code, slots: Array(MAX).fill(null), hostCid: 'server', ownerCid: null, v: this.VERSION, started: false };
     this.players = []; this.heroes = {}; this.H = null;
+    this.twins = new Map();   // cid -> Twin (each human's game, run here)
     this.createdAt = now(); this.emptySince = now();
   }
   get CFG() { return this.G.CONFIG; }
+  fastConfig(G) { fastConfig(G); }
   // UC_FAST=1 (automated tests only): short Plunder reviews and tournament breaks
-  fast() { if (process.env.UC_FAST === '1') { const C = this.G.CONFIG; C.shop.reviewSeconds = 1; C.tourBreakSeconds = 3; C.tourIntroExtra = 0; } }
+  fast() { fastConfig(this.G); }
 
   // ---------- Sending ----------
-  sendTo(cid, msg) { const c = this.conns.get(cid); if (c) c.send(JSON.stringify({ ...msg, from: 'server' })); }
+  // A player's browser hears only CLIENT_OK messages while their twin plays the match; the twin hears the rest
+  toConn(cid, c, text, t) { if (!(this.twins.has(cid) && !CLIENT_OK.has(t))) c.send(text); }
+  sendTo(cid, msg) {
+    const text = JSON.stringify({ ...msg, from: 'server' });
+    const c = this.conns.get(cid); if (c) this.toConn(cid, c, text, msg.t);
+    const tw = this.twins.get(cid); if (tw && !CLIENT_OK.has(msg.t)) tw.deliver(text);
+  }
   // To everyone in the room (the old host's "cast")
-  cast(msg) { const s = JSON.stringify({ ...msg, from: 'server' }); for (const c of this.conns.values()) c.send(s); }
+  cast(msg) {
+    const text = JSON.stringify({ ...msg, from: 'server' });
+    for (const [cid, c] of this.conns) this.toConn(cid, c, text, msg.t);
+    for (const tw of this.twins.values()) tw.deliver(text);
+  }
   // A player's message passed on to everyone else, as it was
-  relay(fromCid, msg) { const s = JSON.stringify(msg); for (const [cid, c] of this.conns) if (cid !== fromCid) c.send(s); }
+  relay(fromCid, msg) {
+    const text = JSON.stringify(msg);
+    for (const [cid, c] of this.conns) if (cid !== fromCid) this.toConn(cid, c, text, msg.t);
+    for (const [cid, tw] of this.twins) if (cid !== fromCid) tw.deliver(text);
+  }
+  // A twin's state for its player's browser
+  toClient(cid, text) { const c = this.conns.get(cid); if (c) c.send(text); }
 
   // ---------- Connections ----------
   attach(cid, sock) {
@@ -51,7 +78,13 @@ class Room {
     this.emptySince = 0;
     // Back after a drop: their seat is theirs again
     const back = this.players.find(p => p.cid === cid && p.bot && p.botWas && !p.kicked);
-    if (back) { back.bot = false; back.botWas = null; this.heroes[back.slot].bot = false; this.heroes[back.slot].botWas = null; this.cast({ t: 'players', players: this.players }); }
+    if (back) {
+      back.bot = false; back.botWas = null; this.heroes[back.slot].bot = false; this.heroes[back.slot].botWas = null;
+      // Their twin carries on from the hero the bot left them
+      const tw = this.twins.get(cid);
+      if (tw) { tw.resume(this.heroWire(this.heroes[back.slot])); tw.backFromBot = true; }
+      this.cast({ t: 'players', players: this.players });
+    }
   }
   detach(cid, sock) {
     if (this.conns.get(cid) !== sock) return;
@@ -108,7 +141,11 @@ class Room {
     L.started = true;
     this.cast({ t: 'lobby', lobby: L });
     const seed = G.newSeed();
-    this.cast({ t: 'start', seed, players });
+    const startMsg = { t: 'start', seed, players };
+    // Every human's game runs here from now on
+    this.disposeTwins();
+    for (const p of players) if (!p.bot) this.twins.set(p.cid, new Twin(this, p, { ...startMsg, from: 'server' }));
+    this.cast(startMsg);
     this.startMatch(seed, players);
   }
 
@@ -123,6 +160,7 @@ class Room {
     here.forEach((p, i) => { L.slots[i] = { cid: p.cid, name: p.name }; });
     if (!here.some(p => p.cid === L.ownerCid)) L.ownerCid = here[0] ? here[0].cid : null;
     L.started = false; L.v = this.VERSION;
+    this.disposeTwins();
     this.players = []; this.heroes = {}; this.H = null;
     this.G = loadRules();   // a fresh copy of the rules for the next match
     this.fast();
@@ -166,9 +204,20 @@ class Room {
     G.Supply.reset(Object.values(this.heroes));
   }
 
+  disposeTwins() { for (const tw of this.twins.values()) tw.dispose(); this.twins.clear(); }
+  dispose() { const H = this.H; if (H) { clearInterval(H.plunderTimer); clearTimeout(H.tourTimer); clearTimeout(H.duelTimer); } this.disposeTwins(); }
+
   // ---------- Messages from players ----------
-  onMessage(cid, m) {
-    this.seen[cid] = now();
+  // fromTwin: sent by the player's twin (their game, here). Their browser can only press buttons (act).
+  onMessage(cid, m, fromTwin) {
+    const tw = this.twins.get(cid);
+    if (!fromTwin) {
+      this.seen[cid] = now();
+      if (tw && this.lobby.started) {
+        if (m.t === 'act') { tw.act(m); return; }
+        if (TWIN_ONLY.has(m.t)) return;
+      }
+    }
     const H = this.H;
     const mine = m.slot != null && m.slot === this.slotOf(cid);   // players only speak for their own seat
     switch (m.t) {
@@ -193,6 +242,15 @@ class Room {
   catchUp(cid, clientRoom) {
     const H = this.H, slot = this.slotOf(cid);
     if (!H || slot < 0) return;
+    const tw = this.twins.get(cid);
+    if (tw) {
+      // The twin never left: the browser just needs the whole state again. A twin a bot stood in for catches up
+      // on the room it missed, like a browser used to.
+      const wasBot = tw.backFromBot;
+      if (wasBot) { tw.backFromBot = false; this.catchUpTwin(cid, slot); }
+      setTimeout(() => tw.flush(true), wasBot ? 400 : 0);
+      return;
+    }
     this.sendTo(cid, { t: 'players', players: this.players });
     if (H.tour) {
       const left = Math.max(0, (H.tour.breakEnds || now()) - now());
@@ -207,6 +265,22 @@ class Room {
       const sent = H.duels.sent && H.duels.sent[slot];
       if (sent) setTimeout(() => this.sendTo(cid, sent), 300);   // their fight already happened: here it is
     }
+    this.readyInfo();
+  }
+
+  // A twin coming back from a bot: the room it's in now, and the shared part in progress
+  catchUpTwin(cid, slot) {
+    const H = this.H;
+    this.sendTo(cid, { t: 'players', players: this.players });
+    if (H.tour) {
+      const left = Math.max(0, (H.tour.breakEnds || now()) - now());
+      this.sendTo(cid, { t: 'tour', state: this.tourWire(H.tour.T), phase: H.tour.T.champion ? 'done' : H.tour.waiting ? 'fight' : H.plunder && !H.plunder.done && H.plunder.tour ? 'plunder' : 'break', ms: left, heroes: this.allWire() });
+      if (H.plunder && !H.plunder.done && H.plunder.tour) this.plunderCast();
+      return;
+    }
+    this.sendTo(cid, { t: 'room', n: H.room, heroes: this.allWire() });
+    if (H.plunder && H.plunder.room === H.room) this.plunderCast();
+    if (H.duels && H.duels.room === H.room) this.sendTo(cid, { t: 'duels', room: H.room, pairs: H.duels.wire, heroes: this.allWire() });
     this.readyInfo();
   }
 
@@ -237,6 +311,9 @@ class Room {
     const p = this.players.find(x => x.cid === cid);
     if (!p || p.bot || !this.H) return;
     const G = this.G, H = this.H;
+    // Their twin stops; a bot plays the hero from where the twin left it
+    const tw = this.twins.get(cid);
+    if (tw) { const w = tw.heroWire(); if (w) this.takeSnap(p.slot, w); tw.pause(); }
     p.bot = true; p.botWas = p.name;
     const h = this.heroes[p.slot];
     h.bot = true; h.botWas = p.name;
@@ -627,4 +704,4 @@ class Room {
   }
 }
 
-module.exports = { Room };
+module.exports = { Room, fastConfig };

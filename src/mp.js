@@ -95,6 +95,8 @@ window.G = window.G || {};
     leave(silent) {
       if (this.t) { try { this.send({ t: 'bye', cid: this.cid }); this.t.close(); } catch (e) { /* ignore */ } }
       clearInterval(this._beat);
+      if (G.Remote) G.Remote.end();
+      this.remote = false;
       this.t = null; this.status = 'idle'; this.lobby = null; this.H = null; this.players = []; this.heroes = {}; this.mySlot = -1;
       G.uidPrefix = '';
       if (G.Game.mp) { G.Game.mp = false; G.Game.s = null; }
@@ -129,6 +131,11 @@ window.G = window.G || {};
       if (this.H && m.from && m.from !== this.cid) {
         const back = this.players.find(p => p.cid === m.from && p.bot && p.botWas && !p.kicked);
         if (back) { back.bot = false; back.botWas = null; this.cast({ t: 'players', players: this.players }); }
+      }
+      // A server match: your game runs on the server and sends its state; the room's own messages went to it
+      if (this.remote && this.status === 'match') {
+        if (m.t === 'state') { G.Remote.onState(m); return; }
+        if (!['lobby', 'rematch', 'end', 'kick', 'saved', 'ping', 'version', 'joinError'].includes(m.t)) return;
       }
       const H = this.H;
       switch (m.t) {
@@ -270,6 +277,8 @@ window.G = window.G || {};
       this.H = null; this.players = []; this.heroes = {}; this.mySlot = -1; this.readyInfo = null; this.duelGo = {};
       this.watching = null; this.watchers = {}; this.views = {}; this.lastFight = {};
       this.lobby = m.lobby;
+      if (G.Remote) G.Remote.end();
+      this.remote = false;
       this.status = m.lobby.slots.some(s => s && s.cid === this.cid) ? 'lobby' : 'idle';
       G.uidPrefix = '';
       G.Game.mp = false; G.Game.s = null;
@@ -296,6 +305,9 @@ window.G = window.G || {};
       heroes[me.slot].rng = new G.RNG((m.seed ^ (me.slot + 1) * 0x9e3779b1) >>> 0);
       this.heroes = heroes;
       G.Game.startMatch({ seed: (m.seed + me.slot * 7919) >>> 0, matchSeed: m.seed, player: heroes[me.slot], rivals: m.players.filter(p => p.slot !== me.slot).map(p => heroes[p.slot]) });
+      // On the game server your game runs there (stage 2): this page shows it and sends your choices.
+      // (The server's own copy of this code, your twin, has no G.Remote and plays the game for real.)
+      if (this.serverMode && G.Remote) { this.remote = true; G.Remote.begin(); }
       if (this.isHost) {
         this.H = { seed: m.seed, rng: new G.RNG((m.seed ^ 0x5bd1e995) >>> 0), room: 0, ready: {}, snaps: {},
           rec: { started: new Date().toISOString(), builds: {}, duels: [], tour: [], saved: false } };   // the match database record
