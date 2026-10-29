@@ -1,4 +1,4 @@
-# Undercrown server protocol (stage 2)
+# Undercrown server protocol (stage 3)
 
 This is the contract between a game client (the HTML game today, a Godot client later) and the Undercrown game
 server (`server/`).
@@ -19,12 +19,12 @@ Each human in a match gets a **twin** on the server (`server/twin.js`): the same
 messages below, exactly as it used to talk to browsers; twins send the client its **state**. Nothing a client changes
 on its own side reaches its hero.
 
-Stage 3 adds matchmaking.
+Stage 3 adds matchmaking: "Find a match" (below).
 
 ## Connecting
 
 - WebSocket: `wss://<server>/ws` (`ws://` locally). One JSON object per text message.
-- `GET /health` returns `{ "ok": true, "version": "0.43", "rooms": 3 }`. Free hosting sleeps when idle; calling this
+- `GET /health` returns `{ "ok": true, "version": "0.44", "rooms": 3, "queue": 1 }` (`queue`: players looking for a match). Free hosting sleeps when idle; calling this
   wakes it (the title screen does).
 - The server also serves the game itself at `/`.
 - Every client message carries `from` (the client's id). Every server message carries `from: "server"`.
@@ -76,6 +76,18 @@ Once the match starts (`start`), a client's connection carries only these, plus 
 - `s.battle.res`: the finished fight to play. `"$same"` = the one you already have.
 - `sounds`: sounds to play (`[name, volume]`).
 - `render`: the game redrew its screen (otherwise a light refresh is enough). A fight that's playing keeps playing.
+
+## Find a match
+
+Client → server, as the first message on a new connection: `queue` with `cid, name, v`. `bye` (or closing the
+connection) leaves the queue.
+
+Server → client while waiting, every second: `queue` with `n` (players waiting), `ms` (time until the match starts;
+`null` = nobody waiting) and `max`. The server starts a match (`CONFIG.matchmaking` in data/config.js) when `max` (8) are
+waiting, or `waitSeconds` (30) after the second player joined the queue (everyone waiting goes in), or after
+`soloWaitSeconds` (45) for one player alone. Then it sends `lobby` (the new room, with `matched: true` and its `code`,
+which `rejoin` uses) and `start`, and the match runs like any other. Matched rooms have no rematch: everyone finds a
+new match instead.
 
 ## Lobby
 

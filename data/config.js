@@ -2,7 +2,7 @@
 // All stats are flat whole numbers. Chance stats (Crit, Dodge, Stun) mean "out of 100".
 window.G = window.G || {};
 
-G.VERSION = '0.43';   // players in one room must all run the same version
+G.VERSION = '0.44';   // players in one room must all run the same version
 
 G.CONFIG = {
   // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
@@ -58,6 +58,10 @@ G.CONFIG = {
 
   // Selling from your bag: gear by rarity; potions and elixirs for half their price
   sell: { grey: 4, green: 12, rare: 30, legendary: 45, artifact: 60, consumablePct: 50 },
+
+  // Find a match (online): a match starts when this many are waiting, or waitSeconds after the second player joined
+  // the queue (everyone waiting goes in), or after soloWaitSeconds for one player alone. Bots fill seats up to 6.
+  matchmaking: { maxPlayers: 8, waitSeconds: 30, soloWaitSeconds: 45 },
 
   shop: {
     reviewSeconds: 5,   // everyone looks over the table before picks start

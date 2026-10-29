@@ -8,9 +8,11 @@ const http = require('http'), fs = require('fs'), path = require('path');
 const { attach } = require('./ws');
 const { Room } = require('./room');
 const { ROOT, loadRules } = require('./rules');
+const { Matchmaker } = require('./matchmaker');
 
 const PORT = +process.env.PORT || 8080;
-const VERSION = loadRules().VERSION;
+const RULES = loadRules();
+const VERSION = RULES.VERSION;
 const SUPABASE = {   // the match database (insert only); the key is the public "publishable" one the browser uses too
   url: process.env.SUPABASE_URL || 'https://nlzkkrvnjagfzcrukdgl.supabase.co',
   key: process.env.SUPABASE_KEY || 'sb_publishable_vXjVdjPqtc5MaR81_5KHsg_BY8GTGQ_',
@@ -36,6 +38,13 @@ function newCode() {
   for (;;) { let c = ''; for (let i = 0; i < 5; i++) c += A[Math.floor(Math.random() * A.length)]; if (!rooms.has(c)) return c; }
 }
 
+// ---------- Matchmaking (Find a match) ----------
+const mmConfig = () => {
+  const C = RULES.CONFIG.matchmaking || { maxPlayers: 8, waitSeconds: 30, soloWaitSeconds: 45 };
+  return process.env.UC_FAST === '1' ? { ...C, waitSeconds: 3, soloWaitSeconds: 3 } : C;   // tests
+};
+const matchmaker = new Matchmaker(() => { const r = new Room(newCode(), server); rooms.set(r.code, r); return r; }, mmConfig);
+
 // ---------- Static files (the game) ----------
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.ico': 'image/x-icon', '.md': 'text/plain; charset=utf-8' };
@@ -59,20 +68,30 @@ function serveFile(req, res) {
 const httpServer = http.createServer((req, res) => {
   const url = (req.url || '').split('?')[0];
   res.setHeader('Access-Control-Allow-Origin', '*');   // the itch.io build and the claude.ai page call /health from elsewhere
-  if (url === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, version: VERSION, rooms: rooms.size })); return; }
+  if (url === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, version: VERSION, rooms: rooms.size, queue: matchmaker.q.length })); return; }
   if (url === '/debug/matches' && !SAVE) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(savedLocally)); return; }
   serveFile(req, res);
 });
 
 // ---------- Players' connections ----------
 attach(httpServer, '/ws', sock => {
-  let room = null, cid = null;
+  let room = null, cid = null, queued = false;
   const reply = msg => sock.send(JSON.stringify({ ...msg, from: 'server' }));
   sock.on('message', text => {
     let m; try { m = JSON.parse(text); } catch (e) { return; }
     if (!m || typeof m.t !== 'string') return;
     if (!room) {
-      // First message: create a room, join one, or come back to one after a dropped connection
+      // Waiting in the matchmaking queue: leaving it is the only thing to do
+      if (queued) { if (m.t === 'bye' || m.t === 'leave') { matchmaker.remove(cid); queued = false; } return; }
+      // First message: find a match, create a room, join one, or come back to one after a dropped connection
+      if (m.t === 'queue') {
+        if (m.v !== VERSION) { reply({ t: 'version', cid: m.cid, v: VERSION }); return; }
+        cid = String(m.cid || '').slice(0, 20);
+        if (!cid) return;
+        queued = true;
+        matchmaker.add(cid, m.name, sock, r => { room = r; queued = false; });
+        return;
+      }
       if (m.t !== 'create' && m.t !== 'join' && m.t !== 'rejoin') return;
       if (m.v !== VERSION) { reply({ t: 'version', cid: m.cid, v: VERSION }); return; }
       cid = String(m.cid || '').slice(0, 20);
@@ -92,7 +111,7 @@ attach(httpServer, '/ws', sock => {
     }
     try { room.onMessage(cid, m); } catch (e) { console.error("message", m.t, e); }
   });
-  sock.on('close', () => { if (room) room.detach(cid, sock); });
+  sock.on('close', () => { if (room) room.detach(cid, sock); else if (queued) matchmaker.remove(cid); });
 });
 
 // Heartbeat: pings, dropped players, and rooms nobody has been in for a while

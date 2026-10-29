@@ -1032,7 +1032,8 @@ window.G = window.G || {};
         <p class="lede">${T.entrants.length === 1 ? 'Everyone else ran out of hearts in the dungeon.' : won ? 'Thirty rooms, a tournament, and nobody could stop you.' : 'You made it to the end. Next time, the crown.'}</p>
         ${placements(T)}${roundsList(T)}
         ${G.Game.mp && (G.MP.isHost || G.MP.serverMode) && G.MP.saveStatus ? `<p class="hint save-status">Match database: ${G.MP.saveStatus === 'saved' ? 'this match was saved.' : G.MP.saveStatus === 'saving' ? 'saving…' : esc(G.MP.saveStatus)}</p>` : ''}
-        <div class="row-actions">${G.Game.mp ? (G.MP.isOwner() ? '<button class="enter" data-act="mp-rematch">Play again (same room)</button><button class="ghost" data-act="mp-leave">Leave</button>'
+        <div class="row-actions">${G.Game.mp && G.MP.lobby && G.MP.lobby.matched ? '<button class="enter" data-act="mp-requeue">Find another match</button><button class="ghost" data-act="mp-leave">Leave</button>'
+          : G.Game.mp ? (G.MP.isOwner() ? '<button class="enter" data-act="mp-rematch">Play again (same room)</button><button class="ghost" data-act="mp-leave">Leave</button>'
           : '<p class="waiting">The host can start a rematch in this room.</p><button class="ghost" data-act="mp-leave">Leave</button>') : '<button class="enter" data-act="title">Play again</button>'}</div></section>`;
     }
     const m = G.Tournament.nextMatch(T);
@@ -1092,6 +1093,14 @@ window.G = window.G || {};
     const M = G.MP;
     if (M.status === 'connecting') return `<div class="title-screen lobby"><h2>Connecting…</h2><p class="lede">${M.wantsHost ? 'Opening your room.' : `Looking for room ${esc(M.code)}.`}${M.serverMode ? ' If the game server was asleep, this can take up to a minute.' : ''}</p>
       <div class="row-actions"><button class="ghost" data-act="mp-leave">Cancel</button></div></div>`;
+    if (M.status === 'queue') {
+      const q = M.queueInfo, secs = q && q.ms != null ? Math.max(0, Math.ceil((q.ms - (Date.now() - q.at)) / 1000)) : null;
+      const who = !q ? 'Joining the queue…' : q.n <= 1 ? 'You’re the only one looking right now.' : `${q.n} players are looking for a match.`;
+      const when = !q || secs == null ? '' : q.n >= 2 ? `The match starts in ${secs} second${secs === 1 ? '' : 's'}, or as soon as ${q.max} are in.` : `If nobody else turns up, you start with bots in ${secs} second${secs === 1 ? '' : 's'}.`;
+      return `<div class="title-screen lobby"><h2>Finding a match…</h2><p class="lede">${who} ${when}</p>
+        <p class="hint">Bots fill empty seats up to 6.${M.serverMode && !q ? ' If the game server was asleep, this can take up to a minute.' : ''}</p>
+        <div class="row-actions"><button class="ghost" data-act="mp-leave">Cancel</button></div></div>`;
+    }
     if (M.status === 'error') return `<div class="title-screen lobby"><h2>Couldn’t join</h2><p class="warn">${esc(M.error || 'Something went wrong.')}</p>
       <div class="row-actions"><button data-act="mp-leave">Back</button></div></div>`;
     const L = M.lobby || { slots: [] };
@@ -1131,8 +1140,9 @@ window.G = window.G || {};
       </ul>
       <div class="row-actions"><button class="enter" data-act="start">Play solo</button></div>
       <section class="mp-box">
-        <h3>Play with friends</h3>
+        <h3>Play online</h3>
         <label class="field"><span>Your name</span><input id="mp-name" maxlength="14" value="${esc(savedName())}" placeholder="Your name" autocomplete="nickname"></label>
+        ${G.Net.mode() === 'server' ? '<div class="row-actions"><button class="enter" data-act="mp-find">Find a match</button></div><p class="hint">Play with whoever is online now. Or with friends:</p>' : ''}
         <div class="mp-actions">
           <button data-act="mp-create">Create a room</button>
           <span class="or">or</span>
@@ -1453,6 +1463,8 @@ window.G = window.G || {};
       case 'mp-create': { const n = ($('#mp-name') || {}).value || ''; if (!n.trim()) { toast(el, 'Enter your name first'); break; } G.MP.create(n); break; }
       case 'mp-join': { const n = ($('#mp-name') || {}).value || '', c = ($('#mp-code') || {}).value || ''; if (!n.trim()) { toast(el, 'Enter your name first'); break; } if (!c.trim()) { toast(el, 'Enter the room code'); break; } G.MP.join(c, n); break; }
       case 'mp-start': G.MP.hostStart(); break;
+      case 'mp-find': { const n = ($('#mp-name') || {}).value || ''; if (!n.trim()) { toast(el, 'Enter your name first'); break; } G.MP.findMatch(n); break; }
+      case 'mp-requeue': { const n = G.MP.name; G.MP.leave(true); G.Game.s = null; G.MP.findMatch(n); break; }
       case 'mp-rematch': G.MP.hostRematch(); break;
       case 'spectate': G.MP.watch = +el.dataset.slot; render(); break;
       case 'tour-watch': G.MP.tourWatchSeed = +el.dataset.seed; render(); break;

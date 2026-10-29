@@ -47,7 +47,8 @@ No build step. Scripts are plain `<script>` files on purpose, so double-clicking
 `server/` is the multiplayer server: it hosts rooms, runs the bots, the room clock, Plunder, duel pairings and the
 tournament, and runs every fight between players so every screen sees the same fight. Each player's own run
 (doors, monster fights, loot, gold, level-ups) runs there too, in their "twin" (the same game code, owned by the
-server), so the browser only shows the state and sends button presses. It also serves the game.
+server), so the browser only shows the state and sends button presses. "Find a match" puts players in one queue
+and starts matches from it (server/matchmaker.js). It also serves the game.
 It needs no packages:
 
 ```
@@ -94,6 +95,7 @@ tools/meta.js       headless meta test: `node tools/meta.js 1000`
 server/             the multiplayer game server (Node.js, no packages)
   index.js          web server: the game files, /health and the /ws WebSocket
   room.js           one room: lobby, room clock, bots, Plunder, duels, tournament, match record
+  matchmaker.js     Find a match: the shared queue that starts matches
   twin.js           a player's game, run on the server (game.js + mp.js); browsers send act, get state
   rules.js          loads data/ and the rule files of src/ (the same files the browser runs)
   ws.js             a small built-in WebSocket implementation

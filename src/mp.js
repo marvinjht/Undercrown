@@ -53,11 +53,15 @@ window.G = window.G || {};
     // ---------- Connecting ----------
     async create(name) { return this._open(G.Net.mode() === 'server' ? 'NEW' : code6(), name, true); },
     async join(code, name) { return this._open(String(code || '').trim().toUpperCase(), name, false); },
-    async _open(code, name, host) {
+    // Find a match (game server only): wait in the shared queue; the server puts you in a match
+    async findMatch(name) { return this._open('QUEUE', name, false, true); },
+    async _open(code, name, host, queue) {
       if (!code) { this.status = 'error'; this.error = 'Enter a room code.'; update(); return; }
       this.leave(true);
       this.serverMode = G.Net.mode() === 'server';
-      this.status = 'connecting'; this.error = null; this.code = this.serverMode && host ? '' : code; this.isHost = host && !this.serverMode; this.wantsHost = host;
+      if (queue && !this.serverMode) { this.status = 'error'; this.error = 'Finding a match needs the game server.'; update(); return; }
+      this.status = 'connecting'; this.error = null; this.code = (this.serverMode && host) || queue ? '' : code; this.isHost = host && !this.serverMode; this.wantsHost = host;
+      this.queueing = !!queue; this.queueInfo = null;
       this.name = (name || '').trim().slice(0, 14) || (host ? 'Host' : 'Player');
       try { localStorage.setItem('uc-name', this.name); } catch (e) { /* ignore */ }
       this.cid = 'c' + Math.random().toString(36).slice(2, 9);
@@ -65,7 +69,8 @@ window.G = window.G || {};
       try {
         this.t = await G.Net.connect(code, msg => this.onMessage(msg), {
           // The connection to the server dropped and came back: say who we are again
-          onReconnect: () => { if (this.t && this.status !== 'ended') this.t.send({ t: 'rejoin', cid: this.cid, code: this.code, name: this.name, v: G.VERSION, room: G.Game.s ? G.Game.s.room : null, from: this.cid }); },
+          onReconnect: () => { if (this.t && this.status === 'queue') { this.t.send({ t: 'queue', cid: this.cid, name: this.name, v: G.VERSION, from: this.cid }); return; }
+            if (this.t && this.status !== 'ended') this.t.send({ t: 'rejoin', cid: this.cid, code: this.code, name: this.name, v: G.VERSION, room: G.Game.s ? G.Game.s.room : null, from: this.cid }); },
           onLost: () => { if (this.status !== 'ended' && this.status !== 'idle') this.end('Lost the connection to the game server.'); },
         });
       } catch (e) {
@@ -73,7 +78,8 @@ window.G = window.G || {};
       }
       if (this.serverMode) {
         // The server makes the room (and its code) or puts us in one; its lobby message tells us which
-        this.send(host ? { t: 'create', cid: this.cid, name: this.name, v: G.VERSION } : { t: 'join', code, cid: this.cid, name: this.name, v: G.VERSION });
+        if (queue) { this.status = 'queue'; this.send({ t: 'queue', cid: this.cid, name: this.name, v: G.VERSION }); }
+        else this.send(host ? { t: 'create', cid: this.cid, name: this.name, v: G.VERSION } : { t: 'join', code, cid: this.cid, name: this.name, v: G.VERSION });
       } else if (host) {
         this.lobby = { slots: [{ cid: this.cid, name: this.name }, ...Array(MAX - 1).fill(null)], hostCid: this.cid, v: G.VERSION };
         this.status = 'lobby';
@@ -155,6 +161,7 @@ window.G = window.G || {};
             update();
           }
           break;
+        case 'queue': if (this.status === 'queue') { this.queueInfo = { n: m.n, ms: m.ms, max: m.max, at: now() }; update(); } break;
         case 'joinError': if (m.cid === this.cid && this.status === 'connecting') { this.status = 'error'; this.error = m.reason; update(); } break;
         case 'saved': this.saveStatus = m.status; update(); break;
         case 'rematch': this.onRematch(m); break;
@@ -170,7 +177,8 @@ window.G = window.G || {};
           this.lobby = m.lobby; this.seen[m.lobby.hostCid] = now();
           if (m.lobby.code) this.code = m.lobby.code;
           if (this.serverMode && this.status === 'match') break;   // a reconnect mid-match: nothing to change
-          if (this.status === 'connecting') {
+          if (this.status === 'queue' && m.lobby.slots.some(s => s && s.cid === this.cid)) this.status = 'lobby';   // matched: the match starts now
+          else if (this.status === 'connecting') {
             if (m.lobby.slots.some(s => s && s.cid === this.cid)) this.status = 'lobby';
             else if (m.lobby.started) { this.status = 'error'; this.error = 'That match has already started.'; }
             else if (m.lobby.slots.every(Boolean)) { this.status = 'error'; this.error = 'That room is full (8 players).'; }

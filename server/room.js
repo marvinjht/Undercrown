@@ -152,7 +152,7 @@ class Room {
   // Back to the lobby with everyone still here, same room code
   rematch(cid) {
     const L = this.lobby;
-    if (cid !== L.ownerCid || !L.started) return;
+    if (cid !== L.ownerCid || !L.started || L.matched) return;   // a matchmade room: everyone finds a new match instead
     const H = this.H;
     if (H) { clearInterval(H.plunderTimer); clearTimeout(H.tourTimer); clearTimeout(H.duelTimer); }
     const here = this.players.filter(p => !p.bot && this.conns.has(p.cid));
