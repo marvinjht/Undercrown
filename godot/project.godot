@@ -1,0 +1,36 @@
+; Undercrown, Godot client. The game itself runs on the game server; this client draws it and sends your choices.
+; See README.md in this folder.
+
+config_version=5
+
+[application]
+
+config/name="Undercrown"
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.3", "GL Compatibility")
+config/icon="res://art/icons/crown.png"
+
+[autoload]
+
+Net="*res://scripts/net.gd"
+Game="*res://scripts/game.gd"
+Sfx="*res://scripts/sfx.gd"
+Art="*res://scripts/art.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[gui]
+
+theme/custom="res://theme/theme.tres"
+theme/custom_font="res://fonts/DepartureMono-Regular.otf"
+
+[rendering]
+
+textures/canvas_textures/default_texture_filter=0
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

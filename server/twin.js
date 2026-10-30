@@ -43,7 +43,7 @@ class Twin {
     this.room = room; this.cid = player.cid; this.slot = player.slot;
     this.timers = new Set(); this.dead = false; this.paused = false;
     this.sounds = []; this.renderFlag = false; this.flushT = null;
-    this.sent = { s: {}, mp: {}, heroes: {}, me: {} };
+    this.sent = { s: {}, mp: {}, heroes: {}, me: {}, view: {} };
     const T = this;
     const guard = fn => (...a) => { if (!T.dead) T.safe(() => fn(...a)); };
     const globals = {
@@ -57,7 +57,7 @@ class Twin {
       addEventListener() {},
       location: { search: '', origin: '' },
     };
-    const G = this.G = loadRules(['src/mp.js', 'src/game.js'], globals);
+    const G = this.G = loadRules(['src/mp.js', 'src/game.js', 'src/present.js'], globals);
     if (room.fastConfig) room.fastConfig(G);
     // The screen is the player's browser: anything that would redraw it sends them the new state instead
     G.UI = {
@@ -139,7 +139,7 @@ class Twin {
     if (this.dead) return;
     const G = this.G, s = G.Game.s, MP = G.MP;
     if (!s) return;
-    if (full) { this.sent = { s: {}, mp: {}, heroes: {}, me: {} }; this.lastRes = null; }
+    if (full) { this.sent = { s: {}, mp: {}, heroes: {}, me: {}, view: {} }; this.lastRes = null; }
     const parts = [], del = [];
     const S = [];
     // A hero, field by field: only the fields that changed (and the ones that went away)
@@ -193,10 +193,24 @@ class Twin {
       const pj = heroPatch(MP.heroes[sl], sent, { past: 1 });
       if (pj) Hs.push(JSON.stringify(sl) + ':' + pj);
     }
-    if (!full && !me && !S.length && !del.length && !M.length && !Hs.length && !this.sounds.length) return;
+    // Clients that draw their own screens (Godot) also get every screen described (src/present.js), part by part
+    const V = [];
+    if (this.room.clients && this.room.clients[this.cid] === 'godot') {
+      const v = G.Present.view(s, MP) || {};
+      for (const k of Object.keys(v)) {
+        if (k === 'rivals') {   // each player's panel on its own
+          const sent = this.sent.view.rivals = this.sent.view.rivals || {}, ch = [];
+          for (const sl in v.rivals) { const j = JSON.stringify(v.rivals[sl]); if (sent[sl] !== j) { sent[sl] = j; ch.push(JSON.stringify(sl) + ':' + j); } }
+          if (ch.length) V.push('"rivals":{' + ch.join(',') + '}');
+          continue;
+        }
+        const j = JSON.stringify(v[k]); if (this.sent.view[k] !== j) { this.sent.view[k] = j; V.push(JSON.stringify(k) + ':' + j); }
+      }
+    }
+    if (!full && !me && !S.length && !del.length && !M.length && !Hs.length && !V.length && !this.sounds.length) return;
     parts.push('"t":"state"', '"from":"server"', '"now":' + Date.now(), '"full":' + !!full, '"render":' + this.renderFlag,
       '"me":' + (me || 'null'), '"s":{' + S.join(',') + '}', '"del":' + JSON.stringify(del), '"mp":{' + M.join(',') + '}', '"heroes":{' + Hs.join(',') + '}',
-      '"sounds":' + JSON.stringify(this.sounds));
+      '"sounds":' + JSON.stringify(this.sounds), '"view":{' + V.join(',') + '}');
     this.sounds = []; this.renderFlag = false;
     this.room.toClient(this.cid, '{' + parts.join(',') + '}');
   }

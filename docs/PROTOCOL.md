@@ -76,6 +76,15 @@ Once the match starts (`start`), a client's connection carries only these, plus 
 - `s.battle.res`: the finished fight to play. `"$same"` = the one you already have.
 - `sounds`: sounds to play (`[name, volume]`).
 - `render`: the game redrew its screen (otherwise a light refresh is enough). A fight that's playing keeps playing.
+- `view` (only for clients that said `client: "godot"` in `create`, `join`, `queue` or `rejoin`): every panel and
+  screen described as plain data by `src/present.js`, so the client needs no rules code. Parts (each sent only when
+  it changes): `top` (room track), `clock` (`ends`, `total`, server time), `me` (your hero: vitals, `stats` columns,
+  `sets`, `relics`, `look`), `gear`, `bag` (items with their buttons), `rivals` (by seat; only changed seats),
+  `rivalOrder`, `supply`, `setGuide`, `tree`, `rooms`, and `screen`: `{ phase, title, lede, notice, notes, sections }`.
+  Section kinds: `doors`, `cards`, `buttons`, `list`, `review`, `timer`, `skip`, `tree`, `character`, `opponent`,
+  `bracket`, `places`, `arena` (play `s.battle.res` there). Every button is
+  `{ label, act, args, enabled, style, hold, mp, note, confirm }`: send it as `act` (or handle `ui_…` acts
+  yourself: `ui_leave`, `ui_title`, `ui_requeue`, `ui_rematch`). The Godot client in `godot/` is built on this.
 
 ## Find a match
 

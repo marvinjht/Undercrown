@@ -89,7 +89,8 @@ attach(httpServer, '/ws', sock => {
         cid = String(m.cid || '').slice(0, 20);
         if (!cid) return;
         queued = true;
-        matchmaker.add(cid, m.name, sock, r => { room = r; queued = false; });
+        const client = m.client === 'godot' ? 'godot' : null;
+        matchmaker.add(cid, m.name, sock, r => { room = r; queued = false; if (client) r.clients[cid] = client; });
         return;
       }
       if (m.t !== 'create' && m.t !== 'join' && m.t !== 'rejoin') return;
@@ -103,6 +104,7 @@ attach(httpServer, '/ws', sock => {
         if (!r) { reply({ t: 'joinError', cid, reason: `No room ${String(m.code || '').toUpperCase()} found. Check the code, or ask the host to create it again.` }); return; }
         room = r;
       }
+      if (m.client === 'godot') room.clients[cid] = 'godot';
       room.attach(cid, sock);
       const ok = m.t === 'rejoin' && room.lobby.started ? { ok: room.players.some(p => p.cid === cid), reason: 'That match has already started.' } : room.join(cid, m.name);
       if (!ok.ok) { reply({ t: 'joinError', cid, reason: ok.reason }); room.detach(cid, sock); room = null; return; }

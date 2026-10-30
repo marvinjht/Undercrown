@@ -1,0 +1,99 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/ui/title_view.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/ui/match_view.gd" id="3"]
+
+[node name="Main" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.086, 0.07, 0.063, 1)
+
+[node name="Title" type="MarginContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 16
+script = ExtResource("2")
+
+[node name="Match" type="MarginContainer" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 6
+script = ExtResource("3")
+
+[node name="Rows" type="VBoxContainer" parent="Match"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="TopBar" type="PanelContainer" parent="Match/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Columns" type="HBoxContainer" parent="Match/Rows"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="LeftScroll" type="ScrollContainer" parent="Match/Rows/Columns"]
+custom_minimum_size = Vector2(236, 0)
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="Left" type="VBoxContainer" parent="Match/Rows/Columns/LeftScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="StageScroll" type="ScrollContainer" parent="Match/Rows/Columns"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+horizontal_scroll_mode = 0
+
+[node name="Stage" type="VBoxContainer" parent="Match/Rows/Columns/StageScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="SideScroll" type="ScrollContainer" parent="Match/Rows/Columns"]
+custom_minimum_size = Vector2(286, 0)
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="Side" type="VBoxContainer" parent="Match/Rows/Columns/SideScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6

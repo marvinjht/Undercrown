@@ -39,6 +39,7 @@ class Room {
     this.lobby = { code, slots: Array(MAX).fill(null), hostCid: 'server', ownerCid: null, v: this.VERSION, started: false };
     this.players = []; this.heroes = {}; this.H = null;
     this.twins = new Map();   // cid -> Twin (each human's game, run here)
+    this.clients = {};        // cid -> 'godot' for clients that want every screen described (state.view)
     this.createdAt = now(); this.emptySince = now();
   }
   get CFG() { return this.G.CONFIG; }
