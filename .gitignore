@@ -1,2 +1,5 @@
 *.png
 !assets/*.png
+
+# The Godot client's art is part of the project
+!godot/**/*.png
