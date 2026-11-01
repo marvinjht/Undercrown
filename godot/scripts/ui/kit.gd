@@ -329,16 +329,88 @@ static func card(c: Dictionary, width := CARD_W) -> PanelContainer:
 		v.add_child(line(ln))
 	if has_more(v):
 		v.add_child(detail_hint())
-	var bs: Array = c.get("buttons", [])
-	if bs.size():
-		v.add_child(spacer(2))
-		for b in bs:
-			var btn := button(b)
-			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			v.add_child(btn)
+	card_buttons(v, c.get("buttons", []))
 	p.add_child(v)
 	fit_width(p, width)
 	return p
+
+# A card's buttons, pushed to the bottom (when a grid row makes the card taller than its text)
+static func card_buttons(v: VBoxContainer, bs: Array) -> void:
+	var push := spacer(2)
+	push.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	v.add_child(push)
+	for b in bs:
+		var btn := button(b)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v.add_child(btn)
+
+# ---------- Compact item card ----------
+# Every item on a screen, the same way: name, type line, up to 3 key stats (with the change vs what you wear),
+# what the screen adds (a forge preview...), the verdict tag, then the buttons. Hover shows the full item;
+# Shift shows its full text.
+const CARD_STATS := 3
+
+static func item_card(c: Dictionary, width := CARD_W) -> PanelContainer:
+	var it: Dictionary = c.get("item", {})
+	var p: PanelContainer = preload("res://scripts/ui/tip_slot.gd").new()
+	p.theme_type_variation = "Card"
+	p.item = it
+	p.tooltip_text = " "
+	p.custom_minimum_size = Vector2(width, 0)
+	var v := vbox(3)
+	var nm := label(it.get("name", ""), "", false, Art.color(it.get("color"), Art.TEXT))
+	nm.clip_text = true
+	nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	v.add_child(nm)
+	var tr := hbox(4)
+	var ic := icon(Art.icon(str(it.get("icon", ""))), 20)
+	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	tr.add_child(ic)
+	var ty := label(it.get("type", it.get("sub", "")), "Muted")
+	ty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ty.clip_text = true
+	ty.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	tr.add_child(ty)
+	if it.get("set") is Dictionary and Art.class_icon(it.set.get("id", "")):
+		var ci := icon(Art.class_icon(it.set.id), 12)
+		ci.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		tr.add_child(ci)
+	v.add_child(tr)
+	var rows := []
+	if it.get("stats") is Array and (it.stats as Array).size():
+		for st in it.stats:
+			rows.append(stat_row(st))
+	else:   # bag items and relics: their (short) description
+		for ln in it.get("lines", []):
+			if ln is Dictionary and str(ln.get("tone", "")) in ["hint", "head"]:
+				continue
+			rows.append(line(ln))
+			break
+	for i in mini(rows.size(), CARD_STATS):
+		v.add_child(rows[i])
+	if rows.size() > CARD_STATS:
+		v.add_child(label("+%d more" % (rows.size() - CARD_STATS), "Muted"))
+	for ln in c.get("lines", []):   # what the screen adds
+		v.add_child(line(ln))
+	if it.get("verdict") is Dictionary:
+		v.add_child(label(str(it.verdict.get("text", "")), "", false, Art.tone(it.verdict.get("tone", ""))))
+	card_buttons(v, c.get("buttons", []))
+	p.add_child(v)
+	fit_width(p, width)
+	return p
+
+# "+20 Health ▲10": a stat with its change against the item you wear (green up, red down)
+static func stat_row(st: Dictionary) -> HBoxContainer:
+	var h := hbox(5)
+	var col: Color = Art.MUTED if st.get("lost", false) else (Art.tone("cost") if st.get("cost", false) else (Art.tone("affix") if st.get("affix", false) else Art.TEXT))
+	h.add_child(label(str(st.get("text", "")), "", false, col))
+	var d = st.get("delta")
+	if d != null and int(d) != 0:
+		var a := label(("▲%d" if int(d) > 0 else "▼%d") % absi(int(d)), "", false, Art.UP if int(d) > 0 else Art.DOWN)
+		a.add_theme_font_size_override("font_size", 10)
+		a.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		h.add_child(a)
+	return h
 
 # ---------- Classes and hybrids ----------
 # A class name with its icon on the left

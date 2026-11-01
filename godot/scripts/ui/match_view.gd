@@ -528,10 +528,18 @@ func _section_view(sec: Dictionary) -> void:
 				f.add_child(p)
 			stage.add_child(f)
 		"cards":
-			var f := Kit.flow(8, true)
+			# Same-width cards in a centered grid; every card in a row matches the tallest one
+			var w := 190 if sec.get("compact", false) else Kit.CARD_W
+			var grid: GridContainer = preload("res://scripts/ui/card_grid.gd").new()
+			grid.cell_w = w
+			grid.add_theme_constant_override("h_separation", 8)
+			grid.add_theme_constant_override("v_separation", 8)
+			grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 			for c in sec.get("cards", []):
-				f.add_child(Kit.card(c, 190 if sec.get("compact", false) else Kit.CARD_W))
-			stage.add_child(f)
+				var card: PanelContainer = Kit.item_card(c, w) if c.get("kind") == "item" and c.get("item") is Dictionary else Kit.card(c, w)
+				card.size_flags_vertical = Control.SIZE_FILL
+				grid.add_child(card)
+			stage.add_child(grid)
 		"buttons":
 			stage.add_child(Kit.buttons(sec.get("buttons", []), true))
 		"list":

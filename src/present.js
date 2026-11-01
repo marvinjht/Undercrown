@@ -8,7 +8,9 @@
 //            or 'ui_…' for things the client does itself (ui_leave, ui_requeue, ui_rematch, ui_title).
 //   Line     { text, tone, short? }   short: a plain one-line version of a long text ('' = hide it in short mode).
 //            Clients may show short by default and text on request; the browser shows text. tone: '', 'up', 'down', 'affix', 'cost', 'legend', 'artifact', 'stubborn', 'hint', 'warn', 'head'
-//   Item     { id, kind, name, rarity, rarityName, color, icon, sub, set, lines, trait, traitShort, notes, verdict, compare }
+//   Item     { id, kind, name, rarity, rarityName, color, icon, sub, type, set, lines, stats, trait, traitShort, notes, verdict, compare }
+//            type: short kind line ("Rare Helmet · T2"). stats (gear only): [{ k, label, value, text, affix, cost, lost, delta }]
+//            in display order (base, bonus, then stats you'd lose); delta = change vs your equipped item, on the first line per stat.
 //   Card     { kind: 'item'|'text', item?, title?, sub?, color?, lines, buttons }
 //   Section  { kind: 'cards'|'buttons'|'doors'|'list'|'bracket'|'places'|'tree'|'character'|'opponent'|'review'|'skip'|'timer', … }
 window.G = window.G || {};
@@ -53,7 +55,7 @@ window.G = window.G || {};
     if (n >= max) lines.push(line('Maxed. It can’t drop for you again.', 'hint'));
     else lines.push(rl(Math.min(max, (n || 1) + 1), 'hint', `${n ? 'Next copy' : 'More copies'}: `), line(`Relics stack up to ${max} copies and never use bag space.`, 'hint', ''));
     return { id: item ? item.id : 'relic_' + rid, kind: 'relic', rid, name: R.name, rarity: 'relic', rarityName: 'Relic', color: R.color || RARITY_COLOR.relic,
-      icon: 'relic_' + rid, sub: `Relic${n ? ` · you have ${n}/${max}` : ''}`, set: null, lines, trait: null, notes: [], verdict: { tone: 'relic', text: 'Relic' }, count: n || 0 };
+      icon: 'relic_' + rid, sub: `Relic${n ? ` · you have ${n}/${max}` : ''}`, type: item ? (n ? `Relic · copy ${Math.min(max, n + 1)} of ${max}` : `Relic · stacks to ${max}`) : `Relic · ${n} of ${max}`, set: null, lines, trait: null, notes: [], verdict: { tone: 'relic', text: 'Relic' }, count: n || 0 };
   }
 
   // Everything about an item, for a card or a tooltip. hero: compare against what they wear.
@@ -63,7 +65,7 @@ window.G = window.G || {};
     if (item.kind === 'consumable') {
       const c = G.CONSUMABLES[item.cid];
       return { id: item.id, kind: 'consumable', cid: item.cid, name: c.name, rarity: 'potion', rarityName: 'Bag item', color: RARITY_COLOR.potion, icon: item.iconKey,
-        sub: 'Bag item', set: null, lines: [line(c.desc)], trait: null, notes: [], verdict: { tone: 'side', text: 'Bag item' } };
+        sub: 'Bag item', type: 'Consumable', set: null, lines: [line(c.desc)], trait: null, notes: [], verdict: { tone: 'side', text: 'Bag item' } };
     }
     const R = G.RARITY[item.rarity], wl = weaponLine(item);
     const lines = [];
@@ -90,12 +92,25 @@ window.G = window.G || {};
         compare = { name: eq.name + (eq.rarity === 'artifact' ? ' (loses its artifact effect)' : ''), lines: diffs.length ? diffs.map(d => line(d.text, d.d > 0 ? 'up' : 'down')) : [line('Same stats')] };
       }
     }
+    let deltas = null;
+    if (hero) {
+      const eq = hero.gear[item.slot];
+      if (eq && eq.id !== item.id) { deltas = {}; for (const d of G.Items.compare(item, eq)) deltas[d.k] = d.d; }
+    }
+    const seen = {};
+    const stats = SL.map(l => {
+      const o = { k: l.k, label: G.STAT_INFO[l.k].label, value: l.v, text: l.text, affix: !!l.affix, cost: !!l.cost, lost: false, delta: null };
+      if (deltas && !seen[l.k]) { seen[l.k] = 1; if (deltas[l.k]) o.delta = deltas[l.k]; }
+      return o;
+    });
+    if (deltas) for (const k of G.STAT_ORDER) if (!seen[k] && deltas[k] < 0) stats.push({ k, label: G.STAT_INFO[k].label, value: 0, text: G.STAT_INFO[k].label, affix: false, cost: false, lost: true, delta: deltas[k] });
     const trait = item.rarity === 'artifact' ? item.baseTrait || null : item.trait || null;
     const traitShort = trait ? traitShortOf(item) || trait : null;
     return { id: item.id, kind: 'gear', slot: item.slot, name: item.name, rarity: item.rarity, rarityName: R.name, color: RARITY_COLOR[item.rarity] || '#ffffff',
       icon: item.iconKey, weaponType: item.weaponType || null,
       sub: `${R.name} ${wl || G.SLOT_NAMES[item.slot]}${item.rarity === 'artifact' ? '' : ' · Tier ' + item.tier}`,
-      set: setInfo(item.set), lines, trait, traitShort, notes, verdict: verdict(hero, item), compare };
+      type: `${R.name} ${item.slot === 'weapon' && G.WEAPONS[item.weaponType] ? G.WEAPONS[item.weaponType].name : G.SLOT_NAMES[item.slot]}${item.rarity === 'artifact' ? '' : ' · T' + item.tier}`,
+      set: setInfo(item.set), lines, stats, trait, traitShort, notes, verdict: verdict(hero, item), compare };
   }
   // The short version of an item's trait, from the data (works for items made before short texts existed)
   function traitShortOf(item) {
