@@ -133,8 +133,8 @@ window.G = window.G || {};
   }
 
   const note = (mon, elite) => { const n = elite && mon.eliteForm ? mon.eliteForm.note : mon.note; return n ? ' ' + n : ''; };
-  function bossDesc(b) {
-    if (b.desc) return b.desc;
+  function bossDesc(b, short) {
+    if (b.desc) return short && b.short ? b.short : b.desc;
     const T = G.ELITE_TRAITS[b.trait];
     return T ? `${T.name}: ${T.desc}` : '';
   }
@@ -143,7 +143,8 @@ window.G = window.G || {};
     armory:   { title: 'The Armory', text: () => 'Every warrior starts here. Pick one of three weapons.' },
     fight:    { title: 'Fight',    text: d => `${monsterName(d.monster, 'fight')}.${note(d.monster)} +${CFG().xp.fight} XP and gold; gear 1 fight in 3.` },
     elite:    { title: 'Elite',    text: d => `${monsterName(d.monster, 'elite', d.trait)}.${note(d.monster, true)} ${G.ELITE_TRAITS[d.trait].desc} +${CFG().xp.elite} XP. Always drops gear.` },
-    boss:     { title: 'Boss',     text: d => `${d.monster.name}. ${bossDesc(d.monster)} +${CFG().xp.boss} XP. Guaranteed rare item.` },
+    boss:     { title: 'Boss',     text: d => `${d.monster.name}. ${bossDesc(d.monster)} +${CFG().xp.boss} XP. Guaranteed rare item.`,
+                short: d => `${d.monster.name}. ${bossDesc(d.monster, true)} +${CFG().xp.boss} XP. Guaranteed rare item.` },
     trash:    { title: 'Trash Pile', text: () => 'No fight. A little gold and some junk. Maybe something useful.' },
     vault:    { title: 'Treasure Vault', text: () => 'No fight. Pick 1 of 3 items, one of them rare.' },
     rest:     { title: 'Campfire', text: () => `Recover ${CFG().restHeal} health. Does not clear poison.` },
@@ -203,7 +204,7 @@ window.G = window.G || {};
     return doors;
   }
 
-  function doorInfo(d) { const i = DOOR_INFO[d.type]; return { title: i.title, text: i.text(d) }; }
+  function doorInfo(d) { const i = DOOR_INFO[d.type]; return { title: i.title, text: i.text(d), short: i.short ? i.short(d) : null }; }   // short: a plain one-liner, when the full text is long
 
   function fightOpts(hero, seed) {
     return { seed, aHp: hero.hp, aName: hero.isPlayer ? 'You' : hero.name };

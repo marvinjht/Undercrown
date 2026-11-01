@@ -27,12 +27,62 @@ static func center(l: Label) -> Label:
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return l
 
-static func line(ln) -> Label:   # { text, tone }
+static func line(ln) -> Label:   # { text, tone, short? }
 	if ln is String:
 		return label(ln, "", true)
 	var tone := str(ln.get("tone", ""))
+	if ln.has("short"):
+		return dual(str(ln.get("text", "")), str(ln.short), "Heading" if tone == "head" else "", true, Art.tone(tone))
 	var l := label(ln.get("text", ""), "Heading" if tone == "head" else "", true, Art.tone(tone))
 	return l
+
+# ---------- Short and full texts ----------
+# Long descriptions come with a short version: it shows by default, the full text while Shift is held.
+# short == null: there is only one text. short == "": hidden unless Shift is held.
+const HINT := "Hold Shift for details"
+
+static func dual(full: String, short, variation := "", wrap := true, color = null) -> Label:
+	if short == null:
+		return label(full, variation, wrap, color)
+	var l: Label = preload("res://scripts/ui/dual_label.gd").new()
+	l.full = full
+	l.short = str(short)
+	l.text = full if Game.details else l.short
+	l.visible = l.text != ""
+	if variation != "":
+		l.theme_type_variation = variation
+	if wrap:
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if color != null:
+		l.add_theme_color_override("font_color", color)
+	return l
+
+# Does anything under this node have a full text that differs from its short one?
+static func has_more(node: Node) -> bool:
+	for c in node.find_children("*", "Label", true, false):
+		if c.get_script() == preload("res://scripts/ui/dual_label.gd") and c.full != c.short:
+			return true
+	return false
+
+# "Hold Shift for details", only while it isn't held
+static func detail_hint() -> Label:
+	var l := dual("", HINT, "Muted", true)
+	l.add_theme_font_size_override("font_size", 10)
+	return l
+
+# A tooltip made of lines ({ text, tone, short? }), with the hint when there is more to show
+static func lines_tip(lines: Array) -> Control:
+	var p := panel("")
+	p.custom_minimum_size = Vector2(TIP_W, 0)
+	var v := vbox(3)
+	for ln in lines:
+		v.add_child(line(ln))
+	if has_more(v):
+		v.add_child(detail_hint())
+	p.add_child(v)
+	fit_width(p, TIP_W)
+	return p
 
 static func vbox(sep := 4) -> VBoxContainer:
 	var v := VBoxContainer.new()
@@ -205,7 +255,7 @@ static func item_body(item: Dictionary, v: VBoxContainer) -> void:
 	for ln in item.get("lines", []):
 		v.add_child(line(ln))
 	if item.get("trait"):
-		v.add_child(label(item.trait, "Muted", true))
+		v.add_child(dual(str(item.trait), item.get("traitShort"), "Muted", true))
 	for ln in item.get("notes", []):
 		v.add_child(line(ln))
 	if item.get("compare") is Dictionary:
@@ -218,6 +268,8 @@ static func item_tip(item: Dictionary) -> Control:
 	p.custom_minimum_size = Vector2(TIP_W, 0)
 	var v := vbox(3)
 	item_body(item, v)
+	if has_more(v):
+		v.add_child(detail_hint())
 	p.add_child(v)
 	fit_width(p, TIP_W)
 	return p
@@ -270,6 +322,8 @@ static func card(c: Dictionary, width := CARD_W) -> PanelContainer:
 		v.add_child(head)
 	for ln in c.get("lines", []):
 		v.add_child(line(ln))
+	if has_more(v):
+		v.add_child(detail_hint())
 	var bs: Array = c.get("buttons", [])
 	if bs.size():
 		v.add_child(spacer(2))

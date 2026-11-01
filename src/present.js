@@ -6,8 +6,9 @@
 //   Button   { label, act, args, enabled, style: 'primary'|'normal'|'ghost', hold, mp, note }
 //            act = a game action the client sends as { t:'act', fn: act, args } (mp: true → an MP action),
 //            or 'ui_…' for things the client does itself (ui_leave, ui_requeue, ui_rematch, ui_title).
-//   Line     { text, tone }   tone: '', 'up', 'down', 'affix', 'cost', 'legend', 'artifact', 'stubborn', 'hint', 'warn', 'head'
-//   Item     { id, kind, name, rarity, rarityName, color, icon, sub, set, lines, trait, notes, verdict, compare }
+//   Line     { text, tone, short? }   short: a plain one-line version of a long text ('' = hide it in short mode).
+//            Clients may show short by default and text on request; the browser shows text. tone: '', 'up', 'down', 'affix', 'cost', 'legend', 'artifact', 'stubborn', 'hint', 'warn', 'head'
+//   Item     { id, kind, name, rarity, rarityName, color, icon, sub, set, lines, trait, traitShort, notes, verdict, compare }
 //   Card     { kind: 'item'|'text', item?, title?, sub?, color?, lines, buttons }
 //   Section  { kind: 'cards'|'buttons'|'doors'|'list'|'bracket'|'places'|'tree'|'character'|'opponent'|'review'|'skip'|'timer', … }
 window.G = window.G || {};
@@ -18,7 +19,7 @@ window.G = window.G || {};
   const RARITY_COLOR = { grey: '#b5b0a6', green: '#72d064', rare: '#5aa8ff', legendary: '#f2c14a', artifact: '#ff5a48', potion: '#c9a0ff', relic: '#e0a85a' };
   const hex = n => '#' + (n >>> 0).toString(16).padStart(6, '0');
   const btn = (label, act, args, o = {}) => ({ label, act, args: args || [], enabled: o.enabled !== false, style: o.style || 'normal', hold: !!o.hold, mp: !!o.mp, note: o.note || null });
-  const line = (text, tone = '') => ({ text, tone });
+  const line = (text, tone = '', short) => (short === undefined || short === null || short === text ? { text, tone } : { text, tone, short });
   const ord = n => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : n + 'th');
 
   // ---------- Items ----------
@@ -46,10 +47,11 @@ window.G = window.G || {};
 
   function relicView(rid, n, item) {
     const R = G.RELICS[rid], max = G.RELIC_MAX;
-    const lines = [line(R.text(Math.max(1, Math.min(max, n || 1))) + '.')];
-    if (item) lines.splice(0, 1, line(R.text(Math.min(max, n + 1)) + '.'));
+    const rl = (k, tone, pre = '') => line(pre + R.text(k) + '.', tone, pre + R.short(k) + '.');
+    const lines = [rl(Math.max(1, Math.min(max, n || 1)))];
+    if (item) lines.splice(0, 1, rl(Math.min(max, n + 1)));
     if (n >= max) lines.push(line('Maxed. It can’t drop for you again.', 'hint'));
-    else lines.push(line(`${n ? 'Next copy' : 'More copies'}: ${R.text(Math.min(max, (n || 1) + 1))}.`, 'hint'), line(`Relics stack up to ${max} copies and never use bag space.`, 'hint'));
+    else lines.push(rl(Math.min(max, (n || 1) + 1), 'hint', `${n ? 'Next copy' : 'More copies'}: `), line(`Relics stack up to ${max} copies and never use bag space.`, 'hint', ''));
     return { id: item ? item.id : 'relic_' + rid, kind: 'relic', rid, name: R.name, rarity: 'relic', rarityName: 'Relic', color: R.color || RARITY_COLOR.relic,
       icon: 'relic_' + rid, sub: `Relic${n ? ` · you have ${n}/${max}` : ''}`, set: null, lines, trait: null, notes: [], verdict: { tone: 'relic', text: 'Relic' }, count: n || 0 };
   }
@@ -70,9 +72,9 @@ window.G = window.G || {};
     const bonus = SL.filter(l => l.affix);
     if (bonus.length) { lines.push(line('Bonus', 'head')); for (const l of bonus) lines.push(line(l.text + (l.suffix ? ` (${l.suffix})` : ''), l.cost ? 'cost' : 'affix')); }
     const LA = G.legendAffix(item);
-    if (LA) { lines.push(line('Legendary affix', 'head')); lines.push(line(`${LA.text} (${LA.name})`, 'legend')); }
+    if (LA) { lines.push(line('Legendary affix', 'head')); lines.push(line(`${LA.text} (${LA.name})`, 'legend', `${LA.short || LA.text} (${LA.name})`)); }
     if (isStubborn(item)) lines.push(line('Stubborn: its stun ignores the stun limit', 'stubborn'));
-    if (item.rarity === 'artifact') { lines.push(line('Artifact effect', 'head')); lines.push(line(G.ARTIFACTS[item.artifact].desc, 'artifact')); }
+    if (item.rarity === 'artifact') { const A = G.ARTIFACTS[item.artifact]; lines.push(line('Artifact effect', 'head')); lines.push(line(A.desc, 'artifact', A.short)); }
     const notes = [];
     if (item.rarity === 'artifact') notes.push(line('Artifact: you can wear only one. Fixed stats, one of a kind in this match.', 'hint'));
     if (item.affixed) notes.push(line('Forged: already has its added bonus.', 'hint'));
@@ -89,10 +91,19 @@ window.G = window.G || {};
       }
     }
     const trait = item.rarity === 'artifact' ? item.baseTrait || null : item.trait || null;
+    const traitShort = trait ? traitShortOf(item) || trait : null;
     return { id: item.id, kind: 'gear', slot: item.slot, name: item.name, rarity: item.rarity, rarityName: R.name, color: RARITY_COLOR[item.rarity] || '#ffffff',
       icon: item.iconKey, weaponType: item.weaponType || null,
       sub: `${R.name} ${wl || G.SLOT_NAMES[item.slot]}${item.rarity === 'artifact' ? '' : ' · Tier ' + item.tier}`,
-      set: setInfo(item.set), lines, trait, notes, verdict: verdict(hero, item), compare };
+      set: setInfo(item.set), lines, trait, traitShort, notes, verdict: verdict(hero, item), compare };
+  }
+  // The short version of an item's trait, from the data (works for items made before short texts existed)
+  function traitShortOf(item) {
+    const W = item.weaponType ? G.WEAPONS[item.weaponType] : null;
+    if (item.rarity !== 'artifact') return W ? W.traitShort : null;
+    const D = G.ARTIFACTS[item.artifact];
+    if (D.baseTrait !== undefined) return D.baseTraitShort || null;
+    return W && !(D.fx && D.fx.meleeStaff) ? W.traitShort : null;
   }
 
   // ---------- The hero ----------
@@ -173,8 +184,8 @@ window.G = window.G || {};
     const g = p.gem ? G.GEMS[p.gem] : null, S = p.spec ? G.SPECS[p.spec] : null;
     return { name: p.name, level: p.level, xp: p.xp, xpNeed: need, maxLevel: p.level >= L.max, hp: p.hp, maxHp: G.Hero.maxHp(p), hearts: p.hearts, maxHearts: CFG().hearts,
       gold: p.gold, poison: p.poison || 0, alive: !!p.alive, build: buildLabel(p), look: look(p),
-      spec: S ? { name: S.name, role: S.role, desc: S.desc, nodes: G.Stats.treeFx(p).nodes.map(n => ({ name: n.name, desc: n.desc })) } : null,
-      specHint: `Spec at level ${L.specLevel}`, gem: g ? { name: g.name, color: g.color, up: g.up, cost: g.cost } : null,
+      spec: S ? { name: S.name, role: S.role, desc: S.desc, short: S.short || S.desc, nodes: G.Stats.treeFx(p).nodes.map(n => ({ name: n.name, desc: n.desc, short: n.short || n.desc })) } : null,
+      specHint: `Spec at level ${L.specLevel}`, gem: g ? { name: g.name, color: g.color, up: g.up, cost: g.cost, short: g.short || null } : null,
       buffs: buffList(p), relics: relicRow(p), stats: statCols(p), sets: setBonus(p) };
   }
 
@@ -262,7 +273,7 @@ window.G = window.G || {};
     const one = s.doors.length === 1, t = s.doors[0].type;
     const doors = s.doors.map((d, i) => {
       const info = G.Dungeon.doorInfo(d), dg = d.danger;
-      return { i, type: d.type, icon: 'door_' + d.type, title: info.title, text: info.text, monster: d.monster ? d.monster.id : null,
+      return { i, type: d.type, icon: 'door_' + d.type, title: info.title, text: info.text, short: info.short && info.short !== info.text ? info.short : null, monster: d.monster ? d.monster.id : null,
         threat: dg ? (p.gem === 'janus' ? { estimate: true, level: dg.level, avgLoss: dg.avgLoss, winPct: dg.winPct } : { skulls: dg.skulls || 1 }) : null,
         button: btn(info.title, 'chooseDoor', [i], { style: 'primary' }) };
     });
@@ -334,7 +345,7 @@ window.G = window.G || {};
       case 'spec': return { title: `Level ${C.levels.specLevel}: choose your specialization`, lede: 'Three random options. Each one has a skill tree: a choice at level 10, another at 15, and a capstone at 20.',
         sections: [{ kind: 'cards', cards: s.specOptions.map(id => {
           const Sp = G.SPECS[id], T = G.SPEC_TREES[id];
-          return textCard(Sp.name, [Sp.desc, line(Sp.tip, 'affix'), line('Skill tree', 'head'), line(`Lv 10: ${T.t10[0].name} or ${T.t10[1].name}`), line(`Lv 15: ${T.t15[0].name} or ${T.t15[1].name}`), line(`Lv 20: ${T.t20.name}`)],
+          return textCard(Sp.name, [line(Sp.desc, '', Sp.short), line(Sp.tip, 'affix'), line('Skill tree', 'head'), line(`Lv 10: ${T.t10[0].name} or ${T.t10[1].name}`), line(`Lv 15: ${T.t15[0].name} or ${T.t15[1].name}`), line(`Lv 20: ${T.t20.name}`)],
             [btn(`Become a ${Sp.name}`, 'chooseSpec', [id], { style: 'primary' })], { sub: Sp.role });
         }) }] };
       case 'tree': {
@@ -342,7 +353,7 @@ window.G = window.G || {};
         return { title: `Level ${lv}: ${Sp.name} skill tree`, lede: lv === 20 ? 'Claim the capstone of your specialization.' : 'Choose a path. It’s permanent.', sections: [{ kind: 'tree', tree: treeView(p, lv) }] };
       }
       case 'gem': return { title: 'Choose a heart gem', lede: `${G.Dungeon.monsterFor(C.gemRoom, 'boss').name} drops three gems. Each one changes how you play for the rest of the run, for better and worse.`,
-        sections: [{ kind: 'cards', cards: s.gemOptions.map(id => { const g = G.GEMS[id]; return textCard(g.name, [line('Upside', 'head'), line(g.up, 'up'), line('Cost', 'head'), line(g.cost, 'down')], [btn(`Take the ${g.name}`, 'chooseGem', [id], { style: 'primary' })], { color: g.color, icon: 'gem' }); }) }] };
+        sections: [{ kind: 'cards', cards: s.gemOptions.map(id => { const g = G.GEMS[id]; return textCard(g.name, [line('Upside', 'head', ''), line(g.up, 'up', g.short), line('Cost', 'head', ''), line(g.cost, 'down', '')], [btn(`Take the ${g.name}`, 'chooseGem', [id], { style: 'primary' })], { color: g.color, icon: 'gem' }); }) }] };
       case 'shop': return shopScreen(s, p, S);
       case 'duelIntro': {
         const d = s.duel, m = d.mine;
@@ -373,10 +384,10 @@ window.G = window.G || {};
     const T = G.SPEC_TREES[p.spec], picks = p.treePicks || {};
     const node = (n, lv, side) => {
       const taken = picks[lv] === n.id, other = picks[lv] && !taken, live = pickLevel === lv && !picks[lv];
-      return { id: n.id, name: n.name, desc: n.desc, level: lv, side: lv === 20 ? 'Capstone' : side, state: taken ? 'taken' : other ? 'skipped' : live ? 'live' : 'locked',
+      return { id: n.id, name: n.name, desc: n.desc, short: n.short || n.desc, level: lv, side: lv === 20 ? 'Capstone' : side, state: taken ? 'taken' : other ? 'skipped' : live ? 'live' : 'locked',
         button: live ? btn(`Take ${n.name}`, 'chooseTree', [n.id], { style: 'primary' }) : null };
     };
-    return { spec: { name: G.SPECS[p.spec].name, desc: G.SPECS[p.spec].desc }, rows: [
+    return { spec: { name: G.SPECS[p.spec].name, desc: G.SPECS[p.spec].desc, short: G.SPECS[p.spec].short || G.SPECS[p.spec].desc }, rows: [
       { level: 10, nodes: [node(T.t10[0], 10, 'Left'), node(T.t10[1], 10, 'Right')] },
       { level: 15, nodes: [node(T.t15[0], 15, 'Left'), node(T.t15[1], 15, 'Right')] },
       { level: 20, nodes: [node(T.t20, 20)] }] };

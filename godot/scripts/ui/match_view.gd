@@ -270,7 +270,8 @@ func _build_left() -> void:
 func _section(title: String, right_text := "") -> VBoxContainer:
 	var p := Kit.panel("")
 	var v := Kit.vbox(5)
-	var h := Kit.hbox(6)
+	var h: HBoxContainer = preload("res://scripts/ui/tip_row.gd").new()   # a plain row; its tooltip can be a list of lines
+	h.add_theme_constant_override("separation", 6)
 	var t := Kit.label(title, "Heading")
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.add_child(t)
@@ -362,12 +363,19 @@ func _build_side() -> void:
 	if me.get("gem") is Dictionary:
 		chips.append(me.gem.name)
 	var sv := _section("Stats", " · ".join(chips))
+	var tip := []
 	if me.get("spec") is Dictionary:
-		var tip := [str(me.spec.name) + ": " + str(me.spec.desc)]
+		tip.append({ "text": str(me.spec.name) + ": " + str(me.spec.desc), "tone": "head", "short": str(me.spec.name) + ": " + str(me.spec.get("short", me.spec.desc)) })
 		for n in me.spec.get("nodes", []):
-			tip.append(str(n.name) + ": " + str(n.desc))
-		sv.get_child(0).tooltip_text = "\n".join(tip) + ("\n" + str(me.gem.name) + ". Upside: " + str(me.gem.up) + " Cost: " + str(me.gem.cost) if me.get("gem") is Dictionary else "")
-		sv.get_child(0).mouse_filter = Control.MOUSE_FILTER_STOP
+			tip.append({ "text": str(n.name) + ": " + str(n.desc), "tone": "", "short": str(n.name) + ": " + str(n.get("short", n.desc)) })
+	if me.get("gem") is Dictionary:
+		var full := str(me.gem.name) + ". Upside: " + str(me.gem.up) + " Cost: " + str(me.gem.cost)
+		tip.append({ "text": full, "tone": "head", "short": (str(me.gem.name) + ": " + str(me.gem.short)) if me.gem.get("short") else full })
+	if tip.size():
+		var head: Control = sv.get_child(0)
+		head.lines = tip
+		head.tooltip_text = " "
+		head.mouse_filter = Control.MOUSE_FILTER_STOP
 	var sc := Kit.stat_cols(me.get("stats", {}))
 	sv.add_child(sc)
 	sv.add_child(Kit.set_rows(me.get("sets", {})))
@@ -460,7 +468,9 @@ func _section_view(sec: Dictionary) -> void:
 				var ic := Kit.icon(Art.icon(str(d.get("icon", ""))), 72)
 				v.add_child(ic)
 				v.add_child(Kit.label(d.get("title", ""), "Heading", true))
-				v.add_child(Kit.label(d.get("text", ""), "", true))
+				v.add_child(Kit.dual(str(d.get("text", "")), d.get("short"), "", true))
+				if d.get("short"):
+					v.add_child(Kit.detail_hint())
 				var th = d.get("threat")
 				if th is Dictionary:
 					if th.get("estimate", false):
@@ -533,7 +543,7 @@ func _section_view(sec: Dictionary) -> void:
 				for n in row.get("nodes", []):
 					var st := str(n.get("state", ""))
 					var c := { "kind": "text", "title": str(n.name), "sub": str(n.side) + ("  · chosen" if st == "taken" else "  · not taken" if st == "skipped" else ""),
-						"lines": [{ "text": n.desc, "tone": "" }], "buttons": [n.button] if n.get("button") is Dictionary else [] }
+						"lines": [{ "text": n.desc, "tone": "", "short": n.get("short", n.desc) }], "buttons": [n.button] if n.get("button") is Dictionary else [] }
 					var card := Kit.card(c, 250)
 					if st == "skipped" or st == "locked":
 						card.modulate = Color(1, 1, 1, 0.6)

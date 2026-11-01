@@ -7,6 +7,9 @@
 extends Node
 
 signal changed(what: String)
+signal details_changed            # Shift pressed or released: long texts switch between short and full
+
+var details := false              # Shift held: show the full text of long descriptions
 
 var status := "idle"
 var error := ""
@@ -152,6 +155,19 @@ func _on_open() -> void:
 		Net.send({ "t": "rejoin", "cid": cid, "code": code, "name": player_name, "v": server_version, "room": s.get("room", null), "client": "godot", "from": cid })
 	elif status == "queue" and not _pending_open.is_empty():
 		Net.send(_pending_open)
+
+func _input(e: InputEvent) -> void:
+	if e is InputEventKey and e.keycode == KEY_SHIFT and not e.echo:
+		_set_details(e.pressed)
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_set_details(false)   # never get stuck on details if Shift is released in another window
+
+func _set_details(on: bool) -> void:
+	if on != details:
+		details = on
+		details_changed.emit()
 
 func _process(delta: float) -> void:
 	_beat += delta
