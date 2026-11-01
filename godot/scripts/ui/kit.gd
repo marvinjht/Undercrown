@@ -417,7 +417,8 @@ static func artifact_glow(card: Control) -> void:
 static func stat_row(st: Dictionary) -> HBoxContainer:
 	var h := hbox(5)
 	var col: Color = Art.MUTED if st.get("lost", false) else (Art.tone("cost") if st.get("cost", false) else (Art.tone("affix") if st.get("affix", false) else Art.TEXT))
-	h.add_child(label(str(st.get("text", "")), "", false, col))
+	var txt := str(st.get("text", "")) + ((" (%s)" % st.suffix) if st.get("suffix") else "")   # "+10 Armor (Heavy)"
+	h.add_child(label(txt, "", false, col))
 	var d = st.get("delta")
 	if d != null and int(d) != 0:
 		var a := label(("▲%d" if int(d) > 0 else "▼%d") % absi(int(d)), "", false, Art.UP if int(d) > 0 else Art.DOWN)

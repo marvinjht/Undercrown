@@ -114,7 +114,13 @@ func _title() -> void:
 	v.add_child(_server_label)
 	var snd := _btn("Sound off" if not Sfx.muted else "Sound on", func(): pass, "Ghost")
 	snd.pressed.connect(func(): snd.text = "Sound on" if Sfx.toggle() else "Sound off")
-	v.add_child(snd)
+	var opts := Kit.hbox(8)
+	snd.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	opts.add_child(snd)
+	var set_btn := _btn("Settings", func(): Settings.open(self), "Ghost")
+	set_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	opts.add_child(set_btn)
+	v.add_child(opts)
 	box.add_child(v)
 	_box.add_child(box)
 

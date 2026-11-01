@@ -32,6 +32,7 @@ func _init() -> void:
 	# Panels
 	t.set_stylebox("panel", "PanelContainer", box("res://art/ui/panel.png"))
 	t.set_stylebox("panel", "Panel", box("res://art/ui/panel.png"))
+	t.set_stylebox("panel", "AcceptDialog", box("res://art/ui/panel.png"))   # Settings, Set guide...
 	t.set_type_variation("Card", "PanelContainer")
 	t.set_stylebox("panel", "Card", box("res://art/ui/card.png", 8, 6))
 	t.set_type_variation("Slot", "PanelContainer")

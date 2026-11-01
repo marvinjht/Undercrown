@@ -32,6 +32,7 @@ func _ready() -> void:
 	arena.finished.connect(func(): Game.battle_end(battle_key))
 	arena.log_line.connect(_on_log)
 	arena.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	get_viewport().size_changed.connect(func(): _place_watch(_watch_pos))   # a new window size or UI scale: keep it on screen
 	watch_arena = preload("res://scripts/arena.gd").new()
 	watch_arena.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
@@ -39,6 +40,9 @@ func _on_changed(_what: String) -> void:
 	if Game.status != "match" or Game.view.is_empty():
 		arena.stop()
 		watch_arena.stop()
+		if is_instance_valid(watch_win):
+			watch_win.queue_free()
+		watch_win = null
 		shown = {}
 		battle_key = ""
 		_last_res = null
@@ -48,7 +52,8 @@ func _on_changed(_what: String) -> void:
 	_part("top", [V.get("top"), V.get("rooms")], _build_top)
 	_part("left", [V.get("rivals"), V.get("rivalOrder"), V.get("me"), V.get("canWatch"), V.get("watching")], _build_left)
 	_part("side", [V.get("bag"), V.get("gear"), V.get("me"), V.get("supply"), bag_open], _build_side)
-	_part("stage", [V.get("screen"), V.get("me"), V.get("watch")], _build_stage)
+	_part("stage", [V.get("screen"), V.get("me")], _build_stage)
+	_part("watch", [V.get("watch")], _build_watch_win)
 	_check_battle()
 
 func _part(name: String, deps: Array, build: Callable) -> void:
@@ -141,6 +146,12 @@ func _build_top() -> void:
 		d.confirmed.connect(Game.leave)
 		d.popup_centered())
 	brand.add_child(leave)
+	var set_btn := Button.new()
+	set_btn.text = "Settings"
+	set_btn.theme_type_variation = "Ghost"
+	set_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	set_btn.pressed.connect(func(): Settings.open(self))
+	brand.add_child(set_btn)
 	h.add_child(brand)
 	# Room track: an icon for special rooms, a square for the rest. The current room is outlined
 	# (theme: RoomCurrent), the others sit in RoomPip; finished rooms are dimmed.
@@ -473,12 +484,11 @@ func _build_stage() -> void:
 	var phase := str(sc.get("phase", ""))
 	var keep_scroll := stage_scroll.scroll_vertical if phase == _last_phase else 0
 	_last_phase = phase
-	for a in [arena, watch_arena]:   # both arenas keep playing across redraws
-		if a.get_parent():
-			a.get_parent().remove_child(a)
+	if arena.get_parent():   # the fight keeps playing across redraws
+		arena.get_parent().remove_child(arena)
 	Kit.clear(stage)
 	_target = stage
-	timers = timers.filter(func(tm): return false)
+	timers = timers.filter(func(tm): return is_instance_valid(tm.label) and is_instance_valid(watch_win) and watch_win.is_ancestor_of(tm.label))
 	if sc.get("notice"):
 		var np := Kit.panel("Card")
 		np.add_child(Kit.center(Kit.label(sc.notice, "", true, Art.GOLD)))
@@ -491,32 +501,59 @@ func _build_stage() -> void:
 		stage.add_child(Kit.center(Kit.line(n)))
 	for sec in sc.get("sections", []):
 		_section_view(sec)
-	var W = Game.view.get("watch")
-	if W is Dictionary:
-		_build_watch(W)
-	elif watch_key != "":
-		watch_key = ""
-		watch_arena.stop()
 	await get_tree().process_frame
 	stage_scroll.scroll_vertical = keep_scroll
 	_blood_pop(sc)
 
 # ---------- Spectating ----------
-# The game of the player you watch: their screen (buttons can't be pressed) or their fight, under yours
-func _build_watch(W: Dictionary) -> void:
-	var p := Kit.panel("Card")
+# A small window you can drag around and close: the game of the player you watch, live (their screen, untouchable,
+# or their fight in its own arena). It stays open while you play your own rooms.
+const WATCH_W := 560.0
+var watch_win: PanelContainer
+var _watch_pos := Vector2(-1, -1)
+var _drag_off = null
+
+func _build_watch_win() -> void:
+	var W = Game.view.get("watch")
+	if not (W is Dictionary):
+		if watch_arena.get_parent():
+			watch_arena.get_parent().remove_child(watch_arena)
+		if is_instance_valid(watch_win):
+			watch_win.queue_free()
+		watch_win = null
+		if watch_key != "":
+			watch_key = ""
+			watch_arena.stop()
+		return
+	if not is_instance_valid(watch_win):
+		watch_win = Kit.panel("")
+		watch_win.top_level = true
+		add_child(watch_win)
+		if _watch_pos.x < 0:
+			var vr := get_viewport_rect().size
+			_watch_pos = Vector2(vr.x - WATCH_W - 330, vr.y - 470)
+	if watch_arena.get_parent():
+		watch_arena.get_parent().remove_child(watch_arena)
+	timers = timers.filter(func(tm): return is_instance_valid(tm.label) and not watch_win.is_ancestor_of(tm.label))
+	Kit.clear(watch_win)
 	var v := Kit.vbox(6)
-	var head := Kit.hbox(8)
+	v.custom_minimum_size = Vector2(WATCH_W, 0)
+	var head := Kit.hbox(8)   # the title bar: drag it to move the window
+	head.mouse_filter = Control.MOUSE_FILTER_STOP
+	head.mouse_default_cursor_shape = Control.CURSOR_MOVE
+	head.gui_input.connect(_drag_watch)
 	head.add_child(Kit.icon(Art.icon("eye"), 16))
 	head.add_child(Kit.label("Watching " + str(W.get("name", "")), "Heading"))
 	var st := Kit.label(str(W.get("status", "")), "Muted")
 	st.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	st.clip_text = true
 	head.add_child(st)
-	var stop := Button.new()
-	stop.text = "Stop watching"
-	stop.theme_type_variation = "Ghost"
-	stop.pressed.connect(func(): Game.act("stopWatching", [], true))
-	head.add_child(stop)
+	var close := Button.new()
+	close.text = "✕"
+	close.theme_type_variation = "Ghost"
+	close.tooltip_text = "Stop watching"
+	close.pressed.connect(func(): Game.act("stopWatching", [], true))
+	head.add_child(close)
 	v.add_child(head)
 	var f = W.get("fight")
 	if f is Dictionary:
@@ -525,27 +562,52 @@ func _build_watch(W: Dictionary) -> void:
 			watch_key = str(f.get("key", ""))
 			watch_arena.play(f)
 		v.add_child(watch_arena)
+		watch_arena.custom_minimum_size = Vector2(WATCH_W, WATCH_W * 9.0 / 16.0)
 	else:
 		if watch_key != "":
 			watch_key = ""
 			watch_arena.stop()
 		var sc = W.get("screen")
+		var scroll := ScrollContainer.new()
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		scroll.custom_minimum_size = Vector2(WATCH_W, 340)
+		var body := Kit.vbox(6)
+		scroll.add_child(body)
 		if sc is Dictionary:
 			if sc.get("notice"):
-				v.add_child(Kit.center(Kit.label(sc.notice, "", true, Art.GOLD)))
+				body.add_child(Kit.center(Kit.label(sc.notice, "", true, Art.GOLD)))
 			if sc.get("title"):
-				v.add_child(Kit.center(Kit.label(sc.title, "Heading", true)))
+				body.add_child(Kit.center(Kit.label(sc.title, "Heading", true)))
 			if sc.get("lede"):
-				v.add_child(Kit.center(Kit.label(sc.lede, "", true)))
+				body.add_child(Kit.center(Kit.label(sc.lede, "", true)))
 			for n in sc.get("notes", []):
-				v.add_child(Kit.center(Kit.line(n)))
+				body.add_child(Kit.center(Kit.line(n)))
 			var outer := _target
-			_target = v
+			_target = body
 			for sec in sc.get("sections", []):
 				_section_view(sec)
 			_target = outer
-	p.add_child(v)
-	stage.add_child(p)
+		else:
+			body.add_child(Kit.center(Kit.label("Connecting to their game…", "Muted")))
+		v.add_child(scroll)
+	watch_win.add_child(v)
+	watch_win.reset_size()
+	_place_watch(_watch_pos)
+
+func _drag_watch(ev: InputEvent) -> void:
+	if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT:
+		_drag_off = (watch_win.position - ev.global_position) if ev.pressed else null
+	elif ev is InputEventMouseMotion and _drag_off != null:
+		_place_watch(ev.global_position + _drag_off)
+
+# Keep the window on screen
+func _place_watch(at: Vector2) -> void:
+	if not is_instance_valid(watch_win):
+		return
+	var vr := get_viewport_rect().size
+	var sz := watch_win.size
+	_watch_pos = Vector2(clampf(at.x, 0.0, max(0.0, vr.x - sz.x)), clampf(at.y, 0.0, max(0.0, vr.y - sz.y)))
+	watch_win.position = _watch_pos
 
 # Merchant: a "+N gold" that floats up from the sell-blood button and fades, once per sale (bloodPop.seq)
 func _blood_pop(sc: Dictionary) -> void:
@@ -647,10 +709,12 @@ func _section_view(sec: Dictionary) -> void:
 					row.add_child(Kit.label("%d%%" % int(r.get("hpPct", 0)), "Muted"))
 					if r.get("now", false) and sec.get("turnStart"):
 						var l := Kit.label("", "Heading")
-						var tb := _timer_bar(float(sec.get("turnTotal", 20000)) / 1000.0)
-						timers.append({ "label": l, "turn_start": float(sec.turnStart), "turn_total": float(sec.get("turnTotal", 20000)), "prefix": str(r.state), "bar": tb })
+						var tm := { "label": l, "turn_start": float(sec.turnStart), "turn_total": float(sec.get("turnTotal", 20000)), "prefix": str(r.state) }
+						if r.get("me", false):   # a bar for your own turn only
+							turn_bar = _timer_bar(float(sec.get("turnTotal", 20000)) / 1000.0)
+							tm["bar"] = turn_bar
+						timers.append(tm)
 						row.add_child(l)
-						turn_bar = tb
 					else:
 						row.add_child(Kit.label(str(r.get("state", "")), "", false, Art.GOLD if r.get("now", false) else Art.MUTED))
 				else:

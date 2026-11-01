@@ -10,7 +10,8 @@
 //            Clients may show short by default and text on request; the browser shows text. tone: '', 'up', 'down', 'affix', 'cost', 'legend', 'artifact', 'stubborn', 'hint', 'warn', 'head'
 //   Item     { id, kind, name, rarity, rarityName, color, icon, sub, type, set, lines, stats, trait, traitShort, notes, verdict, compare, sell }
 //            sell: gold it sells for (gear and bag items)
-//            type: short kind line ("Rare Helmet · T2"). stats (gear only): [{ k, label, value, text, affix, cost, lost, delta }]
+//            type: short kind line ("Rare Helmet · T2"). stats (gear only): [{ k, label, value, text, affix, cost, suffix, lost, delta }]
+//            suffix: the bonus's affix name ("Heavy"), shown in brackets after it
 //            in display order (base, bonus, then stats you'd lose); delta = change vs your equipped item, on the first line per stat.
 //   Card     { kind: 'item'|'text', item?, title?, sub?, color?, lines, buttons }
 //   Section  { kind: 'cards'|'buttons'|'doors'|'list'|'bracket'|'places'|'tree'|'character'|'opponent'|'review'|'skip'|'timer', … }
@@ -100,11 +101,11 @@ window.G = window.G || {};
     }
     const seen = {};
     const stats = SL.map(l => {
-      const o = { k: l.k, label: G.STAT_INFO[l.k].label, value: l.v, text: l.text, affix: !!l.affix, cost: !!l.cost, lost: false, delta: null };
+      const o = { k: l.k, label: G.STAT_INFO[l.k].label, value: l.v, text: l.text, affix: !!l.affix, cost: !!l.cost, suffix: l.suffix || null, lost: false, delta: null };
       if (deltas && !seen[l.k]) { seen[l.k] = 1; if (deltas[l.k]) o.delta = deltas[l.k]; }
       return o;
     });
-    if (deltas) for (const k of G.STAT_ORDER) if (!seen[k] && deltas[k] < 0) stats.push({ k, label: G.STAT_INFO[k].label, value: 0, text: G.STAT_INFO[k].label, affix: false, cost: false, lost: true, delta: deltas[k] });
+    if (deltas) for (const k of G.STAT_ORDER) if (!seen[k] && deltas[k] < 0) stats.push({ k, label: G.STAT_INFO[k].label, value: 0, text: G.STAT_INFO[k].label, affix: false, cost: false, suffix: null, lost: true, delta: deltas[k] });
     const trait = item.rarity === 'artifact' ? item.baseTrait || null : item.trait || null;
     const traitShort = trait ? traitShortOf(item) || trait : null;
     return { id: item.id, kind: 'gear', slot: item.slot, name: item.name, rarity: item.rarity, rarityName: R.name, color: RARITY_COLOR[item.rarity] || '#ffffff',
@@ -513,11 +514,11 @@ window.G = window.G || {};
     return { top: topView(s), clock: { ends: s.roundEnds || 0, total: (s.roundTotal || CFG().roundSeconds) * 1000 }, me: meView(p), gear: gearView(p), bag: bagView(s, p),
       rivals, rivalOrder: Object.keys(rivals), screen: sc, setGuide: setGuide(p), rooms: ROOM_INFO,
       tree: p.spec ? treeView(p, null) : null, supply: supplyView(s),
-      canWatch: !!(MP && MP.inMatch && MP.inMatch()) && iAmOut(s), watching: MP && MP.watching != null ? MP.watching : null, watch: watchView(s, MP) };
+      canWatch: !!(MP && MP.inMatch && MP.inMatch()), out: iAmOut(s), watching: MP && MP.watching != null ? MP.watching : null, watch: watchView(s, MP) };
   }
 
   // ---------- Spectating ----------
-  // Watching live is for players who are out of the match (or out of the tournament)
+  // Out of the match (or out of the tournament). Anyone in a match can watch another player live.
   function iAmOut(s) {
     if (!s.player.alive) return true;
     const e = s.tour && s.tour.entrants && s.tour.entrants.find(x => x.hero === s.player);

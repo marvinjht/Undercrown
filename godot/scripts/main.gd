@@ -5,6 +5,7 @@ extends Control
 @onready var match_view: Control = %Match
 
 func _ready() -> void:
+	add_child(preload("res://scripts/settings.gd").new())   # display mode, window size, UI scale (user://settings.cfg)
 	Game.changed.connect(_on_changed)
 	_on_changed("status")
 	if "--auto" in OS.get_cmdline_user_args() or "--title" in OS.get_cmdline_user_args():

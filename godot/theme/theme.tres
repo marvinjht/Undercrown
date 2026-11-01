@@ -295,6 +295,7 @@ shadow_size = 10
 [resource]
 default_font = ExtResource("8_sp0n7")
 default_font_size = 11
+AcceptDialog/styles/panel = SubResource("StyleBoxTexture_g8kgg")
 ArtifactGlow/base_type = &"Panel"
 ArtifactGlow/styles/panel = SubResource("StyleBoxFlat_artglow")
 Button/colors/font_color = Color(0.937255, 0.901961, 0.847059, 1)
