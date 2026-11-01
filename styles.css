@@ -805,3 +805,10 @@ table.tour { width: 100%; border-collapse: collapse; font-size: 15px; font-varia
 .tt-cap { color: var(--muted); font: 12px var(--f-mono); margin-top: 4px; }
 .tt-cap.at { color: #f0d27a; }
 .statcols li.capped b { color: #f0d27a; }
+
+/* Scrap counts next to your gold, and your gear slots you can click (sell / scrap) */
+.scrap-chip { display: inline-flex; align-items: center; gap: 4px; }
+.scrap-dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: currentColor; }
+.scrap-dot.r-grey { color: var(--r-grey); } .scrap-dot.r-green { color: var(--r-green); }
+.slot.clickable { cursor: pointer; }
+.gear-menu { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

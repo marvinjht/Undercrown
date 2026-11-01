@@ -36,7 +36,8 @@ class Room {
     this.BOT_NAMES = G.RIVALS.map(r => r.name).concat(['Grist', 'Ulla', 'Fenn', 'Rook']);
     this.conns = new Map();   // cid -> socket
     this.seen = {};           // cid -> last time we heard from them
-    this.lobby = { code, slots: Array(MAX).fill(null), hostCid: 'server', ownerCid: null, v: this.VERSION, started: false };
+    this.lobby = { code, slots: Array(MAX).fill(null), hostCid: 'server', ownerCid: null, v: this.VERSION, started: false,
+      botLevel: G.CONFIG.bots.default };   // bot difficulty: the owner picks it (CONFIG.bots); Find a match plays CONFIG.bots.match
     this.players = []; this.heroes = {}; this.H = null;
     this.twins = new Map();   // cid -> Twin (each human's game, run here)
     this.clients = {};        // cid -> 'godot' for clients that want every screen described (state.view)
@@ -125,6 +126,18 @@ class Room {
     } else this.drop(cid);
   }
 
+  // Bot difficulty for this room (the owner's pick; a matchmade room always plays CONFIG.bots.match)
+  botLevel() {
+    const B = this.G.CONFIG.bots, L = this.lobby;
+    return L.matched ? B.match : B.levels[L.botLevel] ? L.botLevel : B.default;
+  }
+  setBotLevel(cid, level) {
+    const L = this.lobby;
+    if (L.started || L.matched || cid !== L.ownerCid || !this.G.CONFIG.bots.levels[level]) return;
+    L.botLevel = level;
+    this.cast({ t: 'lobby', lobby: L });
+  }
+
   // The owner presses Start: fill empty seats with bots
   start(cid) {
     const L = this.lobby, G = this.G;
@@ -142,7 +155,7 @@ class Room {
     L.started = true;
     this.cast({ t: 'lobby', lobby: L });
     const seed = G.newSeed();
-    const startMsg = { t: 'start', seed, players };
+    const startMsg = { t: 'start', seed, players, botLevel: this.botLevel() };
     // Every human's game runs here from now on
     this.disposeTwins();
     for (const p of players) if (!p.bot) this.twins.set(p.cid, new Twin(this, p, { ...startMsg, from: 'server' }));
@@ -178,7 +191,7 @@ class Room {
     for (const p of players) {
       const h = G.Hero.create({ name: p.name, tint: p.tint, isPlayer: false }, rng.fork());
       h.id = 'h' + p.slot; h.slot = p.slot; h.bot = p.bot;
-      if (p.bot) h.rng = new G.RNG((seed + p.slot * 104729) >>> 0);
+      if (p.bot) { h.rng = new G.RNG((seed + p.slot * 104729) >>> 0); h.botLevel = this.botLevel(); }
       heroes[p.slot] = h;
     }
     this.heroes = heroes;
@@ -225,6 +238,7 @@ class Room {
       case 'ping': break;
       case 'leave': case 'bye': this.leave(cid); this.relay(cid, { t: 'bye', cid, from: cid }); break;
       case 'startReq': this.start(cid); break;
+      case 'botLevel': this.setBotLevel(cid, m.level); break;
       case 'rematchReq': this.rematch(cid); break;
       // Passed on to everyone else unchanged
       case 'watch': case 'view': case 'fight': this.relay(cid, m); break;
@@ -317,7 +331,7 @@ class Room {
     if (tw) { const w = tw.heroWire(); if (w) this.takeSnap(p.slot, w); tw.pause(); }
     p.bot = true; p.botWas = p.name;
     const h = this.heroes[p.slot];
-    h.bot = true; h.botWas = p.name;
+    h.bot = true; h.botWas = p.name; h.botLevel = this.botLevel();
     if (!h.rng) h.rng = new G.RNG((H.seed + p.slot * 104729) >>> 0);
     this.cast({ t: 'players', players: this.players });
     if (H.duels && H.duels.room === H.room && !H.duels.done[p.slot] && H.duels.locks) { H.duels.locks[p.slot] = true; this.fireDuels(H.duels, false); }
@@ -445,9 +459,8 @@ class Room {
     if (!P.turnEnds) { P.turnEnds = n + (this.isBot(slot) ? S.aiPickDelay : S.turnSeconds) * 1000; this.plunderCast(); return; }
     if (this.isBot(slot) || !hero.alive) {
       if (n >= P.turnEnds) {
-        const up = G.AI.bestUpgrade(hero, P.table);
-        const pick = up || P.table.find(it => it.kind === 'consumable' && !G.Hero.bagFull(hero)) || null;
-        if (pick) G.AI.take(hero, pick); else hero.gold += S.passGold;
+        const pick = G.AI.plunderPick(hero, P.table);   // a bot's pick (its difficulty decides how good)
+        if (pick) G.AI.takePick(hero, pick); else hero.gold += S.passGold;
         this.plunderApply(slot, pick);
       }
     } else if (n >= P.turnEnds) this.plunderApply(slot, null);   // a player's turn ran out: pass

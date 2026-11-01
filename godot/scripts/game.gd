@@ -25,6 +25,7 @@ var view: Dictionary = {}
 var skew_ms := 0.0               # server clock minus this machine's clock
 var server_version := ""
 var want_solo := false
+var bot_level := "medium"
 var end_reason := ""
 var _beat := 0.0
 var _active_room := -1
@@ -37,6 +38,17 @@ func _ready() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load("user://settings.cfg") == OK:
 		player_name = cfg.get_value("player", "name", "")
+		bot_level = str(cfg.get_value("player", "bot_level", bot_level))
+
+# Bot difficulty: for solo, and for rooms you own (the server's CONFIG.bots levels: easy, medium, hard)
+func set_bot_level(level: String) -> void:
+	bot_level = level
+	var cfg := ConfigFile.new()
+	cfg.load("user://settings.cfg")
+	cfg.set_value("player", "bot_level", level)
+	cfg.save("user://settings.cfg")
+	if status == "lobby" and lobby.get("ownerCid") == cid:
+		Net.send({ "t": "botLevel", "level": level, "from": cid })
 
 func save_name(n: String) -> void:
 	player_name = n.strip_edges().left(14)
@@ -204,6 +216,7 @@ func _on_message(m: Dictionary) -> void:
 				error = "You were removed from the room."
 			if status == "lobby" and want_solo and lobby.get("ownerCid") == cid and not lobby.get("started", false):
 				want_solo = false
+				Net.send({ "t": "botLevel", "level": bot_level, "from": cid })   # solo: your difficulty
 				start_match()
 			changed.emit("status")
 		"start":

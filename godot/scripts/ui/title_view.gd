@@ -99,6 +99,8 @@ func _title() -> void:
 	var row := Kit.hbox(8)
 	row.add_child(_btn("Find a match", _find))
 	row.add_child(_btn("Play solo", _solo, ""))
+	row.add_child(Kit.label("Bots:", "Muted"))
+	row.add_child(_level_pick())
 	v.add_child(row)
 	v.add_child(Kit.label("Find a match plays with whoever is online now. Play solo: you and five bots. Or with friends:", "Muted", true))
 	var row2 := Kit.hbox(8)
@@ -123,6 +125,24 @@ func _title() -> void:
 	v.add_child(opts)
 	box.add_child(v)
 	_box.add_child(box)
+
+# Bot difficulty: Easy, Medium, Hard (solo and rooms you own; Find a match always plays Medium)
+const LEVELS := [["easy", "Easy"], ["medium", "Medium"], ["hard", "Hard"]]
+func _level_pick() -> OptionButton:
+	var o := OptionButton.new()
+	for i in LEVELS.size():
+		o.add_item(LEVELS[i][1], i)
+		if LEVELS[i][0] == Game.bot_level:
+			o.select(i)
+	o.tooltip_text = "How well the bots play: their door choices, picks and upgrades. Find a match always plays Medium."
+	o.item_selected.connect(func(i): Game.set_bot_level(LEVELS[i][0]))
+	return o
+
+func _level_name(level: String) -> String:
+	for l in LEVELS:
+		if l[0] == level:
+			return l[1]
+	return level
 
 func _woke(ok, _info) -> void:
 	if is_instance_valid(_server_label):
@@ -191,6 +211,18 @@ func _lobby() -> void:
 		else:
 			row.add_child(Kit.label("Open · players only", "Muted"))
 		_box.add_child(row)
+	var bots := Kit.hbox(8)
+	bots.alignment = BoxContainer.ALIGNMENT_CENTER
+	bots.add_child(Kit.label("Bot difficulty:", "Muted"))
+	if owner and not L.get("matched", false):
+		var pick := _level_pick()
+		for i in LEVELS.size():   # the room's level, as the server has it
+			if LEVELS[i][0] == str(L.get("botLevel", "medium")):
+				pick.select(i)
+		bots.add_child(pick)
+	else:
+		bots.add_child(Kit.label(_level_name(str(L.get("botLevel", "medium"))), "Heading"))
+	_box.add_child(bots)
 	var row2 := Kit.hbox(8)
 	if owner:
 		row2.add_child(_btn("Start the match", Game.start_match))

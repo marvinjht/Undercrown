@@ -9,6 +9,7 @@ window.G = window.G || {};
   const tip = (html) => { const id = 't' + (++tipSeq); tips[id] = html; return `data-tip="${id}" tabindex="0"`; };
   const RANGE_NAMES = { melee: 'Melee', reach: 'Reach (2 steps)', near: 'Near range', far: 'Far range' };
   let bagOpen = -1;
+  let gearOpen = null, craftOpen = null;   // your gear slot menu (sell/scrap), the craft steps
   let supplyOpen = false;
 
   // ---------- Health bars with a preview of what just changed ----------
@@ -203,12 +204,40 @@ window.G = window.G || {};
 
   // ---------- Side panels ----------
   function gearPanel(hero) {
-    return `<section class="panel"><h3>Gear</h3><div class="gear-grid">${G.SLOTS.map(slot => {
+    const mine = hero.isPlayer && G.Game.s && !G.Game.s.watchingView && G.Game.s.phase !== 'battle';
+    let menu = '';
+    const grid = G.SLOTS.map(slot => {
       const it = hero.gear[slot];
-      if (!it) return `<div class="slot empty" ${tip(`<div class="tt-title">${G.SLOT_NAMES[slot]}</div><div class="tt-sub">Empty. Loot leans toward empty slots.</div>`)}>
+      if (!it) return `<div class="slot empty" ${tip(`<div class="tt-title">${G.SLOT_NAMES[slot]}</div><div class="tt-sub">Empty. Loot leans toward empty slots.${slot === 'weapon' ? ' Without a weapon you fight with your fists.' : ''}</div>`)}>
         <span class="ico-wrap">${G.Art.icon(slot)}</span><small>${G.SLOT_NAMES[slot]}</small></div>`;
-      return `<div class="slot r-${it.rarity}" ${tip(itemTip(it))}><span class="ico-wrap r-${it.rarity}">${G.Art.icon(it.iconKey)}</span><small>${esc(it.name)}</small>${it.set ? `<i class="set-dot" style="--set:${G.CLASSES[it.set].color}"></i>` : ''}${it.rarity === 'artifact' ? '<i class="fx-dot artifact"></i>' : ''}</div>`;
-    }).join('')}</div></section>`;
+      if (mine && gearOpen === slot) {
+        const fists = slot === 'weapon' ? ' You fight with your fists until you equip another weapon.' : '';
+        menu = `<div class="bag-menu gear-menu"><b>${esc(it.name)}</b>
+          <button class="ghost" data-act="gear-sell" data-slot="${slot}" title="Sell it.${fists}">Sell +${G.Dungeon.sellPrice(it)}g</button>
+          ${G.Dungeon.canScrap(it) ? `<button class="ghost" data-act="gear-scrap" data-slot="${slot}" title="Scrap it.${fists}">Scrap +1 ${CFG().scrap.names[it.rarity]}</button>` : ''}
+          ${fists ? `<p class="hint">${fists.trim()}</p>` : ''}</div>`;
+      }
+      return `<div class="slot r-${it.rarity} ${mine ? 'clickable' : ''}" ${mine ? `data-act="gear-menu" data-slot="${slot}"` : ''} ${tip(itemTip(it))}><span class="ico-wrap r-${it.rarity}">${G.Art.icon(it.iconKey)}</span><small>${esc(it.name)}</small>${it.set ? `<i class="set-dot" style="--set:${G.CLASSES[it.set].color}"></i>` : ''}${it.rarity === 'artifact' ? '<i class="fx-dot artifact"></i>' : ''}</div>`;
+    }).join('');
+    return `<section class="panel"><h3>Gear</h3><div class="gear-grid">${grid}</div>${menu}</section>`;
+  }
+  // Scrap you hold, next to your gold
+  function scrapChips(p) {
+    const S = CFG().scrap, have = p.scrap || {};
+    return Object.keys(S.odds).filter(k => have[k]).map(k => `<span class="chip muted scrap-chip" title="${S.names[k]}: ${S.cost} craft an item (${craftOdds(k)})"><i class="scrap-dot r-${k}"></i>${have[k]}</span>`).join('');
+  }
+  const craftOdds = k => Object.entries(CFG().scrap.odds[k]).filter(([, v]) => v > 0).map(([r, v]) => `${v}% ${G.RARITY[r].name.toLowerCase()}`).join(', ');
+  // Crafting: pick the scrap, then Weapon or Armor, then exactly what
+  function craftBox(st) {
+    const p = st.player, S = CFG().scrap, have = p.scrap || {};
+    const ready = Object.keys(S.odds).filter(k => (have[k] || 0) >= S.cost);
+    if (!ready.length || st.watchingView || st.phase === 'battle') return '';
+    const c = craftOpen && ready.includes(craftOpen.kind) ? craftOpen : null;
+    if (!c) return `<div class="dye-pick"><b>Craft</b> <small>${S.cost} scraps of one kind</small>${ready.map(k => `<button class="ghost" data-act="craft-kind" data-kind="${k}" title="${craftOdds(k)}">${S.names[k]}</button>`).join('')}</div>`;
+    const back = '<button class="ghost" data-act="craft-cancel">Cancel</button>';
+    if (!c.cat) return `<div class="dye-pick"><b>${S.names[c.kind]}: weapon or armor?</b><p class="hint">${craftOdds(c.kind)}</p><button class="ghost" data-act="craft-cat" data-cat="weapon">Weapon</button><button class="ghost" data-act="craft-cat" data-cat="armor">Armor</button>${back}</div>`;
+    const list = c.cat === 'weapon' ? G.WEAPON_ORDER.map(id => [id, G.WEAPONS[id].name]) : G.SLOTS.filter(sl => sl !== 'weapon').map(sl => [sl, G.SLOT_NAMES[sl]]);
+    return `<div class="dye-pick"><b>Craft which ${c.cat === 'weapon' ? 'weapon' : 'piece'}?</b>${list.map(([id, nm]) => `<button class="ghost" data-act="craft-make" data-what="${id}">${esc(nm)}</button>`).join('')}${back}</div>`;
   }
 
   function supplyBlock() {
@@ -375,15 +404,15 @@ window.G = window.G || {};
       slots.push(`<div class="bag-slot ${open ? 'open' : ''}">
         <button class="bag-item" data-act="bag-menu" data-i="${i}" ${tip(itemTip(it, p))} aria-label="${esc(it.name)}">
           <span class="ico-wrap ${it.kind === 'gear' ? 'r-' + it.rarity : ''}">${G.Art.icon(it.iconKey)}</span><small>${esc(it.name)}</small></button>
-        ${open ? `<div class="bag-menu">${bagUseBtn(p, it, i)}<button class="ghost" data-act="bag-sell" data-i="${i}">Sell +${G.Dungeon.sellPrice(it)}g</button></div>` : ''}
+        ${open ? `<div class="bag-menu">${bagUseBtn(p, it, i)}<button class="ghost" data-act="bag-sell" data-i="${i}">Sell +${G.Dungeon.sellPrice(it)}g</button>${G.Dungeon.canScrap(it) ? `<button class="ghost" data-act="bag-scrap" data-i="${i}">Scrap +1 ${CFG().scrap.names[it.rarity]}</button>` : ''}</div>` : ''}
       </div>`);
     }
     const buffs = Object.entries(p.buffs || {}).filter(([, v]) => v).map(([k, v]) => k === 'fullMana' ? 'Full mana' : `+${v} ${G.STAT_INFO[k].label}`);
-    return `<section class="panel"><h3>Bag <span class="bag-head-r">${goldChip(p)}<span class="chip ${p.bag.length >= size ? 'full' : 'muted'}">${p.bag.length}/${size}</span></span></h3>
+    return `<section class="panel"><h3>Bag <span class="bag-head-r">${goldChip(p)}${scrapChips(p)}<span class="chip ${p.bag.length >= size ? 'full' : 'muted'}">${p.bag.length}/${size}</span></span></h3>
       <p class="hint bag-hint">New gear goes straight onto an empty slot; anything else lands here. To swap gear in, click it and hold Equip (the old piece sells automatically), or sell it for gold.</p>
       <div class="bag">${slots.join('')}</div>
       ${buffs.length ? `<p class="buffs">Next fight: ${buffs.join(', ')}</p>` : ''}
-      ${st.bagMsg ? `<p class="bag-msg">${esc(st.bagMsg)}</p>` : ''}${dyePicker(st)}</section>`;
+      ${st.bagMsg ? `<p class="bag-msg">${esc(st.bagMsg)}</p>` : ''}${dyePicker(st)}${craftBox(st)}</section>`;
   }
   // Turncoat's Dye: pick a piece, then its new class
   function dyePicker(st) {
@@ -1120,10 +1149,20 @@ window.G = window.G || {};
         <p>Share this code with your friends. Up to 8 players. Bots fill empty seats up to 6; seats 7 and 8 are for real players only.</p></header>
       ${link ? `<div class="row-actions"><button class="ghost" data-act="mp-copy" data-link="${esc(link)}">Copy invite link</button></div>` : ''}
       <ul class="seats">${slots.join('')}</ul>
+      ${botLevelRow(L.matched ? CFG().bots.match : (L.botLevel || CFG().bots.default), 'lobby-level', isHost && !L.matched)}
       <div class="row-actions">${isHost ? '<button class="enter" data-act="mp-start">Start the match</button>' : '<p class="waiting">Waiting for the host to start…</p>'}
         <button class="ghost" data-act="mp-leave">Leave</button></div>
       ${G.Net.mode() === 'local' ? '<p class="hint">Test mode: players are other tabs in this browser.</p>' : ''}
     </div>`;
+  }
+
+  // Bot difficulty: Easy, Medium, Hard (CONFIG.bots). Solo uses your pick; a room uses its owner's; Find a match plays Medium.
+  function soloLevel() { try { const v = localStorage.getItem('uc-bots'); return CFG().bots.levels[v] ? v : CFG().bots.default; } catch (e) { return CFG().bots.default; } }
+  function botLevelRow(cur, act, canPick) {
+    const name = l => l[0].toUpperCase() + l.slice(1);
+    if (!canPick) return `<p class="hint">Bot difficulty: <b>${esc(name(cur))}</b></p>`;
+    return `<div class="row-actions"><span class="hint">Bot difficulty:</span>${Object.keys(CFG().bots.levels).map(l =>
+      `<button class="${l === cur ? '' : 'ghost'}" data-act="${act}" data-level="${l}" title="How well the bots play: door choices, picks and upgrades">${name(l)}</button>`).join('')}</div>`;
   }
 
   function titleScreen() {
@@ -1139,6 +1178,7 @@ window.G = window.G || {};
         <li><b>The tournament</b>After room 30, everyone with hearts fights round after round until one is left.</li>
       </ul>
       <div class="row-actions"><button class="enter" data-act="start">Play solo</button></div>
+      ${botLevelRow(soloLevel(), 'solo-level', true)}
       <section class="mp-box">
         <h3>Play online</h3>
         <label class="field"><span>Your name</span><input id="mp-name" maxlength="14" value="${esc(savedName())}" placeholder="Your name" autocomplete="nickname"></label>
@@ -1459,7 +1499,9 @@ window.G = window.G || {};
     if (a !== 'bag-menu' && a !== 'bag-art' && a !== 'bag-art-cancel') bagOpen = -1;
     if (a !== 'bag-art') artConfirm = -1;
     switch (a) {
-      case 'start': Gm.newRun(); break;
+      case 'start': Gm.newRun(soloLevel()); break;
+      case 'solo-level': try { localStorage.setItem('uc-bots', el.dataset.level); } catch (e) { /* ignore */ } update(); break;
+      case 'lobby-level': G.MP.setBotLevel(el.dataset.level); break;
       case 'mp-create': { const n = ($('#mp-name') || {}).value || ''; if (!n.trim()) { toast(el, 'Enter your name first'); break; } G.MP.create(n); break; }
       case 'mp-join': { const n = ($('#mp-name') || {}).value || '', c = ($('#mp-code') || {}).value || ''; if (!n.trim()) { toast(el, 'Enter your name first'); break; } if (!c.trim()) { toast(el, 'Enter the room code'); break; } G.MP.join(c, n); break; }
       case 'mp-start': G.MP.hostStart(); break;
@@ -1495,6 +1537,14 @@ window.G = window.G || {};
       case 'bag-art': artConfirm = +el.dataset.i; render(); break;
       case 'bag-art-cancel': render(); break;
       case 'bag-sell': Gm.sellBag(+el.dataset.i); break;
+      case 'bag-scrap': bagOpen = -1; Gm.scrapBag(+el.dataset.i); break;
+      case 'gear-menu': gearOpen = gearOpen === el.dataset.slot ? null : el.dataset.slot; update(); break;
+      case 'gear-sell': gearOpen = null; Gm.sellGear(el.dataset.slot); break;
+      case 'gear-scrap': gearOpen = null; Gm.scrapGear(el.dataset.slot); break;
+      case 'craft-kind': craftOpen = { kind: el.dataset.kind }; update(); break;
+      case 'craft-cat': if (craftOpen) craftOpen.cat = el.dataset.cat; update(); break;
+      case 'craft-cancel': craftOpen = null; update(); break;
+      case 'craft-make': if (craftOpen) { const k = craftOpen.kind; craftOpen = null; Gm.craft(k, el.dataset.what); } break;
       case 'dye-item': Gm.dyeItem(el.dataset.id); break;
       case 'dye-class': Gm.dyeClass(el.dataset.cls); break;
       case 'dye-cancel': Gm.dyeCancel(); break;

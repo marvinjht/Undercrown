@@ -16,6 +16,7 @@ const ACTS = {
   mysteryAct: ['mystery'], chooseSpec: ['spec'], chooseTree: ['tree'], chooseGem: ['gem'], placeBet: ['wager'],
   forgeAct: ['forge'], leaveForge: ['forge'], startDuelFight: ['duelIntro'],
   useBag: null, sellBag: null, dyeItem: null, dyeClass: null, dyeCancel: null,
+  scrapBag: null, sellGear: null, scrapGear: null, craft: null,
   playerShopPick: ['shop'], playerShopPass: ['shop'], shopBuy: ['merchant'], leaveMerchant: ['merchant'],
   seeEnding: ['dead'], markActive: null,
 };

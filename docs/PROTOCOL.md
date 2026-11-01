@@ -61,7 +61,8 @@ Once the match starts (`start`), a client's connection carries only these, plus 
 `takeGold` (reward), `takeSpoils` (spoils), `mysteryAct` (mystery), `chooseSpec` (spec), `chooseTree` (tree), `chooseGem`
 (gem), `placeBet` (wager), `forgeAct`, `leaveForge` (forge), `startDuelFight` (duelIntro), `playerShopPick`,
 `playerShopPass` (shop), `shopBuy`, `leaveMerchant` (merchant), `seeEnding` (dead), and on any screen `useBag`, `sellBag`,
-`dyeItem`, `dyeClass`, `dyeCancel`, `markActive`. Anything else is ignored.
+`dyeItem`, `dyeClass`, `dyeCancel`, `markActive`, `scrapBag` (bag index), `sellGear`, `scrapGear` (slot name),
+`craft` (scrap kind, weapon type or armor slot; CONFIG.scrap). Anything else is ignored.
 
 `state` fields:
 - `now`: the server's clock. Times in the state (`s.roundEnds`, `s.shop.reviewUntil`, `s.shop.turnStart`,
@@ -108,6 +109,7 @@ Client → server (the first message on a new connection must be one of these th
 | `join` | `code, cid, name, v` | Join a room by code. |
 | `rejoin` | `code, cid, name, v, room` | Same seat after a dropped connection (`room` = the room your game is in). |
 | `startReq` | | Owner only: start the match (bots fill seats up to 6). |
+| `botLevel` | `level` | Owner only, before the start: bot difficulty, `easy` \| `medium` \| `hard` (CONFIG.bots). Ignored in matchmade rooms (they play CONFIG.bots.match). |
 | `rematchReq` | | Owner only, after the tournament: back to the lobby, same code. |
 | `bye` | `cid` | Leaving. In a match, a bot takes over your hero. |
 | `ping` | `cid` | Every 2.5 seconds. Silent for 45 seconds in a match = a bot plays for you until you're back. |
@@ -116,10 +118,10 @@ Server → client:
 
 | Message | Fields | Meaning |
 | --- | --- | --- |
-| `lobby` | `lobby: { code, slots: [{cid, name} \| null] ×8, hostCid: 'server', ownerCid, v, started }` | Seats changed. |
+| `lobby` | `lobby: { code, slots: [{cid, name} \| null] ×8, hostCid: 'server', ownerCid, v, started, botLevel, matched? }` | Seats or the bot difficulty changed. |
 | `version` | `cid, v` | Your version doesn't match the server's (`v`). |
 | `joinError` | `cid, reason` | No such room, room full, or match already started. |
-| `start` | `seed, players` | The match begins. Every client makes the starting heroes from `seed` in seat order and plans the bosses from it (`G.Dungeon.planBosses(seed)`). |
+| `start` | `seed, players, botLevel` | The match begins. Every client makes the starting heroes from `seed` in seat order and plans the bosses from it (`G.Dungeon.planBosses(seed)`). |
 | `players` | `players` | Someone dropped (a bot took over) or came back. |
 | `rematch` | `lobby` | Back to the lobby. |
 | `ping` | | Every 2.5 seconds. |

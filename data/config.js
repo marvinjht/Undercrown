@@ -2,7 +2,7 @@
 // All stats are flat whole numbers. Chance stats (Crit, Dodge, Stun) mean "out of 100".
 window.G = window.G || {};
 
-G.VERSION = '0.52';   // players in one room must all run the same version
+G.VERSION = '0.53';   // players in one room must all run the same version
 
 G.CONFIG = {
   // A 10-room pattern that repeats: 5 = Plunder, 7 = merchant, 8 = boss, 10 = duel. Room 30 is the tournament.
@@ -58,10 +58,40 @@ G.CONFIG = {
 
   // Selling from your bag: gear by rarity; potions and elixirs for half their price
   sell: { grey: 4, green: 12, rare: 30, legendary: 45, artifact: 60, consumablePct: 50 },
+  // Scrap and crafting. Scrapping an item (bag or worn) of a rarity in `from` gives 1 scrap of that rarity.
+  // `cost` scraps of one kind craft a chosen weapon type or armor slot; its rarity rolls from `odds` (out of 100).
+  // Never artifacts. Tier for the current room; class tags from the shared supply as usual.
+  scrap: {
+    from: ['grey', 'green'],
+    cost: 4,
+    odds: {
+      grey:  { green: 88, rare: 10, legendary: 2 },
+      green: { green: 35, rare: 60, legendary: 5 },
+    },
+    names: { grey: 'Grey Scrap', green: 'Green Scrap' },
+  },
 
   // Find a match (online): a match starts when this many are waiting, or waitSeconds after the second player joined
   // the queue (everyone waiting goes in), or after soloWaitSeconds for one player alone. Bots fill seats up to 6.
   matchmaking: { maxPlayers: 8, waitSeconds: 30, soloWaitSeconds: 45 },
+  // Bot difficulty. The room owner picks it in the lobby; Find a match plays `match`; solo uses the player's pick.
+  // These change how well bots play, never their stats. A hero with no level (the balance tools) plays like Hard.
+  //   sight: 'exact' = judges fight doors by simulating them; 'skulls' = by the 1-5 skulls players see
+  //   doorNoise: randomness in door choices (0.5 = the old AI; higher = worse doors more often)
+  //   eye: 'power' = judges gear by its full combat value; 'stats' = by the visible stat changes, like a player
+  //   skipUpgrade: chance to pass on an upgrade (gold or a bag item instead)
+  //   plunderRandom: chance to take a random item at Plunder instead of the best one; plunderMiss: chance to miss the turn
+  //   specSmart: picks the spec that suits its weapon (else a random one of the three)
+  //   gemRandom / treeRandom: chance of a random heart gem / skill tree node instead of the best
+  //   bagSkill: chance to use a potion or elixir when it would help
+  bots: {
+    default: 'medium', match: 'medium',
+    levels: {
+      easy:   { sight: 'skulls', doorNoise: 1.6, eye: 'stats', skipUpgrade: 0.30, plunderRandom: 0.5, plunderMiss: 0, specSmart: false, gemRandom: 1,   treeRandom: 0.7, bagSkill: 0.4 },
+      medium: { sight: 'skulls', doorNoise: 0.9, eye: 'stats', skipUpgrade: 0.10, plunderRandom: 0.2, plunderMiss: 0, specSmart: false, gemRandom: 0.5, treeRandom: 0.3, bagSkill: 0.75 },
+      hard:   { sight: 'exact',  doorNoise: 0.5, eye: 'power', skipUpgrade: 0,    plunderRandom: 0,   plunderMiss: 0, specSmart: true,  gemRandom: 0,   treeRandom: 0,   bagSkill: 1 },
+    },
+  },
 
   shop: {
     reviewSeconds: 5,   // everyone looks over the table before picks start
@@ -132,7 +162,7 @@ G.CONFIG = {
     boss:  { hp: 1.6, hit: 1.1 },
     swarmCopy: { hp: 0.35, hit: 0.5 },
     // Each phase's monsters get these on top (their pools differ in toughness, and weapons now cast spells)
-    phase: { morning: { hp: 1.1, hit: 1.1 }, evening: { hp: 1.35, hit: 1.3 }, night: { hp: 1.15, hit: 1.15 } },
+    phase: { morning: { hp: 1.1, hit: 1.1 }, evening: { hp: 1.35, hit: 1.3 }, night: { hp: 1.15, hit: 1.05 } },
   },
 
   combat: {

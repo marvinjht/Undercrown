@@ -25,11 +25,13 @@ window.G = window.G || {};
   const Game = {
     s: null,
 
-    newRun() {
+    newRun(botLevel) {
       const seed = G.newSeed();
       const rng = new G.RNG(seed);
       const player = G.Hero.create({ name: 'You', isPlayer: true, tint: G.PLAYER_TINT }, rng.fork());
       const rivals = G.RIVALS.map(r => G.Hero.create({ name: r.name, tint: r.tint }, rng.fork()));
+      const lv = CFG().bots.levels[botLevel] ? botLevel : CFG().bots.default;
+      for (const r of rivals) r.botLevel = lv;   // bot difficulty (CONFIG.bots)
       this.s = { seed, rng, player, rivals, room: 1, phase: 'doors', roundKind: 'room', roundEnds: 0, notice: null, bagMsg: null, log: [] };
       G.Supply.reset([player, ...rivals]);
       G.Dungeon.planBosses(seed);
@@ -587,6 +589,51 @@ window.G = window.G || {};
       p.gold += g;
       s.goldPop = { amount: g, at: Date.now() };
       s.bagMsg = `Sold ${it.name} for ${g} gold.`;
+      if (this.mp) G.MP.sendSnap();
+      render();
+    },
+
+    // ---------- Scrap and crafting (CONFIG.scrap) ----------
+    scrapBag(i) {
+      const s = this.s, p = s.player, it = p.bag[i];
+      if (!it || s.phase === 'battle' || !G.Dungeon.canScrap(it)) return;
+      p.bag.splice(i, 1);
+      G.Dungeon.scrapItem(p, it);
+      s.bagMsg = `Scrapped ${it.name}: +1 ${CFG().scrap.names[it.rarity]}.`;
+      if (this.mp) G.MP.sendSnap();
+      render();
+    },
+    // Worn gear: sell it or scrap it (a weapon too: you fight with your fists until you equip another)
+    sellGear(slot) {
+      const s = this.s, p = s.player, it = p.gear[slot];
+      if (!it || s.phase === 'battle') return;
+      const g = G.Dungeon.sellPrice(it);
+      G.Hero.withMaxChange(p, () => { p.gear[slot] = null; });
+      p.gold += g;
+      s.goldPop = { amount: g, at: Date.now() };
+      s.bagMsg = `Sold ${it.name} for ${g} gold.${slot === 'weapon' ? ' You fight with your fists until you equip a weapon.' : ''}`;
+      if (this.mp) G.MP.sendSnap();
+      render();
+    },
+    scrapGear(slot) {
+      const s = this.s, p = s.player, it = p.gear[slot];
+      if (!it || s.phase === 'battle' || !G.Dungeon.canScrap(it)) return;
+      G.Hero.withMaxChange(p, () => { p.gear[slot] = null; });
+      G.Dungeon.scrapItem(p, it);
+      s.bagMsg = `Scrapped ${it.name}: +1 ${CFG().scrap.names[it.rarity]}.${slot === 'weapon' ? ' You fight with your fists until you equip a weapon.' : ''}`;
+      if (this.mp) G.MP.sendSnap();
+      render();
+    },
+    // Spend scraps of one kind on a weapon type or an armor slot; it goes on you if the slot is empty, else in your bag
+    craft(kind, what) {
+      const s = this.s, p = s.player;
+      if (s.phase === 'battle') return;
+      const it = G.Dungeon.craftItem(p, kind, what, s.room, s.rng);
+      if (!it) return;
+      const where = G.Hero.receive(p, it);
+      const R = G.RARITY[it.rarity].name;
+      if (!where) { const g = G.Dungeon.sellPrice(it); p.gold += g; s.bagMsg = `Crafted ${it.name} (${R}), but your bag is full: it sold for ${g} gold.`; }
+      else s.bagMsg = `Crafted ${it.name} (${R}). ${G.Hero.receivedText(it, where)}`;
       if (this.mp) G.MP.sendSnap();
       render();
     },

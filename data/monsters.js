@@ -49,7 +49,7 @@ G.JESTER = { id: 'jester', name: 'The Jester', hp: 0.01, hit: 0, spd: 1, scale: 
 // minions = weak helpers that fight alongside; fx = boss mechanics read by combat.js.
 G.BOSSES = {
   boneKing: { id: 'boneKing', name: 'The Bone King', hp: 0.8, hit: 0.9, spd: 10, armor: 4, trait: 'ironclad' },
-  gorehorn: { id: 'gorehorn', name: 'Gorehorn',      hp: 0.95, hit: 1.2, spd: 8, stun: 14, trait: 'thorns' },
+  gorehorn: { id: 'gorehorn', name: 'Gorehorn',      hp: 0.95, hit: 1.0, spd: 8, stun: 14, trait: 'thorns' },
   warden:   { id: 'warden',   name: 'The Warden',    hp: 0.8, hit: 0.85, spd: 10, armor: 6, ward: 4, crit: 8, trait: 'spellward' },
   yeti:     { id: 'yeti',     name: 'The Frost Yeti', hp: 0.9, hit: 1.0, spd: 8, armor: 2, early: { hit: 1.2 },
     fx: { chill: { stacks: 3, secs: 2, cooldown: 6 } },

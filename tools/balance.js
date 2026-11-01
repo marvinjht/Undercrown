@@ -11,12 +11,22 @@ for (const f of ['data/config.js', 'data/weapons.js', 'data/armor.js', 'data/rel
 }
 const G = ctx.G;
 const MATCHES = +process.argv[2] || 60;
+// --set PATH=VALUE tries a number without editing the data files, e.g. --set BOSSES.gorehorn.hit=1.0
+for (let i = 3; i < process.argv.length; i++) if (process.argv[i] === '--set') {
+  const [p, v] = process.argv[++i].split('=');
+  const keys = p.split('.'), last = keys.pop();
+  let o = G;
+  for (const k of keys) o = o[k];
+  console.log(`set ${p}: ${o[last]} -> ${v}`);
+  o[last] = Number(v);
+}
 const rng = new G.RNG(12345);
 const C = G.CONFIG;
 const stats = { heroes: 0, noHeartLost: 0, reachedEnd: 0, heartsAtEnd: {}, levelAt: { 10: [], 20: [], 30: [] }, outBy: {},
   heartLossRoom: {}, duelLen: [], tourLen: [], tourRounds: [], specWins: {}, gemWins: {}, buildWins: {}, sets: {}, hybrids: {}, full: {},
   supplyLow: 0, fightLen: [], gear: [], rarity: { grey: 0, green: 0, rare: 0, legendary: 0, artifact: 0 }, tagged: 0, effects: 0, tradeoffs: 0,
-  artifactHeld: {}, artifactWins: {}, relicsAtEnd: [], hybridWins: {}, lostTo: {} };
+  artifactHeld: {}, artifactWins: {}, relicsAtEnd: [], hybridWins: {}, lostTo: {}, crafted: { green: 0, rare: 0, legendary: 0 }, craftedRareHeroes: 0, craftedHeroes: 0,
+  wornCrafted: { green: 0, rare: 0, legendary: 0 } };
 G._fightLog = stats.fightLen;
 
 for (let mi = 0; mi < MATCHES; mi++) {
@@ -42,6 +52,10 @@ for (let mi = 0; mi < MATCHES; mi++) {
   }
   for (const h of heroes) {
     stats.heroes++;
+    const cr = h.crafted || [];
+    for (const r of cr) stats.crafted[r] = (stats.crafted[r] || 0) + 1;
+    if (cr.length) stats.craftedHeroes++;
+    if (cr.some(r => r === 'rare' || r === 'legendary')) stats.craftedRareHeroes++;
     for (const x of h.heartLog || []) if (x.room < 30) { const k = String(x.by || '?').replace(/^(Elite |Ironclad |Spellward |Swarm |Evasive |Thorns |Shieldbreaker )+/, ''); stats.lostTo[k] = (stats.lostTo[k] || 0) + 1; }
     if (!lostAny.has(h) && h.alive) stats.noHeartLost++;
     if (h.alive) {
@@ -79,6 +93,9 @@ const avg = a => a.length ? (a.reduce((x, y) => x + y, 0) / a.length).toFixed(1)
 G._fightLog = null;
 console.log(`${MATCHES} matches, ${stats.heroes} heroes`);
 console.log(`Reached room 30 without losing a heart: ${pct(stats.noHeartLost, stats.heroes)}  (target about 60%)`);
+{ const c = stats.crafted, n = stats.heroes, per = x => (x / n).toFixed(2);
+  console.log(`Crafting (bots scrap grey and green gear, craft at ${C.scrap.cost} scraps): ${pct(stats.craftedHeroes, n)} of heroes crafted something, ${pct(stats.craftedRareHeroes, n)} crafted at least one rare or legendary.`);
+  console.log(`  Crafted per hero: ${per(c.green)} uncommon, ${per(c.rare)} rare, ${per(c.legendary)} legendary (artifacts can't be crafted).`); }
 console.log(`Reached the tournament at all: ${pct(stats.reachedEnd, stats.heroes)}  hearts left at the end:`, stats.heartsAtEnd, ' knocked out in:', stats.outBy);
 console.log('Hearts lost in the dungeon by rooms:', stats.heartLossRoom);
 console.log('Hearts lost to (top 12):', Object.entries(stats.lostTo).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => k + ' ' + v).join(', '));

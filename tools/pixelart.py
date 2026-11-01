@@ -374,6 +374,16 @@ def icon_hybrid(key):
                 if m.p[y][x][3]: s.px(ox + x, oy + y, m.p[y][x])
     return s
 
+# Scrap (icons/scrap_<rarity>.png): a little pile of bent metal and a bolt, in the rarity's color
+SCRAP_COLOR = {'grey': '#b5b0a6', 'green': '#72d064'}
+def icon_scrap(k):
+    s = Spr(16); c = hexc(SCRAP_COLOR[k]); d = mix(c, -0.35)
+    s.poly([(2, 12), (7, 6), (10, 9), (6, 14)], c)            # a bent plate
+    s.poly([(8, 13), (12, 5), (14, 7), (11, 14)], d)           # a shard
+    s.ellipse(5, 5, 2.5, 2.5, STEEL); s.px(5, 5, DSTEEL)       # a bolt
+    s.rect(9, 3, 3, 2, c)                                      # a chip
+    return s.finish()
+
 def ui_bits():
     out = {}
     s = Spr(16); s.ellipse(8, 8, 5, 5, GOLD); s.rect(7, 5, 2, 6, hexc('#a07a2a')); out['coin'] = s.finish()
@@ -422,6 +432,7 @@ def main():
     for k in DOOR_EMBLEM: icon_door(k).save(f'icons/door_{k}.png')
     for k, sp in ui_bits().items(): sp.save(f'icons/{k}.png')
     for k in CLASS_DRAW: icon_class(k).save(f'icons/class_{k}.png')
+    for k in SCRAP_COLOR: icon_scrap(k).save(f'icons/scrap_{k}.png')
     for k in HYBRID_COLOR: icon_hybrid(k).save(f'icons/hybrid_{k.replace("+", "_")}.png')
     frame(hexc('#1f1915'), hexc('#0e0b09'), hexc('#3d322a')).save('ui/panel.png', 2)
     frame(hexc('#2a221c'), hexc('#0e0b09'), hexc('#4d3f33')).save('ui/card.png', 2)

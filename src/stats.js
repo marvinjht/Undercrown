@@ -51,7 +51,7 @@ window.G = window.G || {};
   // The weapon's own attack speed (what the Attack Speed cap counts bonuses on top of)
   function weaponSpd(hero, W) {
     const w = hero.gear.weapon;
-    if (!w) return 10;
+    if (!w) return G.FISTS.spd;
     if (w.artifact && G.ARTIFACTS[w.artifact].stats.spd) return G.ARTIFACTS[w.artifact].stats.spd;
     return W ? W.spd : 10;
   }
@@ -61,6 +61,8 @@ window.G = window.G || {};
     const t = sumGear(hero);
     const wt = hero.gear.weapon ? hero.gear.weapon.weaponType : null;
     const W = wt ? G.WEAPONS[wt] : null;
+    // No weapon: you fight with your Fists (data/weapons.js G.FISTS)
+    if (!hero.gear.weapon) { t.dmg = (t.dmg || 0) + G.FISTS.dmg; t.spd = (t.spd || 0) + G.FISTS.spd; }
     const st = sets(hero);
     const fx = {};
     const add = (stats) => { for (const k in stats || {}) t[k] = (t[k] || 0) + stats[k]; };

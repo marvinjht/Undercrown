@@ -117,5 +117,9 @@ G.WEAPONS = {
   },
 };
 
+// Fists: how a hero fights with no weapon equipped (sold or scrapped it). Built in: never drops, can't be sold.
+// Weak melee, no spell. dmg and spd are the base before levels, gear and other bonuses.
+G.FISTS = { name: 'Fists', dmg: 4, spd: 10, range: 'melee', type: 'phys' };
+
 G.WEAPON_ORDER = ['daggers', 'saber', 'swordShield', 'longsword', 'greatAxe', 'greatHammer',
   'mace', 'maceShield', 'shortbow', 'longbow', 'wandFocus', 'staff'];

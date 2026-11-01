@@ -426,13 +426,89 @@ window.G = window.G || {};
   }
 
   G.Dungeon = {
+    canScrap, scrapItem, craftItem, aiCraft,
     monsterFor, planBosses, sharedRng, logHeart, bossDesc, buildEnemies, monsterName, makeDoors, doorInfo, danger, goldFor, itemPrice, sellPrice, doorFoes,
     specOptions, gemOptions, rollMystery, fight, applyFight, tickPoison, useItem, fightOpts, roomKind, merchantStock, merchantPrice,
     gearDrops, spoilsOptions, takeSpoils, forgeStrengthen, forgeAffix, strengthenGains, canStrengthen, fightKind, doorTitle,
   };
 
+  // ---------------- Scrap and crafting (CONFIG.scrap) ----------------
+  function canScrap(it) { return !!(it && it.kind === 'gear' && CFG().scrap.from.includes(it.rarity)); }
+  function scrapItem(hero, it) {
+    hero.scrap = hero.scrap || {};
+    hero.scrap[it.rarity] = (hero.scrap[it.rarity] || 0) + 1;
+  }
+  // `what`: a weapon type (daggers, longbow...) or an armor slot (helmet, chest, gloves, legs, boots)
+  function craftItem(hero, kind, what, room, rng) {
+    const S = CFG().scrap, odds = S.odds[kind];
+    if (!odds || ((hero.scrap && hero.scrap[kind]) || 0) < S.cost) return null;
+    const isW = !!G.WEAPONS[what];
+    if (!isW && (what === 'weapon' || !G.SLOTS.includes(what))) return null;
+    hero.scrap[kind] -= S.cost;
+    let r = rng.float() * 100, rarity = Object.keys(odds)[0];
+    for (const k of Object.keys(odds)) { if (r < odds[k]) { rarity = k; break; } r -= odds[k]; }
+    return G.Items.generate(rng, { slot: isW ? 'weapon' : what, rarity, room, hero, weaponType: isW ? what : null });
+  }
+  // A bot's turn at the scrap pile: scrap bag gear it won't wear, then craft its weakest piece while it can afford it.
+  // Its weapon only ever goes when the crafted one is better (take() swaps it), so a bot never ends up on its fists.
+  function aiCraft(hero, room) {
+    const S = CFG().scrap;
+    for (const it of hero.bag.slice()) {
+      if (canScrap(it) && G.Hero.powerWith(hero, it) <= G.Hero.power(hero)) { hero.bag.splice(hero.bag.indexOf(it), 1); scrapItem(hero, it); }
+    }
+    const made = [];
+    for (const kind of Object.keys(S.odds).reverse()) {   // the better scrap first
+      while (((hero.scrap && hero.scrap[kind]) || 0) >= S.cost) {
+        const rank = sl => { const it = hero.gear[sl]; return it ? G.RARITY[it.rarity].rank * 100 + (it.tier || 0) : -1; };
+        const sl = G.SLOTS.filter(x => !(hero.gear[x] && hero.gear[x].rarity === 'artifact')).sort((a, b) => rank(a) - rank(b))[0];
+        if (!sl) break;
+        const what = sl === 'weapon' ? (hero.gear.weapon ? hero.gear.weapon.weaponType : rollWeaponFor(hero)) : sl;
+        const it = craftItem(hero, kind, what, room, hero.rng);
+        if (!it) break;
+        made.push(it.rarity);
+        if (!hero.gear[it.slot] || G.Hero.powerWith(hero, it) > G.Hero.power(hero)) take(hero, it);
+        else if (canScrap(it)) scrapItem(hero, it);
+        else hero.gold += sellPrice(it);
+      }
+    }
+    if (made.length) (hero.crafted = hero.crafted || []).push(...made);   // for the balance tools
+    return made;
+  }
+  const rollWeaponFor = hero => (hero.spec && G.SPECS[hero.spec].affinity && G.SPECS[hero.spec].affinity[0]) || 'longsword';
+
   // ---------------- AI rivals ----------------
+  // A bot's difficulty knobs (CONFIG.bots.levels, or hero.botKnobs from a tool). None: best play.
+  function knobs(hero) {
+    if (!hero) return null;
+    if (hero.botKnobs) return hero.botKnobs;
+    const B = CFG().bots;
+    return (hero.botLevel && B && B.levels[hero.botLevel]) || null;
+  }
+  const roll = (hero, p) => !!p && p > 0 && hero.rng.chance(p);
+  // Gear judged the way a player reads a card: the visible stat changes, with rough weights
+  const SEEN = { dmg: 3, spd: 2.5, hp: 0.4, armor: 2, ward: 1.5, shield: 0.3, crit: 1.5, critDmg: 0.5, dodge: 1.5, leech: 2, holy: 2, pierce: 1.5,
+    bleed: 1.5, stun: 1, manaGain: 0.5, spellDmg: 0.3, startMana: 0.2 };
+  function seenValue(hero, it) {
+    if (it.kind === 'relic') return G.Hero.relicCount(hero, it.rid) >= G.RELIC_MAX ? 0 : 6;
+    const eq = hero.gear[it.slot];
+    if (!eq) return 100;
+    let v = 0;
+    for (const d of G.Items.compare(it, eq)) v += d.d * (SEEN[d.k] || 1);
+    if (it.rarity === 'artifact' && eq.rarity !== 'artifact') v += 10;
+    return v;
+  }
   function bestUpgrade(hero, items) {
+    const K = knobs(hero);
+    if (K && roll(hero, K.skipUpgrade)) return null;
+    if (K && K.eye === 'stats') {
+      let best = null, bv = 0;
+      for (const it of items) {
+        if (it.kind !== 'gear' && it.kind !== 'relic') continue;
+        const v = seenValue(hero, it);
+        if (v > bv) { best = it; bv = v; }
+      }
+      return best;
+    }
     const cur = G.Hero.power(hero);
     let best = null, bestP = cur * 1.005;
     for (const it of items) {
@@ -446,8 +522,31 @@ window.G = window.G || {};
   function take(hero, item) {
     if (item.kind === 'consumable') { hero.bag.push(item); return `took ${item.name}`; }
     if (item.kind === 'relic') { G.Hero.addRelic(hero, item); return `took the ${item.name} relic`; }
-    for (const old of G.Hero.equipSwap(hero, item)) hero.gold += sellPrice(old);   // the old piece (and any other artifact) sells automatically
+    for (const old of G.Hero.equipSwap(hero, item)) {   // the old piece (and any other artifact) goes automatically:
+      if (!hero.isPlayer && canScrap(old)) scrapItem(hero, old);   // a bot scraps what it can,
+      else hero.gold += sellPrice(old);                            // the rest sells
+    }
     return `took ${item.name}`;
+  }
+
+  // A bot's Plunder pick (null = pass): the best upgrade, else a bag item; worse bots sometimes grab at random
+  function plunderPick(hero, table) {
+    const K = knobs(hero);
+    if (K && roll(hero, K.plunderMiss)) return null;
+    if (K && roll(hero, K.plunderRandom)) {
+      const opts = table.filter(it => it.kind !== 'consumable' || !G.Hero.bagFull(hero));
+      if (opts.length) return hero.rng.pick(opts);
+    }
+    return bestUpgrade(hero, table) || table.find(it => it.kind === 'consumable' && !G.Hero.bagFull(hero)) || null;
+  }
+  // Take a picked item; a piece that would make the bot weaker goes in the bag (or sells if the bag is full)
+  function takePick(hero, it) {
+    if (it.kind === 'gear' && hero.gear[it.slot] && G.Hero.powerWith(hero, it) <= G.Hero.power(hero)) {
+      if (!G.Hero.bagFull(hero)) { hero.bag.push(it); return `took ${it.name}`; }
+      hero.gold += sellPrice(it);
+      return `took and sold ${it.name}`;
+    }
+    return take(hero, it);
   }
 
   // Best upgrade, else a consumable if there's room, else gold
@@ -465,9 +564,20 @@ window.G = window.G || {};
     return takeSpoils(hero, pick);
   }
 
-  function autoSpec(hero, opts) { G.Hero.setSpec(hero, opts[0]); return opts[0]; }
+  function autoSpec(hero, opts) {
+    const K = knobs(hero);
+    let pick = opts[0];
+    if (K && K.specSmart) {
+      const w = hero.gear.weapon && hero.gear.weapon.weaponType;
+      pick = opts.find(id => (G.SPECS[id].affinity || []).includes(w)) || opts[0];
+    } else if (K) pick = hero.rng.pick(opts);
+    G.Hero.setSpec(hero, pick);
+    return pick;
+  }
   function autoTree(hero, lv) {
     const opts = G.Stats.treeOptions(hero.spec, lv);
+    const K = knobs(hero);
+    if (K && roll(hero, K.treeRandom)) { const o = hero.rng.pick(opts); G.Hero.pickTree(hero, lv, o.id); return o; }
     let best = opts[0], bp = -1;
     for (const o of opts) { hero.treePicks[lv] = o.id; const p = G.Hero.power(hero); if (p > bp) { bp = p; best = o; } }
     delete hero.treePicks[lv];
@@ -484,15 +594,17 @@ window.G = window.G || {};
   }
   function autoGem(hero, opts) {
     const pref = ['pure', 'gaia', 'devil', 'phoenix', 'janus', 'vulture', 'stone'];
-    const pick = pref.find(g => opts.includes(g)) || opts[0];
+    const K = knobs(hero);
+    const pick = K && roll(hero, K.gemRandom) ? hero.rng.pick(opts) : pref.find(g => opts.includes(g)) || opts[0];
     G.Hero.setGem(hero, pick);
     return pick;
   }
 
   // Use bag items when it makes sense (AI, and the player when the clock runs out)
   function autoBag(hero, nextDoor) {
-    const max = G.Hero.maxHp(hero);
+    const max = G.Hero.maxHp(hero), K = knobs(hero);
     for (const it of hero.bag.slice()) {
+      if (K && K.bagSkill < 1 && !roll(hero, K.bagSkill)) continue;   // a less careful bot forgets sometimes
       if (it.kind === 'gear') { if (G.Hero.powerWith(hero, it) > G.Hero.power(hero)) useItem(hero, it); continue; }
       const c = G.CONSUMABLES[it.cid];
       if (c.heal && max - hero.hp >= c.heal * 0.8) useItem(hero, it);
@@ -504,6 +616,7 @@ window.G = window.G || {};
 
   function chooseDoor(hero, doors, room, rng) {
     if (doors.length === 1) return doors[0];
+    const K = knobs(hero);
     const hpPct = hero.hp / G.Hero.maxHp(hero);
     const hasAntidote = hero.bag.some(it => it.cid === 'antidote');
     const score = d => {
@@ -525,9 +638,10 @@ window.G = window.G || {};
       }
       if (d.monster) {
         const dg = danger(hero, d, room);
-        if (dg.level === 'Deadly') s *= 0.05; else if (dg.level === 'High') s *= 0.4;
+        if (K && K.sight === 'skulls') { if (dg.skulls >= 5) s *= 0.05; else if (dg.skulls >= 4) s *= 0.4; }   // what a player sees
+        else if (dg.level === 'Deadly') s *= 0.05; else if (dg.level === 'High') s *= 0.4;
       }
-      return s + rng.range(0, 0.5);
+      return s + rng.range(0, K ? K.doorNoise : 0.5);
     };
     const scored = doors.map(d => [d, score(d)]);
     return scored.reduce((a, b) => (b[1] > a[1] ? b : a))[0];
@@ -630,8 +744,10 @@ window.G = window.G || {};
   // Shop round without other players (balance tool / fast-forward after the player is out)
   function soloShop(hero, room, rng) {
     const table = G.Loot.shopTable(room, 4, rng);
-    let free = autoLoot(hero, table.slice(rng.int(0, 2)), room, false);
-    if (free === 'took nothing') { hero.gold += CFG().shop.passGold; free = `passed for ${CFG().shop.passGold} gold`; }
+    const pick = plunderPick(hero, table.slice(rng.int(0, 2)));
+    let free;
+    if (pick) free = takePick(hero, pick);
+    else { hero.gold += CFG().shop.passGold; free = `passed for ${CFG().shop.passGold} gold`; }
     return `${free} at the Plunder`;
   }
 
@@ -651,7 +767,9 @@ window.G = window.G || {};
     hero.lastText = resolveDoor(hero, d, room, rng);
     if (hero.alive) autoPicks(hero, rng);
     if (hero.alive && room === CFG().gemRoom && !hero.gem) autoGem(hero, gemOptions(hero, rng));
+    if (hero.alive) aiCraft(hero, room);
   }
 
-  G.AI = { aiRoom, bestUpgrade, autoLoot, autoSpec, autoTree, autoPicks, autoGem, autoBag, autoSpoils, autoReward, resolveDoor, chooseDoor, aiMerchant, take, wagerBet };
+  G.AI = { aiRoom, bestUpgrade, autoLoot, autoSpec, autoTree, autoPicks, autoGem, autoBag, autoSpoils, autoReward, resolveDoor, chooseDoor, aiMerchant, take, wagerBet,
+    knobs, plunderPick, takePick, aiCraft };
 })(window.G);

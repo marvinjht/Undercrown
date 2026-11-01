@@ -22,6 +22,8 @@ var timers: Array = []          # countdown labels: { label, ends (server ms), p
 var clock_label: Label
 var clock_bar: ProgressBar
 var bag_open := -1
+var gear_open := ""            # the worn piece whose Sell / Scrap buttons are showing
+var craft_state: Dictionary = {}   # crafting steps: { kind } then { kind, cat }
 var shown: Dictionary = {}
 var _last_phase := ""
 var _blood_seq := -1   # the last blood sale we showed a "+N gold" pop-up for
@@ -51,7 +53,7 @@ func _on_changed(_what: String) -> void:
 	var V := Game.view
 	_part("top", [V.get("top"), V.get("rooms")], _build_top)
 	_part("left", [V.get("rivals"), V.get("rivalOrder"), V.get("me"), V.get("canWatch"), V.get("watching")], _build_left)
-	_part("side", [V.get("bag"), V.get("gear"), V.get("me"), V.get("supply"), bag_open], _build_side)
+	_part("side", [V.get("bag"), V.get("gear"), V.get("me"), V.get("supply"), bag_open, gear_open, craft_state], _build_side)
 	_part("stage", [V.get("screen"), V.get("me")], _build_stage)
 	_part("watch", [V.get("watch")], _build_watch_win)
 	_check_battle()
@@ -298,6 +300,59 @@ func _build_left() -> void:
 	you.add_child(yv)
 	left.add_child(you)
 
+# Crafting (CONFIG.scrap): pick the scrap, then Weapon or Armor, then exactly what. One craft spends `cost` scraps.
+func _craft_box(bv: VBoxContainer, scrap: Dictionary, locked: bool) -> void:
+	var ready: Array = (scrap.get("kinds", []) as Array).filter(func(k): return k.get("ready", false))
+	if ready.is_empty() or locked:
+		craft_state = {}
+		return
+	var box := Kit.vbox(4)
+	var cost := int(scrap.get("cost", 4))
+	var step := func(label: String, cb: Callable, tip := "") -> Button:
+		var b := Button.new()
+		b.text = label
+		b.theme_type_variation = "Ghost"
+		b.tooltip_text = tip
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.pressed.connect(cb)
+		return b
+	var kind = null
+	for k in ready:
+		if k.kind == craft_state.get("kind"):
+			kind = k
+	if kind == null:
+		box.add_child(Kit.label("Craft: %d scraps of one kind" % cost, "Heading"))
+		for k in ready:
+			var kk: Dictionary = k
+			box.add_child(step.call("%s (%d)" % [kk.name, int(kk.n)], func(): craft_state = { "kind": kk.kind }; _on_changed("craft"), kk.odds))
+	elif not craft_state.has("cat"):
+		box.add_child(Kit.label("%s: weapon or armor?" % kind.name, "Heading"))
+		box.add_child(Kit.label(str(kind.odds), "Muted", true))
+		var row := Kit.hbox(6)
+		row.add_child(step.call("Weapon", func(): craft_state = { "kind": kind.kind, "cat": "weapon" }; _on_changed("craft")))
+		row.add_child(step.call("Armor", func(): craft_state = { "kind": kind.kind, "cat": "armor" }; _on_changed("craft")))
+		box.add_child(row)
+	else:
+		var weapon: bool = craft_state.cat == "weapon"
+		box.add_child(Kit.label("Craft which %s?" % ("weapon" if weapon else "piece"), "Heading"))
+		var g := GridContainer.new()
+		g.columns = 2
+		g.add_theme_constant_override("h_separation", 4)
+		g.add_theme_constant_override("v_separation", 4)
+		for o in (scrap.get("weapons", []) if weapon else scrap.get("armor", [])):
+			var what := str(o.id)
+			var k := str(kind.kind)
+			var b: Button = step.call(str(o.name), func():
+				craft_state = {}
+				Game.act("craft", [k, what]))
+			b.icon = Art.icon(str(o.get("icon", "")))
+			b.expand_icon = false
+			g.add_child(b)
+		box.add_child(g)
+	if not craft_state.is_empty():
+		box.add_child(step.call("Cancel", func(): craft_state = {}; _on_changed("craft")))
+	bv.add_child(box)
+
 # The eye next to a player: watch their game live (only once you're out)
 func _eye(slot: int, on: bool) -> Button:
 	var b := Button.new()
@@ -336,6 +391,14 @@ func _build_side() -> void:
 	var bh: HBoxContainer = bv.get_child(0)
 	bh.add_child(Kit.icon(Art.icon("coin"), 14))
 	bh.add_child(Kit.label(str(int(me.get("gold", 0))), "", false, Art.GOLD))
+	var scrap: Dictionary = bag.get("scrap", {})
+	for k in scrap.get("kinds", []):   # your scrap, one icon per kind
+		if int(k.n) > 0:
+			var si := Kit.icon(Art.icon("scrap_" + str(k.kind)), 14)
+			si.tooltip_text = "%s: %d. %d of one kind craft an item (%s)." % [k.name, int(k.n), int(scrap.get("cost", 4)), k.odds]
+			si.mouse_filter = Control.MOUSE_FILTER_STOP
+			bh.add_child(si)
+			bh.add_child(Kit.label(str(int(k.n)), "", false, Art.rarity_color(k.kind)))
 	bh.add_child(Kit.label("· %d/%d" % [items.size(), int(bag.get("size", 6))], "Muted"))
 	bh.lines = [{ "text": "New gear goes straight onto an empty slot; anything else lands here. Click an item to use, equip or sell it." }]
 	bh.tooltip_text = " "
@@ -382,22 +445,47 @@ func _build_side() -> void:
 		bv.add_child(Kit.label(bag.dye.title, "Heading", true))
 		for b in bag.dye.get("buttons", []):
 			bv.add_child(Kit.button(b))
+	_craft_box(bv, scrap, bool(bag.get("locked", false)))
 	# Gear
 	var gv := _section("Gear")
 	var gg := GridContainer.new()
 	gg.columns = 3
 	gg.add_theme_constant_override("h_separation", 6)
 	gg.add_theme_constant_override("v_separation", 4)
+	var gear_btns: Array = []
 	for g in V.get("gear", []):
 		var cell := Kit.vbox(1)
 		cell.custom_minimum_size = Vector2(80, 0)
-		cell.add_child(Kit.item_slot(g.get("item"), 32, str(g.get("slot", "")), true))
+		var gs := Kit.item_slot(g.get("item"), 32, str(g.get("slot", "")), true)
+		var sl := str(g.get("slot", ""))
+		if g.get("item") is Dictionary and (g.get("buttons", []) as Array).size():
+			gs.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+			gs.gui_input.connect(func(ev):
+				if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+					gear_open = "" if gear_open == sl else sl
+					_on_changed("gear"))
+			if gear_open == sl:
+				gs.modulate = Color(1.3, 1.2, 1.0)
+				gear_btns = g.buttons
+		cell.add_child(gs)
 		var nl := Kit.label(g.get("slotName", ""), "Muted")   # the item's name and details are in the slot's hover card
 		nl.clip_text = true
 		nl.custom_minimum_size = Vector2(80, 0)
 		cell.add_child(nl)
 		gg.add_child(cell)
 	gv.add_child(gg)
+	if gear_btns.size() and not bag.get("locked", false):   # Sell / Scrap the piece you clicked
+		for b in gear_btns:
+			var btn := Kit.button(b)
+			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			btn.pressed.connect(func(): gear_open = "")
+			if btn.has_signal("held"):
+				btn.connect("held", func(): gear_open = "")
+			gv.add_child(btn)
+			if b.get("note"):
+				gv.add_child(Kit.label(b.note, "Muted", true))
+	elif gear_open != "" and gear_btns.is_empty():
+		gear_open = ""
 	# Relics
 	var relics: Array = me.get("relics", [])
 	var rv := _section("Relics", str(relics.size()) if relics.size() else "")

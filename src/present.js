@@ -207,7 +207,25 @@ window.G = window.G || {};
   }
 
   // ---------- Panels ----------
-  function gearView(p) { return G.SLOTS.map(sl => ({ slot: sl, slotName: G.SLOT_NAMES[sl], item: itemView(p.gear[sl], null) })); }
+  function gearView(p) {
+    return G.SLOTS.map(sl => {
+      const it = p.gear[sl], buttons = [];
+      if (it) {
+        const fists = sl === 'weapon' ? ' You fight with your fists (weak) until you equip another weapon.' : '';
+        buttons.push(btn(`Sell +${G.Dungeon.sellPrice(it)}g`, 'sellGear', [sl], { style: 'ghost', hold: true, note: `Hold to sell your ${it.name}.${fists}` }));
+        if (G.Dungeon.canScrap(it)) buttons.push(btn(`Scrap +1 ${CFG().scrap.names[it.rarity]}`, 'scrapGear', [sl], { style: 'ghost', hold: true, note: `Hold to scrap your ${it.name}.${fists}` }));
+      }
+      return { slot: sl, slotName: G.SLOT_NAMES[sl], item: itemView(it, null), buttons };
+    });
+  }
+  // Scrap you hold and what crafting can make (CONFIG.scrap)
+  function scrapView(p) {
+    const S = CFG().scrap, have = p.scrap || {};
+    const kinds = Object.keys(S.odds).map(k => ({ kind: k, name: S.names[k], n: have[k] || 0, ready: (have[k] || 0) >= S.cost,
+      odds: Object.entries(S.odds[k]).filter(([, v]) => v > 0).map(([r, v]) => `${v}% ${G.RARITY[r].name.toLowerCase()}`).join(', ') }));
+    return { cost: S.cost, kinds, weapons: G.WEAPON_ORDER.map(id => ({ id, name: G.WEAPONS[id].name, icon: id })),
+      armor: G.SLOTS.filter(sl => sl !== 'weapon').map(sl => ({ id: sl, name: G.SLOT_NAMES[sl], icon: sl })) };
+  }
   function bagView(s, p) {
     const size = CFG().bagSize, items = [];
     p.bag.forEach((it, i) => {
@@ -226,10 +244,12 @@ window.G = window.G || {};
         }
       }
       buttons.push(btn(`Sell +${G.Dungeon.sellPrice(it)}g`, 'sellBag', [i], { style: 'ghost' }));
+      if (G.Dungeon.canScrap(it)) buttons.push(btn(`Scrap +1 ${CFG().scrap.names[it.rarity]}`, 'scrapBag', [i], { style: 'ghost' }));
       items.push({ i, item: v, buttons });
     });
     let dye = null;
     const d = s.dye;
+    const scrap = scrapView(p);
     if (d && p.bag.some(x => x.id === d.id)) {
       const targets = [...G.SLOTS.map(sl => p.gear[sl]), ...p.bag].filter(it => it && it.kind === 'gear' && it.set);
       if (!d.item) dye = { title: 'Re-tag which piece?', buttons: targets.map(it => btn(`${it.name} (${G.CLASSES[it.set].name})`, 'dyeItem', [it.id], { style: 'ghost' })).concat([btn('Cancel', 'dyeCancel', [], { style: 'ghost' })]) };
@@ -238,7 +258,7 @@ window.G = window.G || {};
         dye = { title: `${it ? it.name : ''}: new class?`, buttons: G.CLASS_ORDER.filter(c => !it || c !== it.set).map(c => btn(`${G.CLASSES[c].name} (${G.Supply.left(c)} left)`, 'dyeClass', [c], { enabled: G.Supply.left(c) > 0, style: 'ghost' })).concat([btn('Cancel', 'dyeCancel', [], { style: 'ghost' })]) };
       }
     }
-    return { size, items, buffs: buffList(p), msg: s.bagMsg || null, dye, locked: s.phase === 'battle' };
+    return { size, items, buffs: buffList(p), msg: s.bagMsg || null, dye, scrap, locked: s.phase === 'battle' };
   }
   function rivalsView(s, MP) {
     const ready = new Set(MP && MP.readyInfo && MP.readyInfo.room === s.room ? MP.readyInfo.ready : []);

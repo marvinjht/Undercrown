@@ -265,7 +265,16 @@ window.G = window.G || {};
       }
       L.started = true;
       this.send({ t: 'lobby', lobby: L });
-      this.cast({ t: 'start', seed: G.newSeed(), players });
+      this.cast({ t: 'start', seed: G.newSeed(), players, botLevel: L.botLevel || CFG().bots.default });
+    },
+    // Bot difficulty (the room owner's pick; the server keeps it for online rooms)
+    setBotLevel(level) {
+      if (!CFG().bots.levels[level] || !this.lobby || this.lobby.started) return;
+      if (this.serverMode) { if (this.isOwner()) this.send({ t: 'botLevel', level }); return; }
+      if (!this.isHost) return;
+      this.lobby.botLevel = level;
+      this.cast({ t: 'lobby', lobby: this.lobby });
+      update();
     },
 
     // Back to the lobby with everyone still here, same room code
@@ -307,6 +316,7 @@ window.G = window.G || {};
       for (const p of m.players) {
         const h = G.Hero.create({ name: p.name, tint: p.tint, isPlayer: p.slot === me.slot }, rng.fork());
         h.id = 'h' + p.slot; h.slot = p.slot; h.bot = p.bot;
+        if (p.bot) h.botLevel = m.botLevel || CFG().bots.default;
         heroes[p.slot] = h;
       }
       // Own randomness (doors, loot) is private to each player
@@ -523,9 +533,8 @@ window.G = window.G || {};
       if (!P.turnEnds) { P.turnEnds = n + (this.isBot(slot) ? S.aiPickDelay : S.turnSeconds) * 1000; this.hostPlunderCast(); return; }
       if (this.isBot(slot) || !hero.alive) {
         if (n >= P.turnEnds) {
-          const up = G.AI.bestUpgrade(hero, P.table);
-          const pick = up || P.table.find(it => it.kind === 'consumable' && !G.Hero.bagFull(hero)) || null;
-          if (pick) G.AI.take(hero, pick); else hero.gold += S.passGold;
+          const pick = G.AI.plunderPick(hero, P.table);
+          if (pick) G.AI.takePick(hero, pick); else hero.gold += S.passGold;
           this.hostPlunderApply(slot, pick);
         }
       } else if (n >= P.turnEnds) this.hostPlunderApply(slot, null);   // a player's turn ran out: pass
