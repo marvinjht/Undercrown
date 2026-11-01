@@ -341,6 +341,39 @@ def icon_door(k):
     s.finish(shade=True, outline=True)
     DOOR_EMBLEM.get(k, DOOR_EMBLEM['fight'])(s)
     return s
+# Class icons (icons/class_<id>.png): shown next to class names, set rows and on gear slots
+CLASS_DRAW = {
+    'warrior': lambda s: [s.line(5, 10, 13, 2, STEEL, 2), s.line(3, 8, 7, 12, hexc('#e0645a'), 2), s.line(2, 13, 4, 11, WOOD, 2), s.px(1, 14, GOLD)],
+    'mage': lambda s: [s.poly([(9, 0), (13, 11), (3, 11)], hexc('#8a6ae0')), s.rect(1, 11, 14, 3, hexc('#6a4ac0')), s.rect(4, 10, 8, 1, GOLD), s.px(8, 5, hexc('#ffe08a')), s.px(9, 7, hexc('#ffe08a'))],
+    'archer': lambda s: [[s.rect(5 + 6 * math.cos(a), 8 + 7 * math.sin(a), 2, 1, WOOD) for a in [i / 20 * math.pi - math.pi / 2 for i in range(21)]],
+                         s.line(5, 1, 5, 15, hexc('#efe6d8')), s.line(1, 8, 14, 8, STEEL), s.px(15, 8, STEEL), s.px(14, 7, STEEL), s.px(14, 9, STEEL),
+                         s.rect(1, 6, 2, 1, hexc('#86d873')), s.rect(1, 10, 2, 1, hexc('#86d873'))],
+    'paladin': lambda s: [s.poly([(2, 1), (14, 1), (14, 8), (8, 15), (2, 8)], hexc('#e0b84a')), s.rect(7, 3, 2, 9, hexc('#fff6e0')), s.rect(4, 5, 8, 2, hexc('#fff6e0'))],
+    'rogue': lambda s: [s.poly([(6, 8), (8, 10), (12, 5), (13, 3), (11, 4)], STEEL), s.line(3, 7, 7, 11, hexc('#8e9ab8'), 2), s.line(2, 13, 4, 11, hexc('#3a2a2a'), 2), s.px(1, 14, hexc('#8e9ab8'))],
+}
+def icon_class(k, finish=True):
+    s = Spr(16); CLASS_DRAW[k](s); return s.finish() if finish else s
+
+# Hybrids (icons/hybrid_<a>_<b>.png): both class icons, small, on a disc in the hybrid's own color.
+# Keep these colors in step with HYBRID_COLOR in godot/scripts/art.gd (the client colors the names with them).
+HYBRID_COLOR = {'warrior+mage': '#ff6a9a', 'warrior+paladin': '#ff9a3a', 'warrior+archer': '#c8b04a', 'warrior+rogue': '#d97a5a',
+                'mage+paladin': '#7ad8ff', 'mage+archer': '#5ae0c0', 'mage+rogue': '#b06aff', 'archer+paladin': '#d8e86a',
+                'paladin+rogue': '#f0a0d0', 'archer+rogue': '#4ab070'}
+def mini(sp, n=10):   # shrink a 16x16 drawing to n x n (nearest pixel)
+    m = Spr(n)
+    for y in range(n):
+        for x in range(n): m.p[y][x] = sp.get(int(x * 16 / n + .5), int(y * 16 / n + .5))
+    return m
+def icon_hybrid(key):
+    a, b = key.split('+')
+    s = Spr(16); s.ellipse(7.5, 7.5, 7.5, 7.5, mix(hexc(HYBRID_COLOR[key]), -.45)); s.finish(shade=False)
+    for k, ox, oy in ((a, 0, 0), (b, 6, 6)):
+        m = mini(icon_class(k, finish=False)); m.shade(); m.outline()
+        for y in range(10):
+            for x in range(10):
+                if m.p[y][x][3]: s.px(ox + x, oy + y, m.p[y][x])
+    return s
+
 def ui_bits():
     out = {}
     s = Spr(16); s.ellipse(8, 8, 5, 5, GOLD); s.rect(7, 5, 2, 6, hexc('#a07a2a')); out['coin'] = s.finish()
@@ -388,6 +421,8 @@ def main():
     for k in RELIC_DRAW: icon_relic(k).save(f'icons/relic_{k}.png')
     for k in DOOR_EMBLEM: icon_door(k).save(f'icons/door_{k}.png')
     for k, sp in ui_bits().items(): sp.save(f'icons/{k}.png')
+    for k in CLASS_DRAW: icon_class(k).save(f'icons/class_{k}.png')
+    for k in HYBRID_COLOR: icon_hybrid(k).save(f'icons/hybrid_{k.replace("+", "_")}.png')
     frame(hexc('#1f1915'), hexc('#0e0b09'), hexc('#3d322a')).save('ui/panel.png', 2)
     frame(hexc('#2a221c'), hexc('#0e0b09'), hexc('#4d3f33')).save('ui/card.png', 2)
     frame(hexc('#4a2e18'), hexc('#0e0b09'), hexc('#a8642a')).save('ui/button.png', 2)

@@ -1,4 +1,4 @@
-[gd_resource type="Theme" load_steps=34 format=3]
+[gd_resource type="Theme" load_steps=37 format=3]
 
 [ext_resource type="Texture2D" path="res://art/ui/button_disabled.png" id="1_c2unj"]
 [ext_resource type="Texture2D" path="res://art/ui/button_hover.png" id="2_3byeq"]
@@ -248,6 +248,36 @@ texture_margin_top = 8.0
 texture_margin_right = 8.0
 texture_margin_bottom = 8.0
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_roomcur"]
+content_margin_left = 3.0
+content_margin_top = 3.0
+content_margin_right = 3.0
+content_margin_bottom = 3.0
+bg_color = Color(0.909804, 0.564706, 0.247059, 0.22)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.94902, 0.756863, 0.290196, 1)
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_roompip"]
+content_margin_left = 3.0
+content_margin_top = 3.0
+content_margin_right = 3.0
+content_margin_bottom = 3.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_slotcls"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
+bg_color = Color(0.32, 0.27, 0.24, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 1, 1, 1)
+
 [resource]
 default_font = ExtResource("8_sp0n7")
 default_font_size = 11
@@ -283,6 +313,13 @@ Muted/base_type = &"Label"
 Muted/colors/font_color = Color(0.658824, 0.6, 0.541176, 1)
 Panel/styles/panel = SubResource("StyleBoxTexture_jn2vu")
 PanelContainer/styles/panel = SubResource("StyleBoxTexture_g8kgg")
+RoomCurrent/base_type = &"PanelContainer"
+RoomCurrent/styles/panel = SubResource("StyleBoxFlat_roomcur")
+RoomLabel/base_type = &"Label"
+RoomLabel/colors/font_color = Color(0.909804, 0.564706, 0.247059, 1)
+RoomLabel/font_sizes/font_size = 15
+RoomPip/base_type = &"PanelContainer"
+RoomPip/styles/panel = SubResource("StyleBoxEmpty_roompip")
 Primary/base_type = &"Button"
 Primary/colors/font_color = Color(0.94902, 0.756863, 0.290196, 1)
 Primary/colors/font_disabled_color = Color(0.419608, 0.380392, 0.345098, 1)
@@ -301,6 +338,8 @@ RichTextLabel/font_sizes/normal_font_size = 11
 ScrollContainer/styles/panel = SubResource("StyleBoxEmpty_s7x1g")
 Slot/base_type = &"PanelContainer"
 Slot/styles/panel = SubResource("StyleBoxTexture_8b7ke")
+SlotClass/base_type = &"PanelContainer"
+SlotClass/styles/panel = SubResource("StyleBoxFlat_slotcls")
 Title/base_type = &"Label"
 Title/colors/font_color = Color(0.94902, 0.756863, 0.290196, 1)
 Title/font_sizes/font_size = 22

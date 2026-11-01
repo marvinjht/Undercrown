@@ -27,10 +27,14 @@ func _build() -> void:
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	add_child(scroll)
+	var mid := CenterContainer.new()   # keeps the column in the middle of the window at any width
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.use_top_left = false
+	scroll.add_child(mid)
 	_box = Kit.vbox(12)
 	_box.custom_minimum_size = Vector2(min(760.0, get_viewport_rect().size.x - 48.0), 0)
 	_box.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	scroll.add_child(_box)
+	mid.add_child(_box)
 	_queue_label = null
 	match Game.status:
 		"connecting": _simple("Connecting…", "If the game server was asleep, this can take up to a minute.", [["Cancel", Game.leave]])
@@ -41,12 +45,12 @@ func _build() -> void:
 		_: _title()
 
 func _heading(eyebrow: String, title: String, text: String) -> void:
-	_box.add_child(Kit.label(eyebrow, "Muted"))
-	var t := Kit.label(title, "Title")
+	_box.add_child(Kit.center(Kit.label(eyebrow, "Muted")))
+	var t := Kit.center(Kit.label(title, "Title"))
 	t.add_theme_font_size_override("font_size", 44)
 	_box.add_child(t)
 	if text != "":
-		_box.add_child(Kit.label(text, "", true))
+		_box.add_child(Kit.center(Kit.label(text, "", true)))
 
 func _btn(text: String, cb: Callable, style := "Primary") -> Button:
 	var b := Button.new()
@@ -58,6 +62,7 @@ func _btn(text: String, cb: Callable, style := "Primary") -> Button:
 func _simple(title: String, text: String, actions: Array) -> void:
 	_heading("UNDERCROWN", title, text)
 	var row := Kit.hbox(8)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	for a in actions:
 		row.add_child(_btn(a[0], a[1]))
 	_box.add_child(row)
@@ -70,6 +75,7 @@ func _title() -> void:
 		["The tournament", "After room 30, everyone with hearts fights round after round until one is left."]]
 	var grid := GridContainer.new()
 	grid.columns = 2
+	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 8)
 	for r in rules:
@@ -152,10 +158,12 @@ func _queue_text() -> String:
 
 func _queue() -> void:
 	_heading("UNDERCROWN", "Finding a match…", "")
-	_queue_label = Kit.label(_queue_text(), "", true)
+	_queue_label = Kit.center(Kit.label(_queue_text(), "", true))
 	_box.add_child(_queue_label)
-	_box.add_child(Kit.label("Bots fill empty seats up to 6.", "Muted"))
-	_box.add_child(_btn("Cancel", Game.leave, "Ghost"))
+	_box.add_child(Kit.center(Kit.label("Bots fill empty seats up to 6.", "Muted")))
+	var cancel := _btn("Cancel", Game.leave, "Ghost")
+	cancel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_box.add_child(cancel)
 
 func _lobby() -> void:
 	var L := Game.lobby

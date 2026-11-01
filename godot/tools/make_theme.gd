@@ -36,6 +36,11 @@ func _init() -> void:
 	t.set_stylebox("panel", "Card", box("res://art/ui/card.png", 8, 6))
 	t.set_type_variation("Slot", "PanelContainer")
 	t.set_stylebox("panel", "Slot", box("res://art/ui/button_ghost.png", 8, 2))
+	# A gear slot holding class gear: white border, tinted to the class color in code (Kit.item_slot)
+	t.set_type_variation("SlotClass", "PanelContainer")
+	var sc := flat(Color("#524540"), Color.WHITE, 2)
+	sc.set_content_margin_all(4)
+	t.set_stylebox("panel", "SlotClass", sc)
 	# Buttons
 	for kind in ["Button", "Primary", "Ghost"]:
 		if kind != "Button":
@@ -60,6 +65,9 @@ func _init() -> void:
 	t.set_color("font_color", "Heading", ember)
 	t.set_type_variation("Muted", "Label")
 	t.set_color("font_color", "Muted", muted)
+	t.set_type_variation("RoomLabel", "Label")
+	t.set_font_size("font_size", "RoomLabel", 15)
+	t.set_color("font_color", "RoomLabel", ember)
 	t.set_color("default_color", "RichTextLabel", text)
 	t.set_font_size("normal_font_size", "RichTextLabel", FONT_SIZE)
 	# Tooltips
@@ -73,6 +81,15 @@ func _init() -> void:
 	t.set_stylebox("fill", "ProgressBar", flat(Color("#6cc35f")))
 	t.set_color("font_color", "ProgressBar", text)
 	t.set_stylebox("panel", "ScrollContainer", StyleBoxEmpty.new())
+	# Room track in the top bar: the current room is outlined; the others get the same padding so nothing shifts
+	t.set_type_variation("RoomCurrent", "PanelContainer")
+	var cur := flat(Color(ember, 0.22), gold, 2)
+	cur.set_content_margin_all(3)
+	t.set_stylebox("panel", "RoomCurrent", cur)
+	t.set_type_variation("RoomPip", "PanelContainer")
+	var pip := StyleBoxEmpty.new()
+	pip.set_content_margin_all(3)
+	t.set_stylebox("panel", "RoomPip", pip)
 	var err := ResourceSaver.save(t, "res://theme/theme.tres")
 	print("theme saved: ", err)
 	quit()

@@ -100,18 +100,22 @@ func _build_top() -> void:
 	Kit.clear(top_bar)
 	var top: Dictionary = Game.view.get("top", {})
 	var rooms: Dictionary = Game.view.get("rooms", {})
+	# Three parts: brand (left) and clock (right) share the leftover width equally, so the room track is centered
 	var h := Kit.hbox(16)
 	var brand := Kit.hbox(8)
+	brand.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var t := Kit.label("UNDERCROWN", "Title")
 	brand.add_child(t)
 	var snd := Button.new()
 	snd.text = "Sound off" if not Sfx.muted else "Sound on"
 	snd.theme_type_variation = "Ghost"
+	snd.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	snd.pressed.connect(func(): snd.text = "Sound on" if Sfx.toggle() else "Sound off")
 	brand.add_child(snd)
 	var leave := Button.new()
 	leave.text = "Leave"
 	leave.theme_type_variation = "Ghost"
+	leave.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	leave.pressed.connect(func():
 		var d := ConfirmationDialog.new()
 		d.dialog_text = "Leave the match? A bot plays your hero from here."
@@ -120,9 +124,11 @@ func _build_top() -> void:
 		d.popup_centered())
 	brand.add_child(leave)
 	h.add_child(brand)
+	# Room track: an icon for special rooms, a square for the rest. The current room is outlined
+	# (theme: RoomCurrent), the others sit in RoomPip; finished rooms are dimmed.
 	var mid := Kit.vbox(4)
-	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var pips := Kit.hbox(3)
+	mid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var pips := Kit.hbox(4)
 	pips.alignment = BoxContainer.ALIGNMENT_CENTER
 	var kinds: Array = top.get("kinds", [])
 	var cur := int(top.get("room", 1))
@@ -132,27 +138,38 @@ func _build_top() -> void:
 		var k := str(kinds[i])
 		var c: Control
 		if special.has(k):
-			c = Kit.icon(Art.icon(special[k]), 16)
+			c = Kit.icon(Art.icon(special[k]), 24)
+			if r == cur:
+				c.modulate = Color(1.3, 1.15, 0.9)
 		else:
 			var cr := ColorRect.new()
-			cr.custom_minimum_size = Vector2(8, 8)
-			cr.color = Color("#6b5a4a")
-			cr.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			cr.custom_minimum_size = Vector2(12, 12)
+			cr.color = Art.EMBER if r == cur else Color("#7a6855")
 			c = cr
-		c.modulate = Color(1, 1, 1, 0.35) if r < cur else (Color(1.6, 1.2, 0.8) if r == cur else Color.WHITE)
-		if r == cur:
-			c.custom_minimum_size = c.custom_minimum_size * 1.4
+		c.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		c.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var pip := Kit.panel("RoomCurrent" if r == cur else "RoomPip")
+		pip.custom_minimum_size = Vector2(0, 30)
+		if r < cur:
+			pip.modulate = Color(1, 1, 1, 0.3)
 		var info: Dictionary = rooms.get(k, {})
-		c.tooltip_text = "Room %d: %s\n%s" % [r, info.get("name", k), info.get("text", "")]
-		c.mouse_filter = Control.MOUSE_FILTER_STOP
-		pips.add_child(c)
+		pip.tooltip_text = "Room %d: %s
+%s" % [r, info.get("name", k), info.get("text", "")]
+		pip.mouse_filter = Control.MOUSE_FILTER_STOP
+		pip.add_child(c)
+		pips.add_child(pip)
 	mid.add_child(pips)
-	var rl := Kit.label("%s  %s" % [top.get("label", ""), top.get("small", "")], "Heading")
-	rl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var rl := Kit.center(Kit.label("%s  %s" % [top.get("label", ""), top.get("small", "")], "RoomLabel"))
 	mid.add_child(rl)
 	h.add_child(mid)
-	var clock := Kit.vbox(2)
-	clock.custom_minimum_size = Vector2(110, 0)
+	# Clock: the time, with a short bar under it of the same width
+	var right := Kit.hbox(0)
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.alignment = BoxContainer.ALIGNMENT_END
+	var clock := VBoxContainer.new()
+	clock.add_theme_constant_override("separation", 2)
+	clock.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	clock_label = Kit.label("—", "Title")
 	clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	clock_label.tooltip_text = "Round timer: every choice is timed for everyone and ends early once everyone is ready. Fights don’t count against it."
@@ -160,8 +177,12 @@ func _build_top() -> void:
 	clock.add_child(clock_label)
 	clock_bar = Kit.bar(0, 1, Art.EMBER, "", 4)
 	clock.add_child(clock_bar)
-	h.add_child(clock)
+	right.add_child(clock)
+	h.add_child(right)
 	top_bar.add_child(h)
+	# Keep the clock (and its bar) as wide as "00:00" so it doesn't jump as the digits change
+	var font := clock_label.get_theme_font("font")
+	clock_label.custom_minimum_size.x = font.get_string_size("00:00", HORIZONTAL_ALIGNMENT_LEFT, -1, clock_label.get_theme_font_size("font_size")).x
 
 # ---------- Players (left) ----------
 func _build_left() -> void:
@@ -206,7 +227,7 @@ func _build_left() -> void:
 		if str(r.get("build", "")) != "No set bonus yet":
 			tag.append(r.get("build", ""))
 		if tag.size():
-			cv.add_child(Kit.label(" · ".join(tag), "", true, Art.GOLD))
+			cv.add_child(Kit.set_text(" · ".join(tag), Art.GOLD))
 		if r.get("alive", false):
 			cv.add_child(Kit.bar(float(r.get("hp", 0)), float(r.get("maxHp", 1)), Art.HP, "", 5))
 		else:
@@ -241,7 +262,7 @@ func _build_left() -> void:
 	if str(me.get("build", "")) != "No set bonus yet":
 		sub.append(me.get("build", ""))
 	if sub.size():
-		yv.add_child(Kit.label(" · ".join(sub), "", true, Art.GOLD))
+		yv.add_child(Kit.set_text(" · ".join(sub), Art.GOLD))
 	you.add_child(yv)
 	left.add_child(you)
 
@@ -320,14 +341,20 @@ func _build_side() -> void:
 	for g in V.get("gear", []):
 		var cell := Kit.vbox(1)
 		cell.custom_minimum_size = Vector2(80, 0)
-		cell.add_child(Kit.item_slot(g.get("item"), 32, str(g.get("slot", ""))))
-		var it = g.get("item")
-		var nl := Kit.label(it.name if it is Dictionary else g.get("slotName", ""), "Muted")
+		cell.add_child(Kit.item_slot(g.get("item"), 32, str(g.get("slot", "")), true))
+		var nl := Kit.label(g.get("slotName", ""), "Muted")   # the item's name and details are in the slot's hover card
 		nl.clip_text = true
 		nl.custom_minimum_size = Vector2(80, 0)
 		cell.add_child(nl)
 		gg.add_child(cell)
 	gv.add_child(gg)
+	# Relics
+	var relics: Array = me.get("relics", [])
+	var rv := _section("Relics", str(relics.size()) if relics.size() else "")
+	if relics.is_empty():
+		rv.add_child(Kit.label("No relics yet. They drop at Plunder, from elites and bosses, and in vaults.", "Muted", true))
+	for r in relics:
+		rv.add_child(Kit.relic_line(r))
 	# Stats
 	var chips := []
 	if me.get("spec") is Dictionary:
@@ -354,8 +381,8 @@ func _build_side() -> void:
 	var spv := _section("Set supply", "of %d each" % int(sup.get("per", 12)))
 	for c in sup.get("classes", []):
 		var row := Kit.hbox(6)
-		var nm := Kit.label(c.name, "", false, Art.color(c.color))
-		nm.custom_minimum_size = Vector2(70, 0)
+		var nm := Kit.class_tag(str(c.get("cls", "")), str(c.name), Art.color(c.color))
+		nm.custom_minimum_size = Vector2(84, 0)
 		row.add_child(nm)
 		row.add_child(Kit.bar(float(c.left), float(sup.get("per", 12)), Art.color(c.color), "%d left" % int(c.left), 10))
 		spv.add_child(row)
@@ -370,12 +397,18 @@ func _set_guide() -> void:
 	v.custom_minimum_size = Vector2(600, 0)
 	v.add_child(Kit.label("Gear with a class tag counts toward that class. All 6 slots count, weapon included. 2 pieces give a small bonus; 4 add a bigger one; 6 add the capstone (bonuses stack). Wearing 4 of one class and 2 of another unlocks that pair's hybrid instead of a capstone.", "", true))
 	for c in g.get("classes", []):
-		v.add_child(Kit.label("%s  %d/6 worn" % [c.name, int(c.n)], "Heading", false, Art.color(c.color)))
+		var head := Kit.class_tag(str(c.get("cls", "")), str(c.name), Art.color(c.color), 14)
+		head.add_child(Kit.label("%d/6 worn" % int(c.n), "Muted"))
+		v.add_child(head)
 		for t in c.get("tiers", []):
-			v.add_child(Kit.label(("✓ " if t.on else "· ") + str(t.label) + ": " + str(t.text), "", true, Art.UP if t.on else Art.TEXT))
+			v.add_child(Kit.tier_line(t))
+	v.add_child(Kit.spacer(4))
 	v.add_child(Kit.label("Hybrids (4 of one + 2 of another)", "Heading"))
 	for hy in g.get("hybrids", []):
-		v.add_child(Kit.label("%s (%s): %s" % [hy.name, hy.pair, hy.text], "", true, Art.UP if hy.on else Art.TEXT))
+		var head := Kit.hybrid_tag(str(hy.get("key", "")), str(hy.name), 14)
+		head.add_child(Kit.label(str(hy.pair) + ("  · active" if hy.on else ""), "Muted"))
+		v.add_child(head)
+		v.add_child(Kit.label(str(hy.text), "" if hy.on else "Muted", true, Art.UP if hy.on else null))
 	sc.add_child(v)
 	d.add_child(sc)
 	add_child(d)
@@ -395,31 +428,31 @@ func _build_stage() -> void:
 	timers = timers.filter(func(tm): return false)
 	if sc.get("notice"):
 		var np := Kit.panel("Card")
-		np.add_child(Kit.label(sc.notice, "", true, Art.GOLD))
+		np.add_child(Kit.center(Kit.label(sc.notice, "", true, Art.GOLD)))
 		stage.add_child(np)
 	if sc.get("title"):
-		stage.add_child(Kit.label(sc.title, "Title", true))
+		stage.add_child(Kit.center(Kit.label(sc.title, "Title", true)))
 	if sc.get("lede"):
-		stage.add_child(Kit.label(sc.lede, "", true))
+		stage.add_child(Kit.center(Kit.label(sc.lede, "", true)))
 	for n in sc.get("notes", []):
-		stage.add_child(Kit.line(n))
+		stage.add_child(Kit.center(Kit.line(n)))
 	for sec in sc.get("sections", []):
 		_section_view(sec)
 	await get_tree().process_frame
 	stage_scroll.scroll_vertical = keep_scroll
 
 func _countdown(prefix: String, ends: float) -> Label:
-	var l := Kit.label(prefix, "Heading")
+	var l := Kit.center(Kit.label(prefix, "Heading"))
 	timers.append({ "label": l, "ends": ends, "prefix": prefix })
 	return l
 
 func _section_view(sec: Dictionary) -> void:
 	var kind := str(sec.get("kind", ""))
 	if sec.get("title"):
-		stage.add_child(Kit.label(sec.title, "Heading"))
+		stage.add_child(Kit.center(Kit.label(sec.title, "Heading")))
 	match kind:
 		"doors":
-			var f := Kit.flow(10)
+			var f := Kit.flow(10, true)
 			for d in sec.get("doors", []):
 				var p := Kit.panel("Card")
 				p.custom_minimum_size = Vector2(250, 0)
@@ -448,14 +481,15 @@ func _section_view(sec: Dictionary) -> void:
 				f.add_child(p)
 			stage.add_child(f)
 		"cards":
-			var f := Kit.flow(8)
+			var f := Kit.flow(8, true)
 			for c in sec.get("cards", []):
 				f.add_child(Kit.card(c, 190 if sec.get("compact", false) else Kit.CARD_W))
 			stage.add_child(f)
 		"buttons":
-			stage.add_child(Kit.buttons(sec.get("buttons", [])))
+			stage.add_child(Kit.buttons(sec.get("buttons", []), true))
 		"list":
 			var v := Kit.vbox(3)
+			v.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 			for r in sec.get("rows", []):
 				var row := Kit.hbox(8)
 				if r.has("n"):
@@ -481,21 +515,21 @@ func _section_view(sec: Dictionary) -> void:
 			if float(sec.get("ends", 0)) > 0.0:
 				stage.add_child(_countdown(str(sec.get("label", "")), float(sec.ends)))
 			else:
-				stage.add_child(Kit.label(sec.get("label", ""), "Heading", true))
+				stage.add_child(Kit.center(Kit.label(sec.get("label", ""), "Heading", true)))
 			if (sec.get("buttons", []) as Array).size():
-				stage.add_child(Kit.buttons(sec.buttons))
+				stage.add_child(Kit.buttons(sec.buttons, true))
 		"skip":
 			var p := Kit.panel("Card")
 			var v := Kit.vbox(6)
-			v.add_child(Kit.label(sec.get("text", ""), "", true))
-			v.add_child(Kit.buttons(sec.get("buttons", [])))
+			v.add_child(Kit.center(Kit.label(sec.get("text", ""), "", true)))
+			v.add_child(Kit.buttons(sec.get("buttons", []), true))
 			p.add_child(v)
 			stage.add_child(p)
 		"tree":
 			var tr: Dictionary = sec.get("tree", {})
 			for row in tr.get("rows", []):
-				stage.add_child(Kit.label("Level %d" % int(row.level), "Muted"))
-				var f := Kit.flow(8)
+				stage.add_child(Kit.center(Kit.label("Level %d" % int(row.level), "Muted")))
+				var f := Kit.flow(8, true)
 				for n in row.get("nodes", []):
 					var st := str(n.get("state", ""))
 					var c := { "kind": "text", "title": str(n.name), "sub": str(n.side) + ("  · chosen" if st == "taken" else "  · not taken" if st == "skipped" else ""),
@@ -511,6 +545,7 @@ func _section_view(sec: Dictionary) -> void:
 			stage.add_child(Kit.opponent(sec.get("opponent", {})))
 		"places":
 			var v := Kit.vbox(2)
+			v.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 			for pl in sec.get("places", []):
 				v.add_child(Kit.label("%s  %s" % [pl.place, pl.name], "Heading" if pl.get("me", false) else "", false, Art.GOLD if str(pl.place) == "1st" else null))
 			stage.add_child(v)
@@ -564,7 +599,10 @@ func _bracket(b: Dictionary) -> Control:
 		p.add_child(row)
 		col.add_child(p)
 		h.add_child(col)
-	sc.add_child(h)
+	var mid := CenterContainer.new()   # keeps the bracket centered when it's narrower than the screen
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.add_child(h)
+	sc.add_child(mid)
 	var v := Kit.vbox(4)
 	v.add_child(sc)
 	if (b.get("out", []) as Array).size():

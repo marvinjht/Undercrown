@@ -5,6 +5,8 @@ class_name Kit
 extends RefCounted
 
 const CARD_W := 214
+const CHARACTER_W := 440   # width of your character card (centered on the screen)
+const TIP_W := 260         # width of an item's hover card
 
 # ---------- Text ----------
 static func label(text, variation := "", wrap := false, color = null) -> Label:
@@ -17,6 +19,12 @@ static func label(text, variation := "", wrap := false, color = null) -> Label:
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if color != null:
 		l.add_theme_color_override("font_color", color)
+	return l
+
+# Center a label's text across the width it's given
+static func center(l: Label) -> Label:
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return l
 
 static func line(ln) -> Label:   # { text, tone }
@@ -37,8 +45,10 @@ static func hbox(sep := 6) -> HBoxContainer:
 	h.add_theme_constant_override("separation", sep)
 	return h
 
-static func flow(sep := 8) -> HFlowContainer:
+static func flow(sep := 8, centered := false) -> HFlowContainer:
 	var f := HFlowContainer.new()
+	if centered:
+		f.alignment = FlowContainer.ALIGNMENT_CENTER
 	f.add_theme_constant_override("h_separation", sep)
 	f.add_theme_constant_override("v_separation", sep)
 	f.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -103,8 +113,8 @@ static func press(b: Dictionary) -> void:
 		return
 	Game.act(str(b.act), b.get("args", []), b.get("mp", false))
 
-static func buttons(list: Array) -> HFlowContainer:
-	var f := flow(6)
+static func buttons(list: Array, centered := false) -> HFlowContainer:
+	var f := flow(6, centered)
 	for b in list:
 		f.add_child(button(b))
 	return f
@@ -145,7 +155,8 @@ static func chip(text: String, color: Color, tip := "") -> Label:
 
 # ---------- Items ----------
 # A slot with an item icon; hover shows the item's full card
-static func item_slot(item, size := 36, empty_icon := "") -> PanelContainer:
+# show_class: tint the frame in the item's class color and put the class icon in the bottom-right corner
+static func item_slot(item, size := 36, empty_icon := "", show_class := false) -> PanelContainer:
 	var p := preload("res://scripts/ui/tip_slot.gd").new()
 	p.theme_type_variation = "Slot"
 	p.custom_minimum_size = Vector2(size + 8, size + 8)
@@ -155,6 +166,21 @@ static func item_slot(item, size := 36, empty_icon := "") -> PanelContainer:
 		var ic := icon(Art.icon(str(item.get("icon", ""))), size)
 		p.add_child(ic)
 		p.self_modulate = Art.rarity_color(item.get("rarity", "")).lerp(Color.WHITE, 0.35)
+		if show_class and item.get("set") is Dictionary:
+			p.theme_type_variation = "SlotClass"   # theme: a frame with a white border, tinted here to the class color
+			p.self_modulate = Art.color(item.set.get("color"), Color.WHITE)
+			var ct := Art.class_icon(item.set.get("id", ""))
+			if ct:
+				var corner := icon(ct, 14)
+				corner.anchor_left = 1.0
+				corner.anchor_top = 1.0
+				corner.anchor_right = 1.0
+				corner.anchor_bottom = 1.0
+				corner.offset_left = -12
+				corner.offset_top = -12
+				corner.offset_right = 2
+				corner.offset_bottom = 2
+				ic.add_child(corner)
 	elif empty_icon != "":
 		p.add_child(icon(Art.icon(empty_icon), size, Color(1, 1, 1, 0.25)))
 	return p
@@ -168,7 +194,7 @@ static func item_body(item: Dictionary, v: VBoxContainer) -> void:
 	nm.add_child(label(item.get("sub", ""), "Muted", true))
 	var tags := hbox(6)
 	if item.get("set") is Dictionary:
-		tags.add_child(chip(item.set.name, Art.color(item.set.color)))
+		tags.add_child(class_tag(str(item.set.get("id", "")), str(item.set.name), Art.color(item.set.color)))
 	if item.get("verdict") is Dictionary:
 		var vt: Dictionary = item.verdict
 		tags.add_child(chip(str(vt.text), Art.tone(vt.get("tone", ""))))
@@ -189,16 +215,46 @@ static func item_body(item: Dictionary, v: VBoxContainer) -> void:
 
 static func item_tip(item: Dictionary) -> Control:
 	var p := panel("")
-	p.custom_minimum_size = Vector2(250, 0)
+	p.custom_minimum_size = Vector2(TIP_W, 0)
 	var v := vbox(3)
 	item_body(item, v)
 	p.add_child(v)
+	fit_width(p, TIP_W)
 	return p
+
+# Wrapped text only knows its height once it knows its width. Containers work that out a frame later, which is
+# too late for a tooltip (it sizes itself once, from the first guess, leaving a tall empty box). This hands every
+# wrapped label its real width up front, so boxes are exactly as tall as their text.
+static func fit_width(c: Control, w: float) -> void:
+	if c is Label or c is RichTextLabel:
+		if c.autowrap_mode != TextServer.AUTOWRAP_OFF:
+			c.size = Vector2(w, c.size.y)
+		return
+	if c is PanelContainer:
+		var sb := c.get_theme_stylebox("panel")
+		if sb:
+			w -= sb.get_minimum_size().x
+	var kids: Array = c.get_children().filter(func(k): return k is Control and k.visible)
+	if c is HBoxContainer:
+		var fixed: float = c.get_theme_constant("separation") * maxi(0, kids.size() - 1)
+		var grow := []
+		for k in kids:
+			if k.size_flags_horizontal & Control.SIZE_EXPAND:
+				grow.append(k)
+			else:
+				fixed += k.get_combined_minimum_size().x
+		for k in kids:
+			fit_width(k, (w - fixed) / max(1, grow.size()) if k in grow else k.get_combined_minimum_size().x)
+		return
+	if c is BoxContainer or c is PanelContainer or c is MarginContainer:
+		for k in kids:
+			fit_width(k, w)
 
 # A card on a screen: { kind: 'item'|'text', item?, title?, sub?, color?, icon?, lines, buttons }
 static func card(c: Dictionary, width := CARD_W) -> PanelContainer:
 	var p := panel("Card")
 	p.custom_minimum_size = Vector2(width, 0)
+	p.size_flags_vertical = Control.SIZE_SHRINK_BEGIN   # in a row of cards, don't stretch to the tallest one
 	var v := vbox(4)
 	if c.get("kind") == "item" and c.get("item") is Dictionary:
 		item_body(c.item, v)
@@ -222,7 +278,88 @@ static func card(c: Dictionary, width := CARD_W) -> PanelContainer:
 			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			v.add_child(btn)
 	p.add_child(v)
+	fit_width(p, width)
 	return p
+
+# ---------- Classes and hybrids ----------
+# A class name with its icon on the left
+static func class_tag(cls: String, name: String, color: Color, size := 12) -> HBoxContainer:
+	var h := hbox(3)
+	var t := Art.class_icon(cls)
+	if t:
+		var ic := icon(t, size)
+		ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		h.add_child(ic)
+	h.add_child(label(name, "", false, color))
+	return h
+
+static func hybrid_tag(key: String, name: String, size := 12) -> HBoxContainer:
+	var h := hbox(3)
+	var t := Art.hybrid_icon(key)
+	if t:
+		var ic := icon(t, size)
+		ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		h.add_child(ic)
+	h.add_child(label(name, "", false, Art.hybrid_color(key)))
+	return h
+
+# Class and hybrid display names -> their icon, from the set guide the server sends
+static func set_names() -> Dictionary:
+	var out := {}
+	var g: Dictionary = Game.view.get("setGuide", {})
+	for c in g.get("classes", []):
+		out[str(c.name)] = Art.class_icon(c.get("cls", ""))
+	for hy in g.get("hybrids", []):
+		if hy.get("key"):
+			out[str(hy.name)] = Art.hybrid_icon(hy.key)
+	return out
+
+# A line of text (like a build: "Warrior 2 · Mage 2", "Templar (4 Paladin + 2 Mage)") where each class or hybrid
+# name gets its icon on the left. Built as a wrapping row of words, so an icon, its name and a count after it
+# ("Paladin 2") always stay together on one line.
+static func set_text(text: String, color: Color, centered := false, size := 12) -> HFlowContainer:
+	var f := HFlowContainer.new()
+	f.add_theme_constant_override("h_separation", 0)
+	f.add_theme_constant_override("v_separation", 0)
+	f.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	f.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if centered:
+		f.alignment = FlowContainer.ALIGNMENT_CENTER
+	var words := func(t: String):   # plain words, keeping the text's own spacing (wraps only at spaces)
+		var parts := t.split(" ")
+		for k in parts.size():
+			var w: String = parts[k] + (" " if k < parts.size() - 1 else "")
+			if w != "":
+				f.add_child(label(w, "", false, color))
+	var names := set_names()
+	var count := RegEx.create_from_string("^ [0-9]+")   # a count right after the name
+	var i := 0
+	while i < text.length():
+		var at := -1
+		var hit := ""
+		for n in names:   # the earliest name wins; at the same spot the longer one ("Arcane Archer" over "Archer")
+			var p := text.find(n, i)
+			if p >= 0 and (at < 0 or p < at or (p == at and n.length() > hit.length())):
+				at = p
+				hit = n
+		if at < 0:
+			words.call(text.substr(i))
+			break
+		words.call(text.substr(i, at - i))
+		var shown := hit
+		i = at + hit.length()
+		var m := count.search(text.substr(i))
+		if m:
+			shown += m.get_string()
+			i += m.get_string().length()
+		var unit := hbox(3)
+		if names[hit]:
+			var ic := icon(names[hit], size)
+			ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			unit.add_child(ic)
+		unit.add_child(label(shown, "", false, color))
+		f.add_child(unit)
+	return f
 
 # ---------- Stats ----------
 # stats: { defense: [cell], offense: [cell], extras: [cell] }   cell: { label, value, tip, extra, cap, capped }
@@ -256,34 +393,47 @@ static func set_rows(sets: Dictionary) -> VBoxContainer:
 		v.add_child(label("No set pieces yet. Items with a class tag count toward that set.", "Muted", true))
 	for r in rows:
 		var row := hbox(6)
-		row.add_child(chip(str(r.name), Art.color(r.color)))
+		row.add_child(class_tag(str(r.get("cls", "")), str(r.name), Art.color(r.color)))
 		row.add_child(label("%d/%d" % [int(r.n), int(r.next)]))
 		row.add_child(label(str(r.status), "Muted"))
-		var tip := []
-		for t in r.get("tiers", []):
-			tip.append(("✓ " if t.on else "· ") + str(t.label) + ": " + str(t.text))
-		row.tooltip_text = "\n".join(tip)
-		row.mouse_filter = Control.MOUSE_FILTER_STOP
 		v.add_child(row)
+		for t in r.get("tiers", []):
+			v.add_child(tier_line(t))
 	if sets.get("hybrid") is Dictionary:
-		var hy := label("%s (hybrid active)" % sets.hybrid.name, "", true, Art.GOLD)
-		hy.tooltip_text = str(sets.hybrid.text)
-		hy.mouse_filter = Control.MOUSE_FILTER_STOP
-		v.add_child(hy)
+		var key := ""
+		for hy in Game.view.get("setGuide", {}).get("hybrids", []):
+			if str(hy.name) == str(sets.hybrid.name):
+				key = str(hy.get("key", ""))
+		var hrow := hybrid_tag(key, str(sets.hybrid.name))
+		hrow.add_child(label("hybrid active", "Muted"))
+		v.add_child(hrow)
+		v.add_child(label(str(sets.hybrid.text), "", true, Art.UP))
 	return v
 
-static func relic_row(relics: Array) -> Control:
-	var v := vbox(2)
-	v.add_child(label("RELICS", "Muted"))
-	if relics.is_empty():
-		v.add_child(label("No relics yet. They drop at Plunder, from elites and bosses, and in vaults.", "Muted", true))
-		return v
-	var f := flow(6)
-	for r in relics:
-		var s := item_slot(r, 22)
-		f.add_child(s)
-	v.add_child(f)
-	return v
+# One set tier: active ones in full color, the rest greyed out
+static func tier_line(t: Dictionary) -> Label:
+	var on: bool = t.get("on", false)
+	return label(("✓ " if on else "· ") + str(t.get("label", "")) + ": " + str(t.get("text", "")), "" if on else "Muted", true, Art.UP if on else null)
+
+# One relic you own: icon (hover for its card), name and count; the whole row's tooltip is the relic's text
+static func relic_line(r: Dictionary) -> HBoxContainer:
+	var row := hbox(6)
+	row.add_child(item_slot(r, 22))
+	var nm := label(r.get("name", ""), "", false, Art.color(r.get("color"), Art.TEXT))
+	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	nm.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	nm.clip_text = true
+	row.add_child(nm)
+	var n := label("x%d" % int(r.get("count", 1)), "Muted")
+	n.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(n)
+	var tip := [str(r.get("name", ""))]
+	for ln in r.get("lines", []):
+		tip.append(str(ln.get("text", "")) if ln is Dictionary else str(ln))
+	row.tooltip_text = "
+".join(tip)
+	row.mouse_filter = Control.MOUSE_FILTER_STOP
+	return row
 
 # A hero drawn like in fights: class look, tint, weapon in hand
 static func hero_preview(look: Dictionary, scale := 3) -> Control:
@@ -300,16 +450,19 @@ static func hero_preview(look: Dictionary, scale := 3) -> Control:
 		c.add_child(wi)
 	return c
 
-# Your character: picture, vitals, stats, sets and relics (under the doors, on most screens)
+# Your character, centered: level, picture, name, build and spec, hearts, health and XP.
+# Stats, sets and relics live in the right-hand panel. (Doors, rewards, spoils, wager and waiting screens.)
 static func character(me: Dictionary) -> PanelContainer:
 	var p := panel("Card")
-	var h := hbox(14)
-	var left := vbox(4)
-	left.custom_minimum_size = Vector2(150, 0)
-	left.add_child(label("Lv %d" % int(me.get("level", 1)), "Heading"))
-	left.add_child(hero_preview(me.get("look", {}), 3))
-	left.add_child(label("You", "Heading"))
-	left.add_child(label(me.get("build", ""), "", true, Art.GOLD))
+	p.custom_minimum_size = Vector2(CHARACTER_W, 0)
+	p.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var v := vbox(4)
+	v.add_child(center(label("Lv %d" % int(me.get("level", 1)), "Heading")))
+	var pic := hero_preview(me.get("look", {}), 4)
+	pic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	v.add_child(pic)
+	v.add_child(center(label("You", "Heading")))
+	v.add_child(set_text(str(me.get("build", "")), Art.GOLD, true))
 	var sub := []
 	if me.get("spec") is Dictionary:
 		sub.append(me.spec.name)
@@ -317,20 +470,16 @@ static func character(me: Dictionary) -> PanelContainer:
 		sub.append(str(me.get("specHint", "")))
 	if me.get("gem") is Dictionary:
 		sub.append(me.gem.name)
-	left.add_child(label(" · ".join(sub), "Muted", true))
-	left.add_child(vitals(me))
-	h.add_child(left)
-	var right := vbox(8)
-	right.add_child(stat_cols(me.get("stats", {})))
-	right.add_child(set_rows(me.get("sets", {})))
-	right.add_child(relic_row(me.get("relics", [])))
-	h.add_child(right)
-	p.add_child(h)
+	v.add_child(center(label(" · ".join(sub), "Muted", true)))
+	v.add_child(vitals(me, true))
+	p.add_child(v)
 	return p
 
-static func vitals(me: Dictionary) -> VBoxContainer:
+static func vitals(me: Dictionary, centered := false) -> VBoxContainer:
 	var v := vbox(3)
 	var top := hbox(6)
+	if centered:
+		top.alignment = BoxContainer.ALIGNMENT_CENTER
 	top.add_child(hearts(int(me.get("hearts", 0)), int(me.get("maxHearts", 3))))
 	if int(me.get("poison", 0)) > 0:
 		top.add_child(chip("Poison %d" % int(me.poison), Color("#8fdc5a"), "You lose this much health at the start of every room until cured."))
@@ -354,7 +503,7 @@ static func opponent(o: Dictionary) -> PanelContainer:
 	left.add_child(label(o.get("name", ""), "Heading", true))
 	if not o.get("ghost", false):
 		left.add_child(hearts(int(o.get("hearts", 0))))
-	left.add_child(label(o.get("build", ""), "", true, Art.GOLD))
+	left.add_child(set_text(str(o.get("build", "")), Art.GOLD))
 	left.add_child(label("Level %d · %s%s" % [int(o.get("level", 1)), o.get("spec", ""), (" · " + str(o.gem)) if o.get("gem") else ""], "Muted", true))
 	h.add_child(left)
 	var right := vbox(8)

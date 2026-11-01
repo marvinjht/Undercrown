@@ -19,6 +19,11 @@ const MAGIC := Color("#7fb0ff")     # magic damage numbers are blue
 const TONES := { "": TEXT, "up": UP, "down": DOWN, "affix": Color("#9fd38f"), "cost": DOWN, "legend": GOLD, "artifact": Color("#ff8a7a"),
 	"stubborn": Color("#ffd34d"), "hint": MUTED, "warn": Color("#ffb36b"), "head": EMBER, "notice": TEXT, "side": MUTED, "relic": Color("#e0a85a") }
 
+# Each hybrid set's own color (keyed like the game: "warrior+mage"). Keep in step with HYBRID_COLOR in tools/pixelart.py.
+const HYBRID_COLOR := { "warrior+mage": Color("#ff6a9a"), "warrior+paladin": Color("#ff9a3a"), "warrior+archer": Color("#c8b04a"),
+	"warrior+rogue": Color("#d97a5a"), "mage+paladin": Color("#7ad8ff"), "mage+archer": Color("#5ae0c0"), "mage+rogue": Color("#b06aff"),
+	"archer+paladin": Color("#d8e86a"), "paladin+rogue": Color("#f0a0d0"), "archer+rogue": Color("#4ab070") }
+
 var _cache: Dictionary = {}
 
 func tex(path: String) -> Texture2D:
@@ -35,6 +40,16 @@ func icon(key: String) -> Texture2D:
 		return tex("res://art/icons/skull.png")
 	var t := tex("res://art/icons/%s.png" % key)
 	return t if t else tex("res://art/icons/skull.png")
+
+# Class icon (icons/class_warrior.png...) and hybrid icon (icons/hybrid_warrior_mage.png...); null if missing
+func class_icon(cls) -> Texture2D:
+	return tex("res://art/icons/class_%s.png" % str(cls))
+
+func hybrid_icon(key) -> Texture2D:
+	return tex("res://art/icons/hybrid_%s.png" % str(key).replace("+", "_"))
+
+func hybrid_color(key) -> Color:
+	return HYBRID_COLOR.get(str(key), GOLD)
 
 # A hero's body: by class look (warrior, mage...) or plain
 func hero(look_name) -> Texture2D:

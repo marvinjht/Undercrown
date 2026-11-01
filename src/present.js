@@ -157,7 +157,7 @@ window.G = window.G || {};
   function setGuide(hero) {
     const st = G.Stats.sets(hero);
     return { classes: G.CLASS_ORDER.map(c => ({ cls: c, name: G.CLASSES[c].name, color: G.CLASSES[c].color, n: st.counts[c] || 0, tiers: tierRows(c, st.counts[c] || 0) })),
-      hybrids: Object.keys(G.HYBRIDS).map(k => { const [a, b] = k.split('+'); return { name: G.HYBRIDS[k].name, pair: `${G.CLASSES[a].name} + ${G.CLASSES[b].name}`, text: G.HYBRIDS[k].desc, on: st.hybrid === k }; }) };
+      hybrids: Object.keys(G.HYBRIDS).map(k => { const [a, b] = k.split('+'); return { key: k, a, b, name: G.HYBRIDS[k].name, pair: `${G.CLASSES[a].name} + ${G.CLASSES[b].name}`, text: G.HYBRIDS[k].desc, on: st.hybrid === k }; }) };
   }
   function buffList(p) { return Object.entries(p.buffs || {}).filter(([, v]) => v).map(([k, v]) => (k === 'fullMana' ? 'Full mana' : `+${v} ${G.STAT_INFO[k].label}`)); }
   function relicRow(p) {
