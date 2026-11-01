@@ -11,6 +11,11 @@ extends MarginContainer
 
 var arena: Control
 var battle_key := ""
+var _last_res = null            # the fight result on screen (a new result object = a new fight)
+var _battle_n := 0
+var watch_arena: Control        # the fight of the player you watch (separate from yours)
+var watch_key := ""
+var _target: VBoxContainer      # where screen sections are drawn: the stage, or the watch box
 var log_box: VBoxContainer
 var log_lines: Array = []
 var timers: Array = []          # countdown labels: { label, ends (server ms), prefix, turn_start, turn_total }
@@ -27,18 +32,23 @@ func _ready() -> void:
 	arena.finished.connect(func(): Game.battle_end(battle_key))
 	arena.log_line.connect(_on_log)
 	arena.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	watch_arena = preload("res://scripts/arena.gd").new()
+	watch_arena.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 func _on_changed(_what: String) -> void:
 	if Game.status != "match" or Game.view.is_empty():
 		arena.stop()
+		watch_arena.stop()
 		shown = {}
 		battle_key = ""
+		_last_res = null
+		watch_key = ""
 		return
 	var V := Game.view
 	_part("top", [V.get("top"), V.get("rooms")], _build_top)
-	_part("left", [V.get("rivals"), V.get("rivalOrder"), V.get("me")], _build_left)
+	_part("left", [V.get("rivals"), V.get("rivalOrder"), V.get("me"), V.get("canWatch"), V.get("watching")], _build_left)
 	_part("side", [V.get("bag"), V.get("gear"), V.get("me"), V.get("supply"), bag_open], _build_side)
-	_part("stage", [V.get("screen"), V.get("me")], _build_stage)
+	_part("stage", [V.get("screen"), V.get("me"), V.get("watch")], _build_stage)
 	_check_battle()
 
 func _part(name: String, deps: Array, build: Callable) -> void:
@@ -52,15 +62,19 @@ func _part(name: String, deps: Array, build: Callable) -> void:
 func _check_battle() -> void:
 	var b = Game.s.get("battle")
 	if str(Game.s.get("phase", "")) == "battle" and b is Dictionary and b.get("res") is Dictionary:
-		var res: Dictionary = b.res
-		var key := "%s|%s|%s" % [b.get("title", ""), res.get("duration", 0), (res.get("events", []) as Array).size()]
-		if key != battle_key:
-			battle_key = key
+		# A new fight is a new result object (updates during a fight keep the same one, "$same" on the wire)
+		if not is_same(b.res, _last_res):
+			_last_res = b.res
+			_battle_n += 1
+			battle_key = "fight%d" % _battle_n
 			log_lines.clear()
 			_render_log()
 			arena.play(b)
 	else:
+		# The server has moved on: stop, and take the fight off screen right away (never leave it frozen there)
 		arena.stop()
+		if arena.get_parent():
+			arena.get_parent().remove_child(arena)
 
 func _on_log(text: String) -> void:
 	log_lines.append(text)
@@ -90,11 +104,14 @@ func _process(_d: float) -> void:
 	for tm in timers:
 		if not is_instance_valid(tm.label):
 			continue
+		var rem: float
 		if tm.has("turn_start"):
-			var rem: float = max(0.0, float(tm.turn_total) / 1000.0 - (Game.now_ms() - Game.local_ms(float(tm.turn_start))) / 1000.0)
-			tm.label.text = "%s %ds" % [tm.prefix, int(ceil(rem))]
+			rem = max(0.0, float(tm.turn_total) / 1000.0 - (Game.now_ms() - Game.local_ms(float(tm.turn_start))) / 1000.0)
 		else:
-			tm.label.text = "%s %ds" % [tm.prefix, int(ceil(Game.secs_left(float(tm.ends))))]
+			rem = Game.secs_left(float(tm.ends))
+		tm.label.text = "%s %ds" % [tm.prefix, int(ceil(rem))]
+		if tm.get("bar") and is_instance_valid(tm.bar):
+			tm.bar.value = rem
 
 # ---------- Top bar ----------
 func _build_top() -> void:
@@ -223,6 +240,8 @@ func _build_left() -> void:
 			row.add_child(Kit.chip("BOT", Art.MUTED, "%s left the match, so a bot is playing their hero." % r.botWas if r.get("botWas") else "An empty seat, played by the computer."))
 		row.add_child(Kit.label("Lv %d" % int(r.get("level", 1)), "Muted"))
 		row.add_child(Kit.hearts(int(r.get("hearts", 0)), 3, 10))
+		if V.get("canWatch", false) and not r.get("bot", false) and r.get("alive", false) and r.get("slot") != null:
+			row.add_child(_eye(int(r.slot), V.get("watching") != null and int(V.watching) == int(r.slot)))
 		cv.add_child(row)
 		var tag := [r.get("spec", "")] if r.get("spec") else []
 		if str(r.get("build", "")) != "No set bonus yet":
@@ -238,7 +257,8 @@ func _build_left() -> void:
 			gear.add_child(Kit.item_slot(it, 12))
 		cv.add_child(gear)
 		card.add_child(cv)
-		card.tooltip_text = "%s\nLevel %d · %s · %d gold\n%s\n%s" % [r.get("name", ""), int(r.get("level", 1)), r.get("spec", "No spec yet") if r.get("spec") else "No spec yet", int(r.get("gold", 0)), r.get("build", ""), r.get("summary", "")]
+		var gem_line := ("\nHeart gem: %s%s" % [r.gem, (". " + str(r.gemShort)) if r.get("gemShort") else ""]) if r.get("gem") else ""
+		card.tooltip_text = "%s\nLevel %d · %s · %d gold%s\n%s\n%s" % [r.get("name", ""), int(r.get("level", 1)), r.get("spec", "No spec yet") if r.get("spec") else "No spec yet", int(r.get("gold", 0)), gem_line, r.get("build", ""), r.get("summary", "")]
 		v.add_child(card)
 	p.add_child(v)
 	left.add_child(p)
@@ -266,6 +286,17 @@ func _build_left() -> void:
 		yv.add_child(Kit.set_text(" · ".join(sub), Art.GOLD))
 	you.add_child(yv)
 	left.add_child(you)
+
+# The eye next to a player: watch their game live (only once you're out)
+func _eye(slot: int, on: bool) -> Button:
+	var b := Button.new()
+	b.icon = Art.icon("eye")
+	b.expand_icon = false
+	b.theme_type_variation = "Primary" if on else "Ghost"
+	b.tooltip_text = "Stop watching" if on else "Watch their game live"
+	b.custom_minimum_size = Vector2(22, 18)
+	b.pressed.connect(func(): Game.act("stopWatching" if on else "startWatching", [] if on else [slot], true))
+	return b
 
 # ---------- Bag, gear, stats (right) ----------
 func _section(title: String, right_text := "") -> VBoxContainer:
@@ -442,9 +473,11 @@ func _build_stage() -> void:
 	var phase := str(sc.get("phase", ""))
 	var keep_scroll := stage_scroll.scroll_vertical if phase == _last_phase else 0
 	_last_phase = phase
-	if arena.get_parent():
-		arena.get_parent().remove_child(arena)
+	for a in [arena, watch_arena]:   # both arenas keep playing across redraws
+		if a.get_parent():
+			a.get_parent().remove_child(a)
 	Kit.clear(stage)
+	_target = stage
 	timers = timers.filter(func(tm): return false)
 	if sc.get("notice"):
 		var np := Kit.panel("Card")
@@ -458,9 +491,61 @@ func _build_stage() -> void:
 		stage.add_child(Kit.center(Kit.line(n)))
 	for sec in sc.get("sections", []):
 		_section_view(sec)
+	var W = Game.view.get("watch")
+	if W is Dictionary:
+		_build_watch(W)
+	elif watch_key != "":
+		watch_key = ""
+		watch_arena.stop()
 	await get_tree().process_frame
 	stage_scroll.scroll_vertical = keep_scroll
 	_blood_pop(sc)
+
+# ---------- Spectating ----------
+# The game of the player you watch: their screen (buttons can't be pressed) or their fight, under yours
+func _build_watch(W: Dictionary) -> void:
+	var p := Kit.panel("Card")
+	var v := Kit.vbox(6)
+	var head := Kit.hbox(8)
+	head.add_child(Kit.icon(Art.icon("eye"), 16))
+	head.add_child(Kit.label("Watching " + str(W.get("name", "")), "Heading"))
+	var st := Kit.label(str(W.get("status", "")), "Muted")
+	st.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(st)
+	var stop := Button.new()
+	stop.text = "Stop watching"
+	stop.theme_type_variation = "Ghost"
+	stop.pressed.connect(func(): Game.act("stopWatching", [], true))
+	head.add_child(stop)
+	v.add_child(head)
+	var f = W.get("fight")
+	if f is Dictionary:
+		v.add_child(Kit.center(Kit.label(str(f.get("title", "Fight")), "Heading")))
+		if str(f.get("key", "")) != watch_key:
+			watch_key = str(f.get("key", ""))
+			watch_arena.play(f)
+		v.add_child(watch_arena)
+	else:
+		if watch_key != "":
+			watch_key = ""
+			watch_arena.stop()
+		var sc = W.get("screen")
+		if sc is Dictionary:
+			if sc.get("notice"):
+				v.add_child(Kit.center(Kit.label(sc.notice, "", true, Art.GOLD)))
+			if sc.get("title"):
+				v.add_child(Kit.center(Kit.label(sc.title, "Heading", true)))
+			if sc.get("lede"):
+				v.add_child(Kit.center(Kit.label(sc.lede, "", true)))
+			for n in sc.get("notes", []):
+				v.add_child(Kit.center(Kit.line(n)))
+			var outer := _target
+			_target = v
+			for sec in sc.get("sections", []):
+				_section_view(sec)
+			_target = outer
+	p.add_child(v)
+	stage.add_child(p)
 
 # Merchant: a "+N gold" that floats up from the sell-blood button and fades, once per sale (bloodPop.seq)
 func _blood_pop(sc: Dictionary) -> void:
@@ -491,10 +576,17 @@ func _countdown(prefix: String, ends: float) -> Label:
 	timers.append({ "label": l, "ends": ends, "prefix": prefix })
 	return l
 
+# A timer bar that empties as time runs out (same look as the round timer); total in seconds
+func _timer_bar(total: float) -> ProgressBar:
+	var bar := Kit.bar(total, total, Art.EMBER, "", 6)
+	bar.custom_minimum_size = Vector2(320, 6)
+	bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	return bar
+
 func _section_view(sec: Dictionary) -> void:
 	var kind := str(sec.get("kind", ""))
 	if sec.get("title"):
-		stage.add_child(Kit.center(Kit.label(sec.title, "Heading")))
+		_target.add_child(Kit.center(Kit.label(sec.title, "Heading")))
 	match kind:
 		"doors":
 			var f := Kit.flow(10, true)
@@ -526,7 +618,7 @@ func _section_view(sec: Dictionary) -> void:
 				v.add_child(btn)
 				p.add_child(v)
 				f.add_child(p)
-			stage.add_child(f)
+			_target.add_child(f)
 		"cards":
 			# Same-width cards in a centered grid; every card in a row matches the tallest one
 			var w := 190 if sec.get("compact", false) else Kit.CARD_W
@@ -539,12 +631,13 @@ func _section_view(sec: Dictionary) -> void:
 				var card: PanelContainer = Kit.item_card(c, w) if c.get("kind") == "item" and c.get("item") is Dictionary else Kit.card(c, w)
 				card.size_flags_vertical = Control.SIZE_FILL
 				grid.add_child(card)
-			stage.add_child(grid)
+			_target.add_child(grid)
 		"buttons":
-			stage.add_child(Kit.buttons(sec.get("buttons", []), true))
+			_target.add_child(Kit.buttons(sec.get("buttons", []), true))
 		"list":
 			var v := Kit.vbox(3)
 			v.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			var turn_bar: ProgressBar = null
 			for r in sec.get("rows", []):
 				var row := Kit.hbox(8)
 				if r.has("n"):
@@ -554,8 +647,10 @@ func _section_view(sec: Dictionary) -> void:
 					row.add_child(Kit.label("%d%%" % int(r.get("hpPct", 0)), "Muted"))
 					if r.get("now", false) and sec.get("turnStart"):
 						var l := Kit.label("", "Heading")
-						timers.append({ "label": l, "turn_start": float(sec.turnStart), "turn_total": float(sec.get("turnTotal", 20000)), "prefix": str(r.state) })
+						var tb := _timer_bar(float(sec.get("turnTotal", 20000)) / 1000.0)
+						timers.append({ "label": l, "turn_start": float(sec.turnStart), "turn_total": float(sec.get("turnTotal", 20000)), "prefix": str(r.state), "bar": tb })
 						row.add_child(l)
+						turn_bar = tb
 					else:
 						row.add_child(Kit.label(str(r.get("state", "")), "", false, Art.GOLD if r.get("now", false) else Art.MUTED))
 				else:
@@ -563,27 +658,32 @@ func _section_view(sec: Dictionary) -> void:
 					row.add_child(Kit.label(r.get("name", ""), "Heading"))
 					row.add_child(Kit.label(r.get("label", ""), "", false, col.get(str(r.get("state", "")), Art.TEXT)))
 				v.add_child(row)
-			stage.add_child(v)
+			_target.add_child(v)
+			if turn_bar:   # the pick in progress, as a bar under the list
+				_target.add_child(turn_bar)
 		"review":
-			stage.add_child(_countdown(str(sec.get("label", "")), float(sec.get("ends", 0))))
+			_target.add_child(_countdown(str(sec.get("label", "")), float(sec.get("ends", 0))))
+			var rb := _timer_bar(float(sec.get("total", 5000)) / 1000.0)
+			timers[timers.size() - 1]["bar"] = rb
+			_target.add_child(rb)
 		"timer":
 			if float(sec.get("ends", 0)) > 0.0:
-				stage.add_child(_countdown(str(sec.get("label", "")), float(sec.ends)))
+				_target.add_child(_countdown(str(sec.get("label", "")), float(sec.ends)))
 			else:
-				stage.add_child(Kit.center(Kit.label(sec.get("label", ""), "Heading", true)))
+				_target.add_child(Kit.center(Kit.label(sec.get("label", ""), "Heading", true)))
 			if (sec.get("buttons", []) as Array).size():
-				stage.add_child(Kit.buttons(sec.buttons, true))
+				_target.add_child(Kit.buttons(sec.buttons, true))
 		"skip":
 			var p := Kit.panel("Card")
 			var v := Kit.vbox(6)
 			v.add_child(Kit.center(Kit.label(sec.get("text", ""), "", true)))
 			v.add_child(Kit.buttons(sec.get("buttons", []), true))
 			p.add_child(v)
-			stage.add_child(p)
+			_target.add_child(p)
 		"tree":
 			var tr: Dictionary = sec.get("tree", {})
 			for row in tr.get("rows", []):
-				stage.add_child(Kit.center(Kit.label("Level %d" % int(row.level), "Muted")))
+				_target.add_child(Kit.center(Kit.label("Level %d" % int(row.level), "Muted")))
 				var f := Kit.flow(8, true)
 				for n in row.get("nodes", []):
 					var st := str(n.get("state", ""))
@@ -593,23 +693,23 @@ func _section_view(sec: Dictionary) -> void:
 					if st == "skipped" or st == "locked":
 						card.modulate = Color(1, 1, 1, 0.6)
 					f.add_child(card)
-				stage.add_child(f)
+				_target.add_child(f)
 		"character":
-			stage.add_child(Kit.character(Game.view.get("me", {})))
+			_target.add_child(Kit.character(Game.view.get("me", {})))
 		"opponent":
-			stage.add_child(Kit.opponent(sec.get("opponent", {})))
+			_target.add_child(Kit.opponent(sec.get("opponent", {})))
 		"places":
 			var v := Kit.vbox(2)
 			v.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 			for pl in sec.get("places", []):
 				v.add_child(Kit.label("%s  %s" % [pl.place, pl.name], "Heading" if pl.get("me", false) else "", false, Art.GOLD if str(pl.place) == "1st" else null))
-			stage.add_child(v)
+			_target.add_child(v)
 		"bracket":
-			stage.add_child(_bracket(sec.get("bracket", {})))
+			_target.add_child(_bracket(sec.get("bracket", {})))
 		"arena":
-			stage.add_child(arena)
+			_target.add_child(arena)
 			log_box = Kit.vbox(1)
-			stage.add_child(log_box)
+			_target.add_child(log_box)
 			_render_log()
 
 func _bracket(b: Dictionary) -> Control:

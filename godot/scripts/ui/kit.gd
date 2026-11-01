@@ -273,6 +273,8 @@ static func item_tip(item: Dictionary) -> Control:
 	p.custom_minimum_size = Vector2(TIP_W, 0)
 	var v := vbox(3)
 	item_body(item, v)
+	if int(item.get("sell", 0)) > 0:
+		v.add_child(sell_line(item))
 	if has_more(v):
 		v.add_child(detail_hint())
 	p.add_child(v)
@@ -348,8 +350,6 @@ static func card_buttons(v: VBoxContainer, bs: Array) -> void:
 # Every item on a screen, the same way: name, type line, up to 3 key stats (with the change vs what you wear),
 # what the screen adds (a forge preview...), the verdict tag, then the buttons. Hover shows the full item;
 # Shift shows its full text.
-const CARD_STATS := 3
-
 static func item_card(c: Dictionary, width := CARD_W) -> PanelContainer:
 	var it: Dictionary = c.get("item", {})
 	var p: PanelContainer = preload("res://scripts/ui/tip_slot.gd").new()
@@ -371,11 +371,9 @@ static func item_card(c: Dictionary, width := CARD_W) -> PanelContainer:
 	ty.clip_text = true
 	ty.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	tr.add_child(ty)
-	if it.get("set") is Dictionary and Art.class_icon(it.set.get("id", "")):
-		var ci := icon(Art.class_icon(it.set.id), 12)
-		ci.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		tr.add_child(ci)
 	v.add_child(tr)
+	if it.get("set") is Dictionary:   # its class: icon and name
+		v.add_child(class_tag(str(it.set.get("id", "")), str(it.set.get("name", "")), Art.color(it.set.get("color"), Art.TEXT)))
 	var rows := []
 	if it.get("stats") is Array and (it.stats as Array).size():
 		for st in it.stats:
@@ -386,18 +384,34 @@ static func item_card(c: Dictionary, width := CARD_W) -> PanelContainer:
 				continue
 			rows.append(line(ln))
 			break
-	for i in mini(rows.size(), CARD_STATS):
-		v.add_child(rows[i])
-	if rows.size() > CARD_STATS:
-		v.add_child(label("+%d more" % (rows.size() - CARD_STATS), "Muted"))
+	for r in rows:   # every stat: players choose from them at a glance
+		v.add_child(r)
 	for ln in c.get("lines", []):   # what the screen adds
 		v.add_child(line(ln))
 	if it.get("verdict") is Dictionary:
 		v.add_child(label(str(it.verdict.get("text", "")), "", false, Art.tone(it.verdict.get("tone", ""))))
+	if int(it.get("sell", 0)) > 0:
+		v.add_child(sell_line(it))
 	card_buttons(v, c.get("buttons", []))
 	p.add_child(v)
+	if str(it.get("rarity", "")) == "artifact":
+		artifact_glow(p)
 	fit_width(p, width)
 	return p
+
+static func sell_line(it: Dictionary) -> Label:
+	return label("Sells for %d gold" % int(it.get("sell", 0)), "Muted")
+
+# A pulsing red glow around a card (artifacts in loot stand out). Theme: ArtifactGlow.
+static func artifact_glow(card: Control) -> void:
+	var g := Panel.new()
+	g.theme_type_variation = "ArtifactGlow"
+	g.show_behind_parent = true
+	g.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(g)
+	var tw := g.create_tween().set_loops()
+	tw.tween_property(g, "modulate:a", 0.25, 0.8).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(g, "modulate:a", 1.0, 0.8).set_trans(Tween.TRANS_SINE)
 
 # "+20 Health ▲10": a stat with its change against the item you wear (green up, red down)
 static func stat_row(st: Dictionary) -> HBoxContainer:

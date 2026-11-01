@@ -37,6 +37,13 @@ func _init() -> void:
 	t.set_type_variation("Slot", "PanelContainer")
 	t.set_stylebox("panel", "Slot", box("res://art/ui/button_ghost.png", 8, 2))
 	# A gear slot: white border on a faint white fill, tinted to the item's rarity color in code (Kit.item_slot)
+	# A pulsing red glow behind artifact cards (Kit.artifact_glow pulses it)
+	t.set_type_variation("ArtifactGlow", "Panel")
+	var ag := flat(Color(0.85, 0.16, 0.12, 0.10), Color("#ff5440"), 2)
+	ag.set_expand_margin_all(9)
+	ag.shadow_color = Color(1, 0.2, 0.12, 0.55)
+	ag.shadow_size = 10
+	t.set_stylebox("panel", "ArtifactGlow", ag)
 	t.set_type_variation("SlotRarity", "PanelContainer")
 	var sc := flat(Color(1, 1, 1, 0.14), Color.WHITE, 2)
 	sc.set_content_margin_all(4)

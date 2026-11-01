@@ -8,7 +8,8 @@
 //            or 'ui_…' for things the client does itself (ui_leave, ui_requeue, ui_rematch, ui_title).
 //   Line     { text, tone, short? }   short: a plain one-line version of a long text ('' = hide it in short mode).
 //            Clients may show short by default and text on request; the browser shows text. tone: '', 'up', 'down', 'affix', 'cost', 'legend', 'artifact', 'stubborn', 'hint', 'warn', 'head'
-//   Item     { id, kind, name, rarity, rarityName, color, icon, sub, type, set, lines, stats, trait, traitShort, notes, verdict, compare }
+//   Item     { id, kind, name, rarity, rarityName, color, icon, sub, type, set, lines, stats, trait, traitShort, notes, verdict, compare, sell }
+//            sell: gold it sells for (gear and bag items)
 //            type: short kind line ("Rare Helmet · T2"). stats (gear only): [{ k, label, value, text, affix, cost, lost, delta }]
 //            in display order (base, bonus, then stats you'd lose); delta = change vs your equipped item, on the first line per stat.
 //   Card     { kind: 'item'|'text', item?, title?, sub?, color?, lines, buttons }
@@ -65,7 +66,7 @@ window.G = window.G || {};
     if (item.kind === 'consumable') {
       const c = G.CONSUMABLES[item.cid];
       return { id: item.id, kind: 'consumable', cid: item.cid, name: c.name, rarity: 'potion', rarityName: 'Bag item', color: RARITY_COLOR.potion, icon: item.iconKey,
-        sub: 'Bag item', type: 'Consumable', set: null, lines: [line(c.desc)], trait: null, notes: [], verdict: { tone: 'side', text: 'Bag item' } };
+        sub: 'Bag item', type: 'Consumable', sell: G.Dungeon.sellPrice(item), set: null, lines: [line(c.desc)], trait: null, notes: [], verdict: { tone: 'side', text: 'Bag item' } };
     }
     const R = G.RARITY[item.rarity], wl = weaponLine(item);
     const lines = [];
@@ -110,7 +111,7 @@ window.G = window.G || {};
       icon: item.iconKey, weaponType: item.weaponType || null,
       sub: `${R.name} ${wl || G.SLOT_NAMES[item.slot]}${item.rarity === 'artifact' ? '' : ' · Tier ' + item.tier}`,
       type: `${R.name} ${item.slot === 'weapon' && G.WEAPONS[item.weaponType] ? G.WEAPONS[item.weaponType].name : G.SLOT_NAMES[item.slot]}${item.rarity === 'artifact' ? '' : ' · T' + item.tier}`,
-      set: setInfo(item.set), lines, stats, trait, traitShort, notes, verdict: verdict(hero, item), compare };
+      set: setInfo(item.set), lines, stats, sell: G.Dungeon.sellPrice(item), trait, traitShort, notes, verdict: verdict(hero, item), compare };
   }
   // The short version of an item's trait, from the data (works for items made before short texts existed)
   function traitShortOf(item) {
@@ -243,7 +244,7 @@ window.G = window.G || {};
     return s.rivals.map(r => {
       const sc = G.Stats.compute(r);
       return { slot: r.slot != null ? r.slot : null, id: r.id, name: r.name, bot: !!r.bot, botWas: r.botWas || null, level: r.level, hearts: r.hearts, hp: r.hp, maxHp: G.Hero.maxHp(r),
-        alive: !!r.alive, diedRoom: r.diedRoom || null, spec: r.spec ? G.SPECS[r.spec].name : null, gem: r.gem ? G.GEMS[r.gem].name : null, build: buildLabel(r),
+        alive: !!r.alive, diedRoom: r.diedRoom || null, spec: r.spec ? G.SPECS[r.spec].name : null, gem: r.gem ? G.GEMS[r.gem].name : null, gemShort: r.gem ? G.GEMS[r.gem].short || null : null, gemColor: r.gem ? G.GEMS[r.gem].color : null, build: buildLabel(r),
         tint: hex(r.tint || 0x9fdcff), gold: r.gold, ready: ready.has(r.slot), look: look(r),
         summary: `${sc.dmg} Damage, ${sc.spd} Attack Speed, ${sc.armor} Armor, ${sc.ward} Magic Resist, ${sc.dodge} Dodge${r.poison ? `, ${r.poison} poison` : ''}`,
         gear: G.SLOTS.map(sl => itemView(r.gear[sl], null)) };
@@ -511,7 +512,62 @@ window.G = window.G || {};
     rv.forEach((r, i) => { rivals[r.slot != null ? r.slot : 'r' + i] = r; });
     return { top: topView(s), clock: { ends: s.roundEnds || 0, total: (s.roundTotal || CFG().roundSeconds) * 1000 }, me: meView(p), gear: gearView(p), bag: bagView(s, p),
       rivals, rivalOrder: Object.keys(rivals), screen: sc, setGuide: setGuide(p), rooms: ROOM_INFO,
-      tree: p.spec ? treeView(p, null) : null, supply: supplyView(s) };
+      tree: p.spec ? treeView(p, null) : null, supply: supplyView(s),
+      canWatch: !!(MP && MP.inMatch && MP.inMatch()) && iAmOut(s), watching: MP && MP.watching != null ? MP.watching : null, watch: watchView(s, MP) };
+  }
+
+  // ---------- Spectating ----------
+  // Watching live is for players who are out of the match (or out of the tournament)
+  function iAmOut(s) {
+    if (!s.player.alive) return true;
+    const e = s.tour && s.tour.entrants && s.tour.entrants.find(x => x.hero === s.player);
+    return !!(e && e.out);
+  }
+  // Every button in a watched screen is shown, never pressable
+  function untouchable(o) {
+    if (Array.isArray(o)) { o.forEach(untouchable); return o; }
+    if (o && typeof o === 'object') { if (typeof o.act === 'string') o.enabled = false; for (const k in o) untouchable(o[k]); }
+    return o;
+  }
+  let watchFightMemo = null;   // a replayed fight, so it isn't simulated again on every update
+  // The game of the player you watch, as they see it (the same screens), or their fight to play back.
+  // Built like the browser's watchState (src/ui.js) from what their game sends (MP.views, MP.lastFight).
+  function watchView(s, MP) {
+    if (!MP || MP.watching == null || !(MP.inMatch && MP.inMatch())) return null;
+    const slot = MP.watching, who = MP.player(slot), h = MP.heroes[slot], v = MP.views[slot];
+    const out = { slot, name: who ? who.name : h ? h.name : '?', status: 'Connecting to their game…', fight: null, screen: null };
+    if (!v || !v.state || !v.state.player) return out;
+    const w = v.state, at = v.at;
+    const wp = JSON.parse(JSON.stringify(w.player));
+    wp.isPlayer = true;
+    const heroes = { ...MP.heroes, [slot]: wp };
+    const vst = { ...w, player: wp, rivals: MP.players.filter(x => x.slot !== slot).map(x => MP.heroes[x.slot]).filter(Boolean), watchingView: true };
+    vst.roundEnds = w.roundMs ? at + w.roundMs : 0;
+    if (w.shop) vst.shop = { ...w.shop, reviewUntil: at + w.shop.reviewMs, turnStart: at - w.shop.turnMs, sent: true };
+    if (w.duel && w.duel.w) vst.duel = { ...w.duel, mine: MP.duelPair(w.duel.w, heroes) };
+    if (MP.lastTourWire) vst.tour = MP.tourFromWire(MP.lastTourWire, heroes);
+    if (w.battle) vst.battle = { ...w.battle };
+    out.status = `Room ${vst.room || '?'} · ${wp.hp}/${G.Hero.maxHp(wp)} health · ${wp.hearts} ${wp.hearts === 1 ? 'heart' : 'hearts'}`;
+    const f = MP.lastFight[slot];
+    if (vst.phase === 'battle' && f) {
+      if (!watchFightMemo || watchFightMemo.f !== f) watchFightMemo = { f, res: f.res || G.simulateFight(...JSON.parse(JSON.stringify(f.args))) };
+      out.fight = { key: `${slot}:${f.at}`, title: f.title || (vst.battle && vst.battle.title) || 'Fight', res: watchFightMemo.res, visual: f.visual || {}, names: f.names || {}, mirror: !!f.mirror };
+      return out;
+    }
+    // Their screen, built as if you were them ("You" means them)
+    const me = s.player, was = me.isPlayer;
+    me.isPlayer = false;
+    try {
+      const sc = vst.phase === 'battle' ? { title: (vst.battle && vst.battle.title) || 'Fight', lede: 'Their fight is starting…', sections: [] } : screenFor(vst, MP);
+      sc.phase = vst.phase;
+      sc.notice = vst.notice && !['dead', 'shop', 'mpEnded'].includes(vst.phase) ? vst.notice : null;
+      sc.notes = sc.notes || [];
+      sc.sections = (sc.sections || []).filter(x => x.kind !== 'character' && x.kind !== 'arena');
+      out.screen = untouchable(sc);
+    } catch (e) {
+      out.screen = { title: '', lede: 'Their screen can’t be shown right now.', sections: [], notes: [] };
+    } finally { me.isPlayer = was; }
+    return out;
   }
   function supplyView(s) {
     const counts = G.Supply.counts(), per = CFG().supplyPerClass;

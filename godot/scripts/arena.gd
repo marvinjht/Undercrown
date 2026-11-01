@@ -23,6 +23,7 @@ var mirror := false
 var t := 0.0
 var idx := 0
 var speed := 1.0
+var start_ms := 0   # when playback started (this machine's clock); the fight's time follows it, never the frame rate
 var done := false
 var playing := false
 var F: Dictionary = {}
@@ -97,6 +98,7 @@ func play(b: Dictionary) -> void:
 	mirror = bool(b.get("mirror", false))
 	events = res.get("events", [])
 	t = 0.0; idx = 0; speed = 1.0; done = false; playing = true
+	start_ms = Time.get_ticks_msec()
 	F = {}; lane_i = 0; ally_i = 0; ring = {}
 	world = Node2D.new()
 	add_child(world)
@@ -259,10 +261,12 @@ func _place(f: Dictionary) -> void:
 func _process(delta: float) -> void:
 	if not playing or done:
 		return
-	if t >= FAST_AFTER:
-		speed = 2.0
+	# Fight time comes from the real clock (double speed after FAST_AFTER), so slow or skipped frames (an unfocused or
+	# minimized window, a busy moment) never slow the fight down: it catches up and ends on time, like the server's.
+	var wall := float(Time.get_ticks_msec() - start_ms) / 1000.0
+	t = wall if wall <= FAST_AFTER else FAST_AFTER + (wall - FAST_AFTER) * 2.0
+	speed = 2.0 if t >= FAST_AFTER else 1.0
 	var d: float = min(0.25, delta)
-	t += d * speed
 	while idx < events.size() and float(events[idx].t) <= t:
 		_apply(events[idx])
 		idx += 1

@@ -1,4 +1,4 @@
-[gd_resource type="Theme" load_steps=37 format=3]
+[gd_resource type="Theme" load_steps=38 format=3]
 
 [ext_resource type="Texture2D" path="res://art/ui/button_disabled.png" id="1_c2unj"]
 [ext_resource type="Texture2D" path="res://art/ui/button_hover.png" id="2_3byeq"]
@@ -278,9 +278,25 @@ border_width_right = 2
 border_width_bottom = 2
 border_color = Color(1, 1, 1, 1)
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_artglow"]
+bg_color = Color(0.85, 0.16, 0.12, 0.10)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0.33, 0.25, 1)
+expand_margin_left = 9.0
+expand_margin_top = 9.0
+expand_margin_right = 9.0
+expand_margin_bottom = 9.0
+shadow_color = Color(1, 0.2, 0.12, 0.55)
+shadow_size = 10
+
 [resource]
 default_font = ExtResource("8_sp0n7")
 default_font_size = 11
+ArtifactGlow/base_type = &"Panel"
+ArtifactGlow/styles/panel = SubResource("StyleBoxFlat_artglow")
 Button/colors/font_color = Color(0.937255, 0.901961, 0.847059, 1)
 Button/colors/font_disabled_color = Color(0.419608, 0.380392, 0.345098, 1)
 Button/colors/font_hover_color = Color(1, 1, 1, 1)
