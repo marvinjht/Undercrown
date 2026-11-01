@@ -31,9 +31,10 @@ static func line(ln) -> Label:   # { text, tone, short? }
 	if ln is String:
 		return label(ln, "", true)
 	var tone := str(ln.get("tone", ""))
+	var col: Color = Art.color(ln.color, Art.tone(tone)) if ln.get("color") else Art.tone(tone)   # color: "#rrggbb" wins over tone
 	if ln.has("short"):
-		return dual(str(ln.get("text", "")), str(ln.short), "Heading" if tone == "head" else "", true, Art.tone(tone))
-	var l := label(ln.get("text", ""), "Heading" if tone == "head" else "", true, Art.tone(tone))
+		return dual(str(ln.get("text", "")), str(ln.short), "Heading" if tone == "head" else "", true, col)
+	var l := label(ln.get("text", ""), "Heading" if tone == "head" else "", true, col)
 	return l
 
 # ---------- Short and full texts ----------
@@ -139,6 +140,8 @@ static func button(b: Dictionary) -> Button:
 	else:
 		btn = Button.new()
 	btn.text = str(b.get("label", ""))
+	btn.set_meta("act", str(b.get("act", "")))
+	btn.set_meta("args", b.get("args", []))
 	btn.disabled = not b.get("enabled", true)
 	var st := str(b.get("style", "normal"))
 	btn.theme_type_variation = "Primary" if st == "primary" else ("Ghost" if st == "ghost" else "")
@@ -205,8 +208,9 @@ static func chip(text: String, color: Color, tip := "") -> Label:
 
 # ---------- Items ----------
 # A slot with an item icon; hover shows the item's full card
-# show_class: tint the frame in the item's class color and put the class icon in the bottom-right corner
-static func item_slot(item, size := 36, empty_icon := "", show_class := false) -> PanelContainer:
+# rarity_frame: a clear frame and soft background in the item's rarity color (grey, green, blue, gold, red),
+# plus its class icon in the bottom-right corner (the gear panel)
+static func item_slot(item, size := 36, empty_icon := "", rarity_frame := false) -> PanelContainer:
 	var p := preload("res://scripts/ui/tip_slot.gd").new()
 	p.theme_type_variation = "Slot"
 	p.custom_minimum_size = Vector2(size + 8, size + 8)
@@ -216,9 +220,10 @@ static func item_slot(item, size := 36, empty_icon := "", show_class := false) -
 		var ic := icon(Art.icon(str(item.get("icon", ""))), size)
 		p.add_child(ic)
 		p.self_modulate = Art.rarity_color(item.get("rarity", "")).lerp(Color.WHITE, 0.35)
-		if show_class and item.get("set") is Dictionary:
-			p.theme_type_variation = "SlotClass"   # theme: a frame with a white border, tinted here to the class color
-			p.self_modulate = Art.color(item.set.get("color"), Color.WHITE)
+		if rarity_frame:
+			p.theme_type_variation = "SlotRarity"   # theme: white border on a faint white fill, tinted here to the rarity color
+			p.self_modulate = Art.rarity_color(item.get("rarity", ""))
+		if rarity_frame and item.get("set") is Dictionary:
 			var ct := Art.class_icon(item.set.get("id", ""))
 			if ct:
 				var corner := icon(ct, 14)
@@ -439,13 +444,27 @@ static func stat_cols(stats: Dictionary) -> HFlowContainer:
 		h.add_child(v)
 	return h
 
-static func set_rows(sets: Dictionary) -> VBoxContainer:
+# compact: one line per class (icon, name, pieces); hover it for the tiers, active ones highlighted
+static func set_rows(sets: Dictionary, compact := false) -> VBoxContainer:
 	var v := vbox(2)
 	v.add_child(label("SET BONUSES", "Muted"))
 	var rows: Array = sets.get("rows", [])
 	if rows.is_empty():
 		v.add_child(label("No set pieces yet. Items with a class tag count toward that set.", "Muted", true))
 	for r in rows:
+		if compact:
+			var crow: HBoxContainer = preload("res://scripts/ui/tip_row.gd").new()
+			crow.add_theme_constant_override("separation", 6)
+			crow.add_child(class_tag(str(r.get("cls", "")), str(r.name), Art.color(r.color)))
+			crow.add_child(label("%d/%d" % [int(r.n), int(r.next)]))
+			var tl := [{ "text": "%s · %d worn · %s" % [r.name, int(r.n), r.status], "color": str(r.color) }]
+			for t in r.get("tiers", []):
+				tl.append({ "text": ("✓ " if t.get("on", false) else "· ") + str(t.get("label", "")) + ": " + str(t.get("text", "")), "tone": "up" if t.get("on", false) else "hint" })
+			crow.lines = tl
+			crow.tooltip_text = " "
+			crow.mouse_filter = Control.MOUSE_FILTER_STOP
+			v.add_child(crow)
+			continue
 		var row := hbox(6)
 		row.add_child(class_tag(str(r.get("cls", "")), str(r.name), Art.color(r.color)))
 		row.add_child(label("%d/%d" % [int(r.n), int(r.next)]))
@@ -458,36 +477,23 @@ static func set_rows(sets: Dictionary) -> VBoxContainer:
 		for hy in Game.view.get("setGuide", {}).get("hybrids", []):
 			if str(hy.name) == str(sets.hybrid.name):
 				key = str(hy.get("key", ""))
-		var hrow := hybrid_tag(key, str(sets.hybrid.name))
+		var hrow: HBoxContainer = preload("res://scripts/ui/tip_row.gd").new()
+		hrow.add_theme_constant_override("separation", 6)
+		hrow.add_child(hybrid_tag(key, str(sets.hybrid.name)))
 		hrow.add_child(label("hybrid active", "Muted"))
 		v.add_child(hrow)
-		v.add_child(label(str(sets.hybrid.text), "", true, Art.UP))
+		if compact:
+			hrow.lines = [{ "text": str(sets.hybrid.name) + " (hybrid)", "color": Art.hybrid_color(key).to_html(false) }, { "text": str(sets.hybrid.text), "tone": "up" }]
+			hrow.tooltip_text = " "
+			hrow.mouse_filter = Control.MOUSE_FILTER_STOP
+		else:
+			v.add_child(label(str(sets.hybrid.text), "", true, Art.UP))
 	return v
 
 # One set tier: active ones in full color, the rest greyed out
 static func tier_line(t: Dictionary) -> Label:
 	var on: bool = t.get("on", false)
 	return label(("✓ " if on else "· ") + str(t.get("label", "")) + ": " + str(t.get("text", "")), "" if on else "Muted", true, Art.UP if on else null)
-
-# One relic you own: icon (hover for its card), name and count; the whole row's tooltip is the relic's text
-static func relic_line(r: Dictionary) -> HBoxContainer:
-	var row := hbox(6)
-	row.add_child(item_slot(r, 22))
-	var nm := label(r.get("name", ""), "", false, Art.color(r.get("color"), Art.TEXT))
-	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	nm.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	nm.clip_text = true
-	row.add_child(nm)
-	var n := label("x%d" % int(r.get("count", 1)), "Muted")
-	n.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(n)
-	var tip := [str(r.get("name", ""))]
-	for ln in r.get("lines", []):
-		tip.append(str(ln.get("text", "")) if ln is Dictionary else str(ln))
-	row.tooltip_text = "
-".join(tip)
-	row.mouse_filter = Control.MOUSE_FILTER_STOP
-	return row
 
 # A hero drawn like in fights: class look, tint, weapon in hand
 static func hero_preview(look: Dictionary, scale := 3) -> Control:

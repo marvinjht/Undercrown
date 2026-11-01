@@ -36,11 +36,11 @@ func _init() -> void:
 	t.set_stylebox("panel", "Card", box("res://art/ui/card.png", 8, 6))
 	t.set_type_variation("Slot", "PanelContainer")
 	t.set_stylebox("panel", "Slot", box("res://art/ui/button_ghost.png", 8, 2))
-	# A gear slot holding class gear: white border, tinted to the class color in code (Kit.item_slot)
-	t.set_type_variation("SlotClass", "PanelContainer")
-	var sc := flat(Color("#524540"), Color.WHITE, 2)
+	# A gear slot: white border on a faint white fill, tinted to the item's rarity color in code (Kit.item_slot)
+	t.set_type_variation("SlotRarity", "PanelContainer")
+	var sc := flat(Color(1, 1, 1, 0.14), Color.WHITE, 2)
 	sc.set_content_margin_all(4)
-	t.set_stylebox("panel", "SlotClass", sc)
+	t.set_stylebox("panel", "SlotRarity", sc)
 	# Buttons
 	for kind in ["Button", "Primary", "Ghost"]:
 		if kind != "Button":

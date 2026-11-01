@@ -362,7 +362,7 @@ window.G = window.G || {};
         return { title: 'Duel', lede: `Everyone still in is paired up. ${opp.ghost ? `You're the odd one out, so you face a ghost: a half-strength copy of ${opp.of.name}. Losing to it still costs a heart.` : `You face ${opp.hero.name}. The loser loses a heart.`} Both of you fight at full health. Win and you go back to the health you had before; the loser comes back at full. Past one minute, both lose a heart.`,
           notes: [line('You can drink potions and elixirs now, before the fight. Not once it starts.', 'hint')],
           sections: [{ kind: 'opponent', opponent: opponentView(opp) },
-            d.goSent ? { kind: 'timer', label: 'Locked in. The fight is starting…' } : { kind: 'timer', label: 'The fight starts for both of you in', ends: s.roundEnds || 0, buttons: [btn('Fight now', 'startDuelFight', [], { style: 'primary' })] }] };
+            d.goSent ? { kind: 'timer', label: 'Locked in. The fight is starting…' } : { kind: 'timer', label: 'The fight starts for both of you in', ends: s.roundEnds || 0 }] };
       }
       case 'battle': {
         const b = s.battle;

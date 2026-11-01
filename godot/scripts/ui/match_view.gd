@@ -19,6 +19,7 @@ var clock_bar: ProgressBar
 var bag_open := -1
 var shown: Dictionary = {}
 var _last_phase := ""
+var _blood_seq := -1   # the last blood sale we showed a "+N gold" pop-up for
 
 func _ready() -> void:
 	Game.changed.connect(_on_changed)
@@ -289,8 +290,14 @@ func _build_side() -> void:
 	var bag: Dictionary = V.get("bag", {})
 	var items: Array = bag.get("items", [])
 	# Bag
-	var bv := _section("Bag", "%d gold · %d/%d" % [int(me.get("gold", 0)), items.size(), int(bag.get("size", 6))])
-	bv.add_child(Kit.label("New gear goes straight onto an empty slot; anything else lands here. Click an item to use, equip or sell it.", "Muted", true))
+	var bv := _section("Bag")
+	var bh: HBoxContainer = bv.get_child(0)
+	bh.add_child(Kit.icon(Art.icon("coin"), 14))
+	bh.add_child(Kit.label(str(int(me.get("gold", 0))), "", false, Art.GOLD))
+	bh.add_child(Kit.label("· %d/%d" % [items.size(), int(bag.get("size", 6))], "Muted"))
+	bh.lines = [{ "text": "New gear goes straight onto an empty slot; anything else lands here. Click an item to use, equip or sell it." }]
+	bh.tooltip_text = " "
+	bh.mouse_filter = Control.MOUSE_FILTER_STOP
 	var grid := GridContainer.new()
 	grid.columns = 3
 	grid.add_theme_constant_override("h_separation", 6)
@@ -354,8 +361,11 @@ func _build_side() -> void:
 	var rv := _section("Relics", str(relics.size()) if relics.size() else "")
 	if relics.is_empty():
 		rv.add_child(Kit.label("No relics yet. They drop at Plunder, from elites and bosses, and in vaults.", "Muted", true))
-	for r in relics:
-		rv.add_child(Kit.relic_line(r))
+	if relics.size():
+		var rf := Kit.flow(4)
+		for r in relics:
+			rf.add_child(Kit.item_slot(r, 22))   # hover: name, copies and what it does
+		rv.add_child(rf)
 	# Stats
 	var chips := []
 	if me.get("spec") is Dictionary:
@@ -365,12 +375,14 @@ func _build_side() -> void:
 	var sv := _section("Stats", " · ".join(chips))
 	var tip := []
 	if me.get("spec") is Dictionary:
-		tip.append({ "text": str(me.spec.name) + ": " + str(me.spec.desc), "tone": "head", "short": str(me.spec.name) + ": " + str(me.spec.get("short", me.spec.desc)) })
+		tip.append({ "text": str(me.spec.name), "color": Art.GOLD.to_html(false) })
+		tip.append({ "text": str(me.spec.desc), "short": str(me.spec.get("short", me.spec.desc)) })
 		for n in me.spec.get("nodes", []):
-			tip.append({ "text": str(n.name) + ": " + str(n.desc), "tone": "", "short": str(n.name) + ": " + str(n.get("short", n.desc)) })
+			tip.append({ "text": str(n.name) + ": " + str(n.desc), "tone": "hint", "short": str(n.name) + ": " + str(n.get("short", n.desc)) })
 	if me.get("gem") is Dictionary:
-		var full := str(me.gem.name) + ". Upside: " + str(me.gem.up) + " Cost: " + str(me.gem.cost)
-		tip.append({ "text": full, "tone": "head", "short": (str(me.gem.name) + ": " + str(me.gem.short)) if me.gem.get("short") else full })
+		var full := "Upside: " + str(me.gem.up) + " Cost: " + str(me.gem.cost)
+		tip.append({ "text": str(me.gem.name), "color": str(me.gem.get("color", "#f2c14a")) })
+		tip.append({ "text": full, "short": str(me.gem.short) if me.gem.get("short") else full })
 	if tip.size():
 		var head: Control = sv.get_child(0)
 		head.lines = tip
@@ -378,7 +390,7 @@ func _build_side() -> void:
 		head.mouse_filter = Control.MOUSE_FILTER_STOP
 	var sc := Kit.stat_cols(me.get("stats", {}))
 	sv.add_child(sc)
-	sv.add_child(Kit.set_rows(me.get("sets", {})))
+	sv.add_child(Kit.set_rows(me.get("sets", {}), true))
 	var guide := Button.new()
 	guide.text = "Set guide"
 	guide.theme_type_variation = "Ghost"
@@ -448,6 +460,31 @@ func _build_stage() -> void:
 		_section_view(sec)
 	await get_tree().process_frame
 	stage_scroll.scroll_vertical = keep_scroll
+	_blood_pop(sc)
+
+# Merchant: a "+N gold" that floats up from the sell-blood button and fades, once per sale (bloodPop.seq)
+func _blood_pop(sc: Dictionary) -> void:
+	var bp = sc.get("bloodPop")
+	if not (bp is Dictionary) or int(bp.get("seq", 0)) == _blood_seq:
+		return
+	_blood_seq = int(bp.get("seq", 0))
+	var at := Vector2(stage.get_global_rect().get_center().x, stage.get_global_rect().position.y + 120)
+	for b in stage.find_children("*", "Button", true, false):
+		var args: Array = b.get_meta("args", [])
+		if str(b.get_meta("act", "")) == "shopBuy" and args.size() and str(args[0]) == "blood":
+			at = b.get_global_rect().get_center() + Vector2(0, -18)
+	var l := Kit.label("+%d gold" % int(bp.get("gold", 0)), "Heading", false, Art.GOLD)
+	l.add_theme_font_size_override("font_size", 16)
+	l.add_theme_constant_override("outline_size", 4)
+	l.top_level = true
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(l)
+	l.reset_size()
+	l.global_position = at - l.size / 2
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(l, "global_position:y", l.global_position.y - 44, 1.1).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tw.tween_property(l, "modulate:a", 0.0, 1.1).set_ease(Tween.EASE_IN)
+	tw.chain().tween_callback(l.queue_free)
 
 func _countdown(prefix: String, ends: float) -> Label:
 	var l := Kit.center(Kit.label(prefix, "Heading"))
