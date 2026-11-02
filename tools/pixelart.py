@@ -384,6 +384,53 @@ def icon_scrap(k):
     s.rect(9, 3, 3, 2, c)                                      # a chip
     return s.finish()
 
+# Full-size doors for the stage (doors/<kind>.png, 48x64, drawn at 2x): a stone arch, and a door leaf and emblem
+# per kind. doors/open.png is the arch with the doorway open (used while you walk through).
+STONE, STONE_D, DOORWAY = hexc('#6b5f55'), hexc('#4a4038'), hexc('#120c0a')
+def door_base(s):
+    s.ellipse(24, 18, 21, 16, STONE); s.rect(3, 18, 42, 46, STONE)
+    for y in range(22, 64, 8):                       # a few mortar lines on the arch
+        s.line(3, y, 8, y, STONE_D); s.line(40, y, 44, y, STONE_D)
+    s.ellipse(24, 19, 15, 12, DOORWAY); s.rect(9, 19, 30, 45, DOORWAY)
+def door_leaf(s, c, planks=True):
+    s.ellipse(24, 20, 13, 10, c); s.rect(11, 20, 26, 44, c)
+    if planks:
+        for x in range(16, 36, 6): s.line(x, 12, x, 63, mix(c, -0.3))
+def door_ring(s, x=31, y=40): s.ellipse(x, y, 1.5, 1.5, GOLD)
+def sign(s, draw):                                   # a little hanging sign on a bracket, top right
+    s.line(30, 6, 44, 6, DSTEEL); s.line(34, 6, 34, 9, DSTEEL); s.line(42, 6, 42, 9, DSTEEL)
+    s.rect(31, 9, 13, 10, hexc('#8a6a3a')); draw(s)
+WOOD_D = hexc('#5a3a26')
+DOOR_DRAW = {
+    'fight':    lambda s: [[s.rect(x, 9, 2, 55, STEEL) for x in range(12, 37, 5)], s.rect(10, 30, 28, 2, DSTEEL), s.rect(10, 48, 28, 2, DSTEEL)],
+    'elite':    lambda s: [[s.rect(x, 9, 2, 55, STEEL) for x in range(12, 37, 5)], s.rect(10, 30, 28, 2, DSTEEL),
+                           s.rect(18, 12, 12, 14, hexc('#8a2a24')), s.ellipse(24, 18, 3.5, 3, hexc('#e6e0d0')), s.px(23, 18, OUT), s.px(25, 18, OUT)],
+    'boss':     lambda s: [door_leaf(s, hexc('#5a1e1a')), s.line(24, 10, 24, 63, OUT), s.poly([(17, 22), (17, 15), (20, 18), (24, 12), (28, 18), (31, 15), (31, 22)], GOLD),
+                           s.line(14, 36, 20, 44, hexc('#ff5a2a')), s.line(34, 40, 29, 50, hexc('#ff5a2a')), door_ring(s, 21, 40), door_ring(s, 27, 40)],
+    'armory':   lambda s: [door_leaf(s, WOOD), door_ring(s), s.line(17, 14, 31, 28, STEEL, 2), s.line(31, 14, 17, 28, STEEL, 2)],
+    'trash':    lambda s: [door_leaf(s, WOOD_D), s.rect(17, 24, 6, 14, DOORWAY), s.rect(26, 38, 5, 10, DOORWAY),
+                           s.ellipse(14, 61, 6, 3, hexc('#7a6a5a')), s.ellipse(34, 62, 7, 3, hexc('#6a5a4a')), s.rect(22, 58, 4, 4, DSTEEL)],
+    'vault':    lambda s: [door_leaf(s, DSTEEL, planks=False), s.ellipse(24, 36, 11, 11, STEEL), s.ellipse(24, 36, 7, 7, DSTEEL), s.ellipse(24, 36, 2.5, 2.5, GOLD),
+                           [s.px(24 + 9 * math.cos(a), 36 + 9 * math.sin(a), OUT) for a in [i * math.pi / 4 for i in range(8)]]],
+    'rest':     lambda s: [s.ellipse(24, 56, 10, 4, hexc('#3a2418')), s.poly([(24, 38), (30, 54), (24, 58), (18, 54)], hexc('#ff8a2a')),
+                           s.ellipse(24, 54, 3, 3, hexc('#ffe08a')), s.line(17, 59, 31, 57, WOOD, 2)],
+    'mystery':  lambda s: [door_leaf(s, hexc('#4a2a6a')), s.ellipse(24, 30, 5, 4, hexc('#c9a0ff')), s.rect(25, 30, 2, 3, hexc('#4a2a6a')),
+                           s.rect(23, 34, 2, 4, hexc('#c9a0ff')), s.rect(23, 40, 2, 2, hexc('#c9a0ff'))],
+    'venom':    lambda s: [door_leaf(s, hexc('#2f4a26')), s.ellipse(24, 30, 5, 6, hexc('#5cc35a')), [s.line(x, 12, x, 12 + h, hexc('#5cc35a')) for x, h in ((14, 8), (20, 5), (31, 10), (35, 6))]],
+    'purify':   lambda s: [s.ellipse(24, 58, 12, 4, hexc('#3a7ab8')), s.ellipse(24, 57, 8, 2, hexc('#7fd0ff')), s.rect(23, 14, 2, 40, hexc('#5fd0ff', 140)), s.px(20, 30, hexc('#ffffff'))],
+    'shop':     lambda s: [door_leaf(s, WOOD), s.rect(10, 12, 28, 2, GOLD), s.rect(17, 30, 14, 10, hexc('#9a5a32')), s.rect(17, 29, 14, 3, hexc('#7a4a2a')), s.rect(23, 32, 2, 3, GOLD)],
+    'merchant': lambda s: [door_leaf(s, WOOD), door_ring(s, 15, 40), sign(s, lambda t: [t.ellipse(37, 14, 3, 3, GOLD), t.rect(36, 13, 2, 3, hexc('#a07a2a'))])],
+    'forge':    lambda s: [door_leaf(s, DSTEEL, planks=False), s.rect(14, 34, 20, 3, hexc('#ff8a2a')), s.rect(16, 35, 16, 1, hexc('#ffe08a')),
+                           sign(s, lambda t: [t.rect(33, 13, 9, 3, DSTEEL), t.rect(35, 16, 5, 2, DSTEEL)])],
+    'trainer':  lambda s: [door_leaf(s, WOOD), door_ring(s, 15, 40), sign(s, lambda t: [t.rect(33, 11, 9, 7, hexc('#efe6d8')), t.line(37, 11, 37, 17, OUT)])],
+    'wager':    lambda s: [s.poly([(10, 12), (24, 12), (20, 63), (10, 63)], hexc('#8a1e2a')), s.poly([(24, 12), (38, 12), (38, 63), (28, 63)], hexc('#a42636')),
+                           s.rect(10, 12, 28, 3, GOLD), s.rect(20, 44, 8, 8, hexc('#efe6d8')), s.px(22, 46, OUT), s.px(25, 49, OUT), s.px(24, 48, OUT)],
+}
+def door_sprite(kind):
+    s = Spr(48, 64); door_base(s)
+    if kind != 'open': DOOR_DRAW[kind](s)
+    return s.finish(shade=True, outline=True)
+
 def ui_bits():
     out = {}
     s = Spr(16); s.ellipse(8, 8, 5, 5, GOLD); s.rect(7, 5, 2, 6, hexc('#a07a2a')); out['coin'] = s.finish()
@@ -405,6 +452,18 @@ def frame(fill, edge, light, size=16, b=4, notch=True):
     if notch:
         for (x, y) in ((0, 0), (size - 1, 0), (0, size - 1), (size - 1, size - 1)): s.px(x, y, CLEAR)
     return s
+def wall():   # the stage's back wall: a 32x32 brick tile
+    s = Spr(32); mortar = hexc('#1c1512')
+    s.rect(0, 0, 32, 32, mortar)
+    for row in range(4):
+        y = row * 8; off = 0 if row % 2 == 0 else 8
+        for col in range(-1, 3):
+            x = col * 16 + off
+            c = hexc('#3e322b') if (row + col) % 3 else hexc('#463831')
+            s.rect(x + 1, y + 1, 14, 6, c)
+            s.rect(x + 1, y + 1, 14, 1, mix(c, 0.12))
+    return s
+
 def floor():
     s = Spr(32); base = hexc('#2a221c')
     s.rect(0, 0, 32, 32, base)
@@ -433,6 +492,7 @@ def main():
     for k, sp in ui_bits().items(): sp.save(f'icons/{k}.png')
     for k in CLASS_DRAW: icon_class(k).save(f'icons/class_{k}.png')
     for k in SCRAP_COLOR: icon_scrap(k).save(f'icons/scrap_{k}.png')
+    for k in list(DOOR_DRAW) + ['open']: door_sprite(k).save(f'doors/{k}.png')
     for k in HYBRID_COLOR: icon_hybrid(k).save(f'icons/hybrid_{k.replace("+", "_")}.png')
     frame(hexc('#1f1915'), hexc('#0e0b09'), hexc('#3d322a')).save('ui/panel.png', 2)
     frame(hexc('#2a221c'), hexc('#0e0b09'), hexc('#4d3f33')).save('ui/card.png', 2)
@@ -441,7 +501,7 @@ def main():
     frame(hexc('#3a2412'), hexc('#0e0b09'), hexc('#7a4a22')).save('ui/button_pressed.png', 2)
     frame(hexc('#26201b'), hexc('#0e0b09'), hexc('#3a322b')).save('ui/button_disabled.png', 2)
     frame(hexc('#221c17'), hexc('#0e0b09'), hexc('#4d3f33')).save('ui/button_ghost.png', 2)
-    floor().save('ui/floor.png'); torch().save('ui/torch.png')
+    floor().save('ui/floor.png'); torch().save('ui/torch.png'); wall().save('ui/wall.png')
     print('art written to', os.path.normpath(ROOT))
 
 if __name__ == '__main__':

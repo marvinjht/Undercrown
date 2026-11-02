@@ -306,11 +306,33 @@ window.G = window.G || {};
     : line('Gear for an empty slot is equipped right away. Anything else goes into your bag, where you hold Equip to swap it in.', 'hint'));
   const nameOf = e => (e.ghost ? e.name : e.hero.isPlayer ? 'You' : e.hero.name);
 
+  // A door's plaque: a few words always visible above it on the Godot stage ("Fight · Wolf Pack ×3", "Study · +15 XP")
+  function doorPlaque(d) {
+    const C = CFG(), D = G.Dungeon;
+    switch (d.type) {
+      case 'fight': return `Fight · ${D.monsterName(d.monster, 'fight')}`;
+      case 'elite': return `Elite · ${D.monsterName(d.monster, 'elite', d.trait)}`;
+      case 'boss': return `Boss · ${d.monster.name}`;
+      case 'wager': return 'Wager · bet gold';
+      case 'trash': return 'Trash · gold and junk';
+      case 'vault': return 'Vault · pick 1 of 3';
+      case 'rest': return `Campfire · +${C.restHeal} health`;
+      case 'mystery': return 'Unknown';
+      case 'venom': return `Venom · item, +${C.poison.venomStacks} poison`;
+      case 'purify': return 'Spring · cures poison';
+      case 'shop': return 'Plunder';
+      case 'merchant': return 'Merchant';
+      case 'forge': return 'Forge';
+      case 'trainer': return `Study · +${C.xp.trainer} XP`;
+      case 'armory': return 'Armory · pick a weapon';
+    }
+    return D.doorInfo(d).title;
+  }
   function doorsScreen(s, p) {
     const one = s.doors.length === 1, t = s.doors[0].type;
     const doors = s.doors.map((d, i) => {
       const info = G.Dungeon.doorInfo(d), dg = d.danger;
-      return { i, type: d.type, icon: 'door_' + d.type, title: info.title, text: info.text, short: info.short && info.short !== info.text ? info.short : null, monster: d.monster ? d.monster.id : null,
+      return { i, type: d.type, icon: 'door_' + d.type, title: info.title, plaque: doorPlaque(d), text: info.text, short: info.short && info.short !== info.text ? info.short : null, monster: d.monster ? d.monster.id : null,
         threat: dg ? (p.gem === 'janus' ? { estimate: true, level: dg.level, avgLoss: dg.avgLoss, winPct: dg.winPct } : { skulls: dg.skulls || 1 }) : null,
         button: btn(info.title, 'chooseDoor', [i], { style: 'primary' }) };
     });

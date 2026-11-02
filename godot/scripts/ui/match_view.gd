@@ -10,6 +10,7 @@ extends MarginContainer
 @onready var stage_scroll: ScrollContainer = %StageScroll
 
 var arena: Control
+var stage_view: StageView      # the center column: the persistent stage (rooms, doors, fights)
 var battle_key := ""
 var _last_res = null            # the fight result on screen (a new result object = a new fight)
 var _battle_n := 0
@@ -37,6 +38,13 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(func(): _place_watch(_watch_pos))   # a new window size or UI scale: keep it on screen
 	watch_arena = preload("res://scripts/arena.gd").new()
 	watch_arena.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# The stage takes the center column; the card layout (StageScroll) becomes its fallback, drawn over it
+	stage_view = preload("res://scripts/stage/stage_view.gd").new()
+	var cols := stage_scroll.get_parent()
+	var at := stage_scroll.get_index()
+	cols.add_child(stage_view)
+	cols.move_child(stage_view, at)
+	stage_view.setup(self, stage_scroll)
 
 func _on_changed(_what: String) -> void:
 	if Game.status != "match" or Game.view.is_empty():
@@ -275,30 +283,8 @@ func _build_left() -> void:
 		v.add_child(card)
 	p.add_child(v)
 	left.add_child(p)
-	# You
-	var me: Dictionary = V.get("me", {})
-	var you := Kit.panel("")
-	var yv := Kit.vbox(4)
-	var yr := Kit.hbox(6)
-	var yl := Kit.label("You", "Heading")
-	yl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	yr.add_child(yl)
-	yr.add_child(Kit.label("Lv %d" % int(me.get("level", 1)), "Heading"))
-	yv.add_child(yr)
-	yv.add_child(Kit.vitals(me))
-	var gold := Kit.hbox(4)
-	gold.add_child(Kit.icon(Art.icon("coin"), 14))
-	gold.add_child(Kit.label(str(int(me.get("gold", 0))), "", false, Art.GOLD))
-	yv.add_child(gold)
-	var sub := []
-	if me.get("spec") is Dictionary:
-		sub.append(me.spec.name)
-	if str(me.get("build", "")) != "No set bonus yet":
-		sub.append(me.get("build", ""))
-	if sub.size():
-		yv.add_child(Kit.set_text(" · ".join(sub), Art.GOLD))
-	you.add_child(yv)
-	left.add_child(you)
+	# You: your character panel (full column width)
+	left.add_child(Kit.character_panel(V.get("me", {})))
 
 # Crafting (CONFIG.scrap): pick the scrap, then Weapon or Armor, then exactly what. One craft spends `cost` scraps.
 func _craft_box(bv: VBoxContainer, scrap: Dictionary, locked: bool) -> void:
@@ -577,6 +563,9 @@ func _build_stage() -> void:
 	Kit.clear(stage)
 	_target = stage
 	timers = timers.filter(func(tm): return is_instance_valid(tm.label) and is_instance_valid(watch_win) and watch_win.is_ancestor_of(tm.label))
+	if stage_view.present(sc):   # a stage scene draws this screen (doors, the fight): no cards
+		_blood_pop(sc)
+		return
 	if sc.get("notice"):
 		var np := Kit.panel("Card")
 		np.add_child(Kit.center(Kit.label(sc.notice, "", true, Art.GOLD)))

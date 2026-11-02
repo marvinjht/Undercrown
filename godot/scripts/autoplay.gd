@@ -1,5 +1,6 @@
 # Testing aid: run with  -- --auto [--shots=DIR] [--server=URL]  and the client plays by itself
 # (solo against bots), pressing the first enabled button of each screen and saving a screenshot of each new screen.
+# Doors are picked the way a player does on the stage: a number key, then Enter. --size=1280x720 sets the window size.
 extends Node
 
 var shots_dir := ""
@@ -12,6 +13,10 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--shots="):
 			shots_dir = a.substr(8)
+		if a.begins_with("--size="):
+			var wh := a.substr(7).split("x")
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+			DisplayServer.window_set_size(Vector2i(int(wh[0]), int(wh[1])))
 	if shots_dir != "":
 		DirAccess.make_dir_recursive_absolute(shots_dir)
 
@@ -65,6 +70,16 @@ func _process(delta: float) -> void:
 				best_threat = th
 				best_door = d
 	if best_door:
+		# On the stage: press the door's number, then Enter (what a player does with the keyboard)
+		var mv = get_tree().root.find_child("Match", true, false)
+		var scene = mv.stage_view.scene if mv and mv.stage_view else null
+		if scene and scene.has_method("confirm"):
+			if not scene.gone:
+				_key(KEY_1 + int(best_door.get("i", 0)))
+				await get_tree().create_timer(0.35).timeout
+				if is_instance_valid(scene) and not scene.gone:
+					_key(KEY_ENTER)
+			return
 		btns.append(best_door.button)
 	for sec in sc.get("sections", []):
 		for c in sec.get("cards", []):
@@ -85,3 +100,10 @@ func _shot(name: String) -> void:
 	shot_count += 1
 	var img := get_viewport().get_texture().get_image()
 	img.save_png("%s/%02d_%s.png" % [shots_dir, shot_count, name])
+
+func _key(code: Key) -> void:
+	for down in [true, false]:
+		var k := InputEventKey.new()
+		k.keycode = code
+		k.pressed = down
+		get_viewport().push_input(k)

@@ -622,6 +622,42 @@ static func character(me: Dictionary) -> PanelContainer:
 	p.add_child(v)
 	return p
 
+# Your character, in the left column: your hero drawn large with what you wear (as in fights), level, hearts, health,
+# XP, gold, spec and set bonuses. Rebuilt whenever any of it changes.
+static func character_panel(me: Dictionary) -> PanelContainer:
+	var p := panel("")
+	var v := vbox(4)
+	var head := hbox(6)
+	var you := label("You", "Heading")
+	you.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(you)
+	head.add_child(label("Lv %d" % int(me.get("level", 1)), "Heading"))
+	v.add_child(head)
+	var stand := PanelContainer.new()   # the hero, on a bit of floor
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color("#1d1713")
+	sb.border_color = Color("#3d322a")
+	sb.set_border_width_all(1)
+	sb.set_content_margin_all(6)
+	stand.add_theme_stylebox_override("panel", sb)
+	var pic := hero_preview(me.get("look", {}), 4)
+	pic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	stand.add_child(pic)
+	v.add_child(stand)
+	v.add_child(vitals(me, true))
+	var gold := hbox(4)
+	gold.alignment = BoxContainer.ALIGNMENT_CENTER
+	gold.add_child(icon(Art.icon("coin"), 14))
+	gold.add_child(label(str(int(me.get("gold", 0))), "", false, Art.GOLD))
+	v.add_child(gold)
+	var spec := str(me.spec.name) if me.get("spec") is Dictionary else str(me.get("specHint", ""))
+	if me.get("gem") is Dictionary:
+		spec += " · " + str(me.gem.name)
+	v.add_child(center(label(spec, "Muted" if not (me.get("spec") is Dictionary) else "", true, null if not (me.get("spec") is Dictionary) else Art.GOLD)))
+	v.add_child(set_text(str(me.get("build", "No set bonus yet")), Art.GOLD if str(me.get("build", "")) != "No set bonus yet" else Art.MUTED, true))
+	p.add_child(v)
+	return p
+
 static func vitals(me: Dictionary, centered := false) -> VBoxContainer:
 	var v := vbox(3)
 	var top := hbox(6)
