@@ -362,7 +362,7 @@ window.G = window.G || {};
         if (m.id === 'cache') b.push(btn('Take the gold', 'mysteryAct', ['cache'], { style: 'primary' }));
         if (m.id === 'ambush') b.push(btn('Fight', 'mysteryAct', ['ambush'], { style: 'primary' }));
         if (m.id === 'shrine') { const cost = p.gem === 'stone' ? 1 : C.shrineCost; b.push(btn(`Offer ${cost} health for an uncommon or better item`, 'mysteryAct', ['shrine'], { enabled: p.hp > cost, style: 'primary' }), btn('Walk away', 'mysteryAct', ['leave'], { style: 'ghost' })); }
-        return { title: m.title, lede: m.text, sections: [{ kind: 'buttons', buttons: b }] };
+        return { title: m.title, mystery: m.id, lede: m.text, sections: [{ kind: 'buttons', buttons: b }] };
       }
       case 'wager': {
         const B = C.wager.bets, broke = p.gold < B[0];

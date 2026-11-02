@@ -462,6 +462,139 @@ def glow():             # a soft round glow, white (tinted in the game: red for 
             if d < 1: im.putpixel((x, y), (255, 255, 255, int(200 * (1 - d) ** 2)))
     return im
 
+# ---------------------------------------------------------------- NPCs (npcs/<name>.png)
+# Each NPC is a strip of 2 frames of 48x64 side by side (a breathing / blinking idle), drawn at 2x in the game,
+# facing left (toward the hero, who walks in from the left). Swap in commissioned art with the same layout.
+def save_strip(frames, rel):
+    path = os.path.join(ROOT, rel)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    img = Image.new('RGBA', (sum(f.w for f in frames), frames[0].h))
+    x = 0
+    for f in frames:
+        im = Image.new('RGBA', (f.w, f.h)); im.putdata([c for row in f.p for c in row]); img.paste(im, (x, 0)); x += f.w
+    img.save(path)
+
+def npc_brannoc(f):     # the smith: huge, bald, white goatee and brows, soot-stained apron, arms crossed, squinting
+    s = Spr(48, 64); up = 1 if f else 0
+    skin, shirt, apron, glove = hexc('#d29a72'), hexc('#2c2a30'), hexc('#7a4a2a'), hexc('#4a2e1a')
+    s.rect(11, 57, 11, 7, hexc('#2a1c14')); s.rect(26, 57, 11, 7, hexc('#2a1c14'))            # boots
+    s.rect(12, 45, 24, 13, hexc('#3a3330'))                                                      # trousers
+    s.rect(5, 21 - up, 38, 27 + up, shirt)                                                       # broad dark undershirt
+    s.ellipse(6, 25 - up, 4, 5, shirt); s.ellipse(42, 25 - up, 4, 5, shirt)                      # big shoulders
+    s.poly([(11, 23 - up), (37, 23 - up), (39, 54), (9, 54)], apron)                             # leather apron
+    for x, y in ((14, 44), (31, 48), (22, 50), (34, 40)): s.ellipse(x, y, 2, 1.5, mix(apron, -0.45))   # soot
+    if f < 3:   # arms crossed
+        s.rect(7, 31 - up, 34, 9, skin); s.line(8, 35 - up, 40, 35 - up, mix(skin, -0.25))     # thick crossed forearms
+        s.rect(3, 30 - up, 7, 11, glove); s.rect(38, 30 - up, 7, 11, glove)                      # heavy gloves
+    else:       # working: one arm hangs, the other swings the hammer (3: raised, 4: struck on the anvil, to his right)
+        s.rect(38, 27, 6, 14, skin); s.rect(38, 40, 7, 7, glove)
+        if f == 3:
+            s.line(6, 24, 4, 10, skin); s.line(7, 24, 5, 10, skin); s.line(8, 24, 6, 10, skin); s.rect(2, 6, 7, 6, glove)
+            s.rect(4, 0, 2, 7, WOOD); s.rect(0, 0, 10, 4, DSTEEL)
+        else:
+            s.line(6, 25, 2, 40, skin); s.line(7, 25, 3, 40, skin); s.line(8, 25, 4, 40, skin); s.rect(0, 38, 6, 6, glove)
+            s.rect(0, 43, 2, 6, WOOD); s.rect(0, 47, 6, 5, DSTEEL)
+    s.rect(19, 17 - up, 10, 5, skin)                                                             # neck
+    s.ellipse(24, 11 - up, 8.5, 9, skin); s.px(21, 4 - up, mix(skin, 0.35)); s.px(22, 4 - up, mix(skin, 0.35))   # bald head (shine)
+    w = hexc('#f2efe8')
+    if f == 2:   # a frown: brows down to the nose, mouth turned down
+        s.line(16, 7, 22, 9, w); s.line(16, 8, 22, 10, w); s.line(25, 9, 31, 7, w); s.line(25, 10, 31, 8, w)
+        s.line(18, 11, 21, 11, OUT); s.line(26, 11, 29, 11, OUT); s.px(24, 13, mix(skin, -0.3))
+        s.line(21, 16, 26, 16, mix(skin, -0.45)); s.px(20, 17, mix(skin, -0.45)); s.px(27, 17, mix(skin, -0.45))
+        s.rect(21, 17, 7, 4, w); s.rect(23, 21, 3, 2, w)
+        return s.finish()
+    s.rect(16, 8 - up, 7, 2, w); s.rect(25, 8 - up, 7, 2, w)                                     # thick white brows
+    if f == 1: s.line(18, 11 - up, 21, 11 - up, OUT); s.line(26, 11 - up, 29, 11 - up, OUT)    # blink
+    else: s.line(18, 11 - up, 21, 11 - up, OUT); s.px(27, 11 - up, OUT); s.px(28, 11 - up, OUT)   # skeptical squint
+    s.px(24, 13 - up, mix(skin, -0.3)); s.line(21, 16 - up, 26, 16 - up, mix(skin, -0.45))     # nose, flat mouth
+    s.rect(21, 17 - up, 7, 4, w); s.rect(23, 21 - up, 3, 2, w)                                   # short white goatee
+    return s.finish()
+
+def npc_quill(f):       # the merchant: tall, thin, slicked dark hair, sly smile; black doublet, white trim, silver key
+    s = Spr(48, 64)
+    blk, wht, slv, skin = hexc('#16151a'), hexc('#efedea'), hexc('#c9cdd6'), hexc('#ead2bc')
+    s.rect(18, 59, 5, 5, blk); s.rect(25, 59, 5, 5, blk)                                         # shoes
+    s.rect(19, 43, 4, 17, blk); s.rect(25, 43, 4, 17, blk)                                       # thin legs
+    s.rect(16, 19, 16, 27, blk)                                                                  # doublet
+    s.line(24, 21, 24, 44, wht); s.rect(16, 44, 16, 2, wht); s.line(16, 19, 16, 45, wht); s.line(31, 19, 31, 45, wht)   # white trim
+    s.rect(13, 21, 4, 17, blk); s.rect(31, 21, 4, 17, blk)                                       # sleeves
+    s.rect(13, 37, 5, 2, wht); s.rect(30, 37, 5, 2, wht)                                         # white cuffs
+    s.ellipse(24, 40, 5, 3, blk)                                                                 # gloved hands, clasped
+    s.line(19, 21, 24, 29, slv); s.line(29, 21, 24, 29, slv); s.rect(23, 30, 2, 3, slv); s.px(25, 32, slv)   # chain and key
+    s.rect(18, 15, 12, 5, wht)                                                                   # white high collar
+    s.ellipse(24, 9, 5, 7.5, skin)                                                               # narrow face
+    s.ellipse(24, 4, 5.5, 3.5, blk); s.rect(19, 4, 2, 5, blk); s.rect(27, 4, 2, 4, blk); s.px(22, 2, hexc('#55555f'))   # slicked hair
+    if f == 1: s.line(21, 9, 22, 9, OUT); s.line(26, 9, 27, 9, OUT)                             # blink
+    else: s.px(22, 9, OUT); s.px(26, 9, OUT)
+    if f == 2: s.line(21, 13, 26, 13, OUT); s.px(20, 14, OUT); s.px(27, 14, OUT); s.line(20, 7, 23, 8, OUT); s.line(25, 8, 28, 7, OUT)   # a frown
+    else: s.px(24, 11, mix(skin, -0.25)); s.line(21, 13, 24, 14, OUT); s.px(25, 13, OUT); s.px(26, 12, OUT)   # sly smile
+    return s.finish()
+
+def npc_dealer(f):      # the dealer: a hooded figure; only a grin and a gold tooth show under the hood
+    s = Spr(48, 64)
+    hood, robe, dark = hexc('#2b1f33'), hexc('#241a2b'), hexc('#0b080d')
+    s.rect(7, 42, 34, 22, robe)
+    s.poly([(24, 4), (39, 26), (38, 46), (10, 46), (9, 26)], hood)
+    s.ellipse(24, 27, 9, 11, dark)
+    if f == 0: s.px(20, 23, hexc('#c43a2a')); s.px(28, 23, hexc('#c43a2a'))                    # eyes in the dark (blink on frame 2)
+    s.rect(18, 31, 12, 2, hexc('#efe6d8')); s.line(18, 30, 29, 30, OUT); s.px(25, 31, GOLD if f == 0 else hexc('#ffe9a0'))   # grin, gold tooth
+    s.line(10, 30, 16, 46, mix(hood, 0.15)); s.line(38, 30, 32, 46, mix(hood, 0.15))
+    return s.finish()
+
+# The mystery room's object, by what the mystery is (present.js sends screen.mystery)
+def npc_mystery(kind, f):
+    s = Spr(48, 64); glow = f == 1
+    if kind == 'shrine':     # an old blood altar, runes glowing
+        s.rect(8, 38, 32, 24, STONE); s.rect(6, 36, 36, 4, STONE_D); s.rect(10, 60, 28, 4, STONE_D)
+        s.ellipse(24, 34, 9, 4, DSTEEL); s.ellipse(24, 33, 6, 2, hexc('#c4241a'))
+        for x in (13, 21, 29, 35): s.rect(x, 44, 2, 6, hexc('#ff4a3a' if glow else '#a8241a'))
+    elif kind == 'spring':   # a stone basin of clear, glowing water
+        s.ellipse(24, 52, 18, 8, STONE); s.ellipse(24, 50, 14, 5, hexc('#5fd0ff' if glow else '#3a90c8')); s.rect(21, 30, 6, 18, STONE_D)
+        s.ellipse(24, 28, 8, 3, STONE); s.px(19, 49, hexc('#ffffff')); s.px(28, 51, hexc('#ffffff')) if glow else None
+    elif kind == 'cache':    # a fallen adventurer's pack, coins spilling out, a broken sword beside it
+        lea, lea_d = hexc('#7a5230'), hexc('#5a3a20')
+        s.ellipse(22, 51, 13, 10, lea); s.ellipse(22, 43, 11, 5, lea_d); s.rect(12, 40, 20, 4, lea_d)
+        s.rect(16, 48, 12, 7, mix(lea, 0.12)); s.rect(21, 50, 2, 3, GOLD); s.line(12, 44, 10, 58, lea_d); s.line(32, 44, 34, 58, lea_d)
+        for x, y in ((35, 58), (39, 60), (31, 61), (43, 59), (37, 62)): s.ellipse(x, y, 2.5, 1.5, GOLD)
+        s.line(4, 61, 14, 56, STEEL); s.line(4, 62, 14, 57, DSTEEL); s.rect(14, 54, 2, 5, WOOD)
+        if glow: s.px(38, 59, hexc('#ffffff')); s.px(22, 50, hexc('#ffffff'))
+    else:                    # ambush: something hanging from the ceiling on a thread, eyes glowing; its shadow below
+        s.line(24, 0, 24, 22, hexc('#c8c8d0')); s.ellipse(24, 30, 9, 8, hexc('#2a2230')); s.ellipse(24, 24, 6, 4, hexc('#3a3040'))
+        for dx in (-1, 1):
+            for k in range(3): s.line(24 + dx * 8, 27 + k * 3, 24 + dx * 15, 31 + k * 4, hexc('#2a2230'))
+        e = hexc('#ff4a2a' if glow else '#b0301a'); s.px(21, 31, e); s.px(23, 32, e); s.px(25, 32, e); s.px(27, 31, e)
+        s.ellipse(24, 61, 10 if glow else 8, 2, hexc('#000000', 110))
+    return s.finish()
+
+# Room props (props/<name>.png, drawn at 2x)
+def prop_anvil():
+    s = Spr(36, 24); s.poly([(2, 4), (34, 4), (30, 10), (6, 10)], DSTEEL); s.rect(12, 10, 12, 8, DSTEEL); s.rect(8, 18, 20, 5, hexc('#55575f')); s.rect(2, 4, 32, 2, STEEL)
+    return s.finish()
+def prop_furnace():
+    s = Spr(44, 56); s.rect(4, 10, 36, 46, STONE); s.ellipse(22, 10, 18, 8, STONE); s.rect(16, 0, 12, 12, STONE_D)
+    s.ellipse(22, 34, 11, 9, hexc('#1a0e08')); s.ellipse(22, 37, 8, 5, hexc('#ff7a1a')); s.ellipse(22, 38, 4, 2, hexc('#ffe08a'))
+    return s.finish()
+def prop_tools():
+    s = Spr(48, 28); s.rect(2, 2, 44, 3, WOOD)
+    s.rect(6, 5, 2, 18, WOOD); s.rect(3, 20, 8, 5, DSTEEL)             # hammer
+    s.line(16, 5, 14, 24, DSTEEL); s.line(18, 5, 20, 24, DSTEEL)       # tongs
+    s.rect(28, 5, 2, 14, WOOD); s.rect(25, 18, 8, 6, DSTEEL)           # sledge
+    s.line(40, 5, 40, 20, STEEL); s.rect(38, 19, 5, 3, WOOD)           # file
+    return s.finish()
+def prop_counter():
+    s = Spr(72, 36); s.rect(0, 12, 72, 24, hexc('#6a4228')); s.rect(0, 10, 72, 4, hexc('#8a5a34')); s.rect(4, 16, 64, 1, hexc('#4a2e1a'))
+    for i, c in enumerate(('#d6403a', '#5cc35a', '#a35cd6', '#4ab4ff')): s.ellipse(8 + i * 8, 7, 3, 3.5, hexc(c)); s.rect(7 + i * 8, 2, 2, 2, hexc('#a07a5a'))
+    s.rect(44, 3, 10, 7, hexc('#9a7a4a')); s.rect(56, 5, 12, 5, hexc('#c9cdd6'))    # a sack and a blade
+    return s.finish()
+def prop_table():
+    s = Spr(48, 28); s.rect(2, 6, 44, 5, hexc('#3a2418')); s.rect(6, 11, 4, 17, hexc('#2a1a10')); s.rect(38, 11, 4, 17, hexc('#2a1a10'))
+    s.rect(4, 1, 7, 5, hexc('#efe6d8')); s.px(6, 3, OUT); s.px(9, 2, OUT); s.rect(13, 3, 6, 3, hexc('#efe6d8')); s.px(15, 4, OUT)   # dice
+    s.rect(28, 3, 8, 3, hexc('#efe6d8')); s.rect(32, 2, 8, 3, hexc('#c4241a'))   # cards
+    return s.finish()
+def prop_candle():
+    s = Spr(10, 20); s.rect(3, 6, 4, 13, hexc('#e6dcc0')); s.rect(1, 18, 8, 2, DSTEEL); s.ellipse(5, 3, 2, 3, hexc('#ff9a2a')); s.px(5, 3, hexc('#ffe9a0'))
+    return s.finish()
+
 def ui_bits():
     out = {}
     s = Spr(16); s.ellipse(8, 8, 5, 5, GOLD); s.rect(7, 5, 2, 6, hexc('#a07a2a')); out['coin'] = s.finish()
@@ -526,6 +659,11 @@ def main():
     for k in list(DOOR_DRAW) + ['open']: door_sprite(k).save(f'doors/{k}.png')
     for k, f in (('rack', prop_rack), ('stand', prop_stand), ('shelf', prop_shelf), ('pedestal', prop_pedestal)): f().save(f'props/{k}.png')
     g = glow(); os.makedirs(os.path.join(ROOT, 'ui'), exist_ok=True); g.save(os.path.join(ROOT, 'ui', 'glow.png'))
+    save_strip([npc_brannoc(k) for k in range(5)], 'npcs/brannoc.png')   # idle, blink, frown, hammer up, hammer down
+    save_strip([npc_quill(k) for k in range(3)], 'npcs/quill.png')   # idle, blink, frown
+    save_strip([npc_dealer(0), npc_dealer(1)], 'npcs/dealer.png')
+    for k in ('shrine', 'spring', 'cache', 'ambush'): save_strip([npc_mystery(k, 0), npc_mystery(k, 1)], f'npcs/mystery_{k}.png')
+    for k, f in (('anvil', prop_anvil), ('furnace', prop_furnace), ('tools', prop_tools), ('counter', prop_counter), ('table', prop_table), ('candle', prop_candle)): f().save(f'props/{k}.png')
     for k in HYBRID_COLOR: icon_hybrid(k).save(f'icons/hybrid_{k.replace("+", "_")}.png')
     frame(hexc('#1f1915'), hexc('#0e0b09'), hexc('#3d322a')).save('ui/panel.png', 2)
     frame(hexc('#2a221c'), hexc('#0e0b09'), hexc('#4d3f33')).save('ui/card.png', 2)

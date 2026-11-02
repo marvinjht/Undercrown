@@ -572,14 +572,16 @@ func _build_stage() -> void:
 		var np := Kit.panel("Card")
 		np.add_child(Kit.center(Kit.label(sc.notice, "", true, Art.GOLD)))
 		stage.add_child(np)
+	var panel: bool = stage_view.is_panel(phase)   # an NPC room: the cards sit in a panel under the room (no big title, no character card)
 	if sc.get("title"):
-		stage.add_child(Kit.center(Kit.label(sc.title, "Title", true)))
+		stage.add_child(Kit.center(Kit.label(sc.title, "Heading" if panel else "Title", true)))
 	if sc.get("lede"):
 		stage.add_child(Kit.center(Kit.label(sc.lede, "", true)))
 	for n in sc.get("notes", []):
 		stage.add_child(Kit.center(Kit.line(n)))
 	for sec in sc.get("sections", []):
-		_section_view(sec)
+		if not (panel and str(sec.get("kind", "")) == "character"):
+			_section_view(sec)
 	await get_tree().process_frame
 	stage_scroll.scroll_vertical = keep_scroll
 	_blood_pop(sc)

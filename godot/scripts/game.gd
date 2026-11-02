@@ -8,6 +8,7 @@ extends Node
 
 signal changed(what: String)
 signal details_changed            # Shift pressed or released: long texts switch between short and full
+signal acted(fn: String, args: Array)   # a button press went to the server (the stage reacts: coins, a nod, a line)
 
 var details := false              # Shift held: show the full text of long descriptions
 
@@ -130,6 +131,7 @@ func act(fn: String, args: Array = [], mp := false) -> void:
 	if fn.begins_with("ui_"):
 		_ui_act(fn)
 		return
+	acted.emit(fn, args)
 	Net.send({ "t": "act", "fn": fn, "args": args, "mp": mp, "from": cid })
 
 func _ui_act(fn: String) -> void:

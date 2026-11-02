@@ -81,7 +81,8 @@ Once the match starts (`start`), a client's connection carries only these, plus 
   screen described as plain data by `src/present.js`, so the client needs no rules code. Parts (each sent only when
   it changes): `top` (room track), `clock` (`ends`, `total`, server time), `me` (your hero: vitals, `stats` columns,
   `sets`, `relics`, `look`), `gear`, `bag` (items with their buttons), `rivals` (by seat; only changed seats),
-  `rivalOrder`, `supply`, `setGuide`, `tree`, `rooms`, and `screen`: `{ phase, title, lede, notice, notes, sections }`.
+  `rivalOrder`, `supply`, `setGuide`, `tree`, `rooms`, and `screen`: `{ phase, title, lede, notice, notes, sections }`
+  (the mystery screen also sends `mystery`: `spring`, `cache`, `shrine` or `ambush`, which object the room shows).
   Section kinds: `doors`, `cards`, `buttons`, `list`, `review`, `timer`, `skip`, `tree`, `character`, `opponent`,
   `bracket`, `places`, `arena` (play `s.battle.res` there). Every button is
   `{ label, act, args, enabled, style, hold, mp, note, confirm }`: send it as `act` (or handle `ui_…` acts

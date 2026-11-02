@@ -22,7 +22,15 @@ const SCENES := {
 	"armory": preload("res://scripts/stage/armory_scene.gd"),
 	"reward": preload("res://scripts/stage/loot_scene.gd"),
 	"spoils": preload("res://scripts/stage/loot_scene.gd"),
+	"forge": preload("res://scripts/stage/npc_scene.gd"),
+	"merchant": preload("res://scripts/stage/npc_scene.gd"),
+	"wager": preload("res://scripts/stage/npc_scene.gd"),
+	"mystery": preload("res://scripts/stage/npc_scene.gd"),
 }
+# A "panel" scene (const PANEL in its script) keeps the room in the top part of the stage and shows the screen's cards
+# in a panel that slides up over the lower part (the NPC rooms: everything present.js sends, nothing lost)
+const PANEL_TOP := 0.46      # where the panel starts (fraction of the stage's height)
+const PANEL_VIEW := Vector2(76.0, 276.0)   # the world rows shown above the panel (the NPC's head to just under the feet)
 const TINTS := { "Morning": Color(1.0, 0.97, 0.9), "Evening": Color(1.0, 0.83, 0.68), "Night": Color(0.64, 0.72, 1.0) }
 
 var mv                         # the match view (arena, log, card sections)
@@ -41,6 +49,9 @@ var _exit_min := MIN_EXIT
 var phase_now := ""            # the phase on stage now, and the one before it (loot after a fight stays in the fight room)
 var prev_phase := ""
 var pre_battle: Dictionary = {}   # your gold and XP when the last fight started (what you got shows up after it)
+var panel_mode := false        # the room on stage is a panel scene
+var _bg_full: StyleBoxFlat
+var _bg_panel: StyleBoxFlat
 
 func _ready() -> void:
 	clip_contents = true
@@ -64,10 +75,17 @@ func setup(match_view, scroll: Control) -> void:
 	scroll.get_parent().remove_child(scroll)
 	add_child(scroll)
 	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg := StyleBoxFlat.new()
-	bg.bg_color = Color(0.055, 0.043, 0.035, 0.86)
-	bg.set_content_margin_all(12)
-	scroll.add_theme_stylebox_override("panel", bg)
+	_bg_full = StyleBoxFlat.new()
+	_bg_full.bg_color = Color(0.055, 0.043, 0.035, 0.86)
+	_bg_full.set_content_margin_all(12)
+	_bg_panel = StyleBoxFlat.new()
+	_bg_panel.bg_color = Color(0.055, 0.043, 0.035, 0.95)
+	_bg_panel.set_content_margin_all(10)
+	_bg_panel.border_width_top = 2
+	_bg_panel.border_color = Color("#6b4a2a")
+	_bg_panel.corner_radius_top_left = 8
+	_bg_panel.corner_radius_top_right = 8
+	scroll.add_theme_stylebox_override("panel", _bg_full)
 	move_child(scroll, 0)
 	move_child(banner, get_child_count() - 1)
 	move_child(ui, get_child_count() - 1)
@@ -84,8 +102,8 @@ func present(sc: Dictionary) -> bool:
 		if scene and scene.has_method("refresh"):
 			scene.refresh(sc)
 		layer.modulate = tint
-		overlay.visible = S == null and not exiting
-		return S != null
+		overlay.visible = (S == null or _panel(S)) and not exiting
+		return S != null and not _panel(S)
 	scene_key = key
 	if exiting:
 		# The next room is ready: let the exit show for a moment (never longer than it has to), then slide on
@@ -96,9 +114,16 @@ func present(sc: Dictionary) -> bool:
 			get_tree().create_timer(left).timeout.connect(_after_exit)
 		else:
 			_after_exit()
-		return S != null
+		return S != null and not _panel(S)
 	_enter(S, sc)
-	return S != null
+	return S != null and not _panel(S)
+
+static func _panel(S) -> bool:
+	return S != null and S.get_script_constant_map().has("PANEL")
+
+# Is this phase drawn as a room with a panel of cards under it?
+func is_panel(phase: String) -> bool:
+	return _panel(SCENES.get(phase))
 
 func _after_exit() -> void:
 	if _pending == null:
@@ -130,7 +155,9 @@ func _enter(S, sc: Dictionary) -> void:
 		c.queue_free()
 	var old := layer
 	var same: bool = S != null and S.same_room(prev_phase)   # e.g. the loot after a fight: no new room
+	panel_mode = _panel(S)
 	layer = _new_layer(S != null and S.use_full_floor(prev_phase))   # a fight's room is all floor, like the arena
+	layer.set_meta("panel", panel_mode)
 	add_child(layer)
 	move_child(layer, 0)
 	actors = {}
@@ -146,7 +173,10 @@ func _enter(S, sc: Dictionary) -> void:
 		spawn_hero("me", Vector2(W * 0.3, HERO_Y))   # an empty room: you stand in it while the cards are up
 	layer.modulate = tint
 	_layout()
+	_place_overlay()
 	overlay.visible = false
+	if panel_mode:
+		_show_overlay(true)   # the panel comes up at once, while the room slides in
 	if old and is_instance_valid(old) and same:
 		old.queue_free()
 		_show_overlay(false)
@@ -159,15 +189,49 @@ func _enter(S, sc: Dictionary) -> void:
 		tw.chain().tween_callback(func():
 			if is_instance_valid(old):
 				old.queue_free()
-			_show_overlay(S == null))
-	else:
+			if not panel_mode:
+				_show_overlay(S == null))
+	elif not panel_mode:
 		_show_overlay(S == null)
 
 func _show_overlay(on: bool) -> void:
 	overlay.visible = on and not exiting
-	if overlay.visible:
+	if not overlay.visible:
+		return
+	if panel_mode:   # slides up from the bottom
+		var to := overlay.position.y
+		overlay.modulate.a = 1.0
+		overlay.position.y = size.y
+		create_tween().tween_property(overlay, "position:y", to, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	else:
 		overlay.modulate.a = 0.0
 		create_tween().tween_property(overlay, "modulate:a", 1.0, 0.15)
+
+# The card layout fills the stage, or (a panel scene) only its lower part
+func _place_overlay() -> void:
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	if panel_mode:
+		overlay.anchor_top = PANEL_TOP
+		overlay.offset_top = 0.0
+	overlay.add_theme_stylebox_override("panel", _bg_panel if panel_mode else _bg_full)
+
+# A scene leaves: the panel slides down (a copy of it; the real one gets the next screen's cards at once)
+func drop_panel() -> void:
+	if not overlay.visible:
+		return
+	var ghost: Control = overlay.duplicate(0)
+	ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for c in ghost.find_children("*", "Control", true, false):
+		c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(ghost)
+	move_child(ghost, overlay.get_index())
+	ghost.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	ghost.position = overlay.position
+	ghost.size = overlay.size
+	overlay.visible = false
+	var tw := ghost.create_tween()
+	tw.tween_property(ghost, "position:y", size.y, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_callback(ghost.queue_free)
 
 # ---------- Rooms ----------
 # A room: the backdrop (wall and floor, extended to fill the column) and a 640x360 world, scaled to the width
@@ -219,13 +283,22 @@ func _new_layer(full_floor: bool) -> Control:
 	l.resized.connect(func(): _fit_layer(l))
 	return l
 
-# The world's scale: as wide as the column, unless that makes it too tall to fit
-func k_scale() -> float:
+# The world's scale: as wide as the column, unless that makes it too tall to fit (a panel room: the strip above the
+# panel shows PANEL_VIEW)
+func k_scale(l: Control = null) -> float:
+	if _is_panel_layer(l):
+		return max(0.5, min(size.x / W, size.y * PANEL_TOP / (PANEL_VIEW.y - PANEL_VIEW.x)))
 	return max(0.5, min(size.x / W, max(size.y, 100.0) / (H * 0.9)))
 
+func _is_panel_layer(l: Control) -> bool:
+	var x := l if l else layer
+	return is_instance_valid(x) and bool(x.get_meta("panel", false))
+
 # Centered across; the floor line sits at about 62% of the height (less empty floor below, room for the banner above)
-func world_origin() -> Vector2:
-	var k := k_scale()
+func world_origin(l: Control = null) -> Vector2:
+	var k := k_scale(l)
+	if _is_panel_layer(l):
+		return Vector2((size.x - W * k) / 2.0, size.y * PANEL_TOP - PANEL_VIEW.y * k)
 	var y := size.y * 0.62 - FLOOR_Y * k
 	y = clampf(y, size.y - H * k, 0.0) if size.y < H * k else clampf(y, 0.0, size.y - H * k)
 	return Vector2((size.x - W * k) / 2.0, y)
@@ -233,8 +306,8 @@ func world_origin() -> Vector2:
 func _fit_layer(l: Control) -> void:
 	if not is_instance_valid(l):
 		return
-	var k := k_scale()
-	var o := world_origin()
+	var k := k_scale(l)
+	var o := world_origin(l)
 	var world: Control = l.get_node("World")
 	world.scale = Vector2(k, k)
 	world.position = o
@@ -291,7 +364,7 @@ func _banner(sc: Dictionary) -> void:
 		for n in sc.get("notes", []):
 			v.add_child(Kit.center(Kit.line(n)))
 	banner.add_child(v)
-	banner.visible = v.get_child_count() > 0 and scene_has_stage(sc)
+	banner.visible = v.get_child_count() > 0 and scene_has_stage(sc) and not is_panel(str(sc.get("phase", "")))
 	Kit.fit_width(banner, v.custom_minimum_size.x + 24.0)
 	_layout.call_deferred()
 
