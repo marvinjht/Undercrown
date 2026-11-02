@@ -595,6 +595,26 @@ def prop_candle():
     s = Spr(10, 20); s.rect(3, 6, 4, 13, hexc('#e6dcc0')); s.rect(1, 18, 8, 2, DSTEEL); s.ellipse(5, 3, 2, 3, hexc('#ff9a2a')); s.px(5, 3, hexc('#ffe9a0'))
     return s.finish()
 
+# Plunder: the treasure room (props/banquet.png is the long table the pile is laid out on, seen from a little above)
+def prop_banquet():
+    s = Spr(184, 72); top, plank, edge = hexc('#6e4529'), hexc('#5c3820'), hexc('#8a5a34')
+    s.rect(0, 0, 184, 54, top)
+    for y in range(8, 54, 9): s.line(1, y, 182, y, plank)
+    for x, y in ((30, 3), (95, 12), (150, 21), (60, 30), (120, 39), (20, 48)): s.line(x, y, x, y + 5, plank)
+    s.rect(0, 0, 184, 2, edge); s.rect(0, 0, 2, 54, edge); s.rect(182, 0, 2, 54, edge)
+    s.rect(6, 22, 172, 11, hexc('#6a1f22')); s.line(6, 22, 177, 22, GOLD); s.line(6, 32, 177, 32, GOLD)    # a red runner, gold trim
+    s.rect(0, 54, 184, 9, hexc('#4a2e1a')); s.line(0, 54, 183, 54, edge)                                   # the front of the table
+    for x in (4, 62, 116, 174): s.rect(x, 63, 6, 9, hexc('#3a2414'))                                       # legs
+    return s.finish()
+def prop_goldpile():
+    s = Spr(40, 20); s.ellipse(20, 14, 19, 6, hexc('#a8781a')); s.ellipse(20, 11, 14, 6, GOLD); s.ellipse(18, 8, 8, 4, hexc('#ffd860'))
+    for x, y in ((12, 10), (26, 9), (20, 6), (31, 13), (8, 14)): s.px(x, y, hexc('#fff3b0'))
+    return s.finish()
+def prop_chest_open():
+    s = Spr(32, 28); s.rect(2, 12, 28, 15, hexc('#7a4a2a')); s.rect(2, 4, 28, 6, hexc('#5a3a26')); s.rect(2, 10, 28, 4, GOLD)
+    s.ellipse(16, 12, 12, 3, hexc('#ffd860')); s.rect(14, 16, 4, 5, DSTEEL); s.rect(2, 12, 28, 1, OUT)
+    return s.finish()
+
 def ui_bits():
     out = {}
     s = Spr(16); s.ellipse(8, 8, 5, 5, GOLD); s.rect(7, 5, 2, 6, hexc('#a07a2a')); out['coin'] = s.finish()
@@ -663,6 +683,7 @@ def main():
     save_strip([npc_quill(k) for k in range(3)], 'npcs/quill.png')   # idle, blink, frown
     save_strip([npc_dealer(0), npc_dealer(1)], 'npcs/dealer.png')
     for k in ('shrine', 'spring', 'cache', 'ambush'): save_strip([npc_mystery(k, 0), npc_mystery(k, 1)], f'npcs/mystery_{k}.png')
+    for k, f in (('banquet', prop_banquet), ('goldpile', prop_goldpile), ('chest_open', prop_chest_open)): f().save(f'props/{k}.png')
     for k, f in (('anvil', prop_anvil), ('furnace', prop_furnace), ('tools', prop_tools), ('counter', prop_counter), ('table', prop_table), ('candle', prop_candle)): f().save(f'props/{k}.png')
     for k in HYBRID_COLOR: icon_hybrid(k).save(f'icons/hybrid_{k.replace("+", "_")}.png')
     frame(hexc('#1f1915'), hexc('#0e0b09'), hexc('#3d322a')).save('ui/panel.png', 2)

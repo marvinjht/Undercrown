@@ -468,7 +468,9 @@ window.G = window.G || {};
     const order = sh.order.map((id, i) => {
       const h = byId(id), now = i === sh.turn && !reviewing;
       return { n: i + 1, name: h ? (h.isPlayer ? 'You' : h.name) : '?', me: !!(h && h.isPlayer), bot: !!(h && h.bot), hearts: h ? h.hearts : 0, hpPct: h ? Math.round(h.hp / G.Hero.maxHp(h) * 100) : 0,
-        state: sh.picks[id] ? `took ${sh.picks[id]}` : now ? (h && h.isPlayer ? 'your turn' : 'picking…') : 'waiting', now };
+        state: sh.picks[id] ? `took ${sh.picks[id]}` : now ? (h && h.isPlayer ? 'your turn' : 'picking…') : 'waiting', now,
+        // For the Godot stage (display only): who it is, how they look, and what they took (item name) or that they passed
+        id, look: h ? look(h) : null, pick: sh.picks[id] && !/^passed/.test(sh.picks[id]) ? sh.picks[id] : null, pass: !!(sh.picks[id] && /^passed/.test(sh.picks[id])) };
     });
     const cards = sh.table.map(it => { const L = takeLabel(p, it, 'Take this'); return itemCard(it, p, [myNow ? btn(L.text, 'playerShopPick', [it.id], { enabled: L.ok, style: 'primary' }) : btn(picked ? 'Picked' : reviewing ? 'Picks start soon' : 'Wait for your turn', 'playerShopPick', [it.id], { enabled: false })]); });
     const sections = [];

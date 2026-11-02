@@ -83,6 +83,9 @@ Once the match starts (`start`), a client's connection carries only these, plus 
   `sets`, `relics`, `look`), `gear`, `bag` (items with their buttons), `rivals` (by seat; only changed seats),
   `rivalOrder`, `supply`, `setGuide`, `tree`, `rooms`, and `screen`: `{ phase, title, lede, notice, notes, sections }`
   (the mystery screen also sends `mystery`: `spring`, `cache`, `shrine` or `ambush`, which object the room shows).
+  On the Plunder screen (`shop`), each row of the `list` section (the pick order) also carries `id`, `look` (as
+  `me.look`), `pick` (the name of the item they took, or null) and `pass` (true when they passed for gold): the stage
+  sees who took what by comparing two screens.
   Section kinds: `doors`, `cards`, `buttons`, `list`, `review`, `timer`, `skip`, `tree`, `character`, `opponent`,
   `bracket`, `places`, `arena` (play `s.battle.res` there). Every button is
   `{ label, act, args, enabled, style, hold, mp, note, confirm }`: send it as `act` (or handle `ui_…` acts

@@ -26,6 +26,7 @@ const SCENES := {
 	"merchant": preload("res://scripts/stage/npc_scene.gd"),
 	"wager": preload("res://scripts/stage/npc_scene.gd"),
 	"mystery": preload("res://scripts/stage/npc_scene.gd"),
+	"shop": preload("res://scripts/stage/plunder_scene.gd"),
 }
 # A "panel" scene (const PANEL in its script) keeps the room in the top part of the stage and shows the screen's cards
 # in a panel that slides up over the lower part (the NPC rooms: everything present.js sends, nothing lost)
@@ -50,6 +51,9 @@ var phase_now := ""            # the phase on stage now, and the one before it (
 var prev_phase := ""
 var pre_battle: Dictionary = {}   # your gold and XP when the last fight started (what you got shows up after it)
 var panel_mode := false        # the room on stage is a panel scene
+var zoom := 1.0                # the current room, zoomed in toward zoom_at (world coordinates); 1 = not zoomed
+var zoom_at := Vector2(W / 2.0, H / 2.0)
+var _zoom_tw: Tween
 var _bg_full: StyleBoxFlat
 var _bg_panel: StyleBoxFlat
 
@@ -156,6 +160,11 @@ func _enter(S, sc: Dictionary) -> void:
 	var old := layer
 	var same: bool = S != null and S.same_room(prev_phase)   # e.g. the loot after a fight: no new room
 	panel_mode = _panel(S)
+	if _zoom_tw and _zoom_tw.is_valid():
+		_zoom_tw.kill()
+	if zoom != 1.0:
+		zoom = 1.0
+		_fit_layer(layer)   # the old room slides out un-zoomed
 	layer = _new_layer(S != null and S.use_full_floor(prev_phase))   # a fight's room is all floor, like the arena
 	layer.set_meta("panel", panel_mode)
 	add_child(layer)
@@ -286,6 +295,12 @@ func _new_layer(full_floor: bool) -> Control:
 # The world's scale: as wide as the column, unless that makes it too tall to fit (a panel room: the strip above the
 # panel shows PANEL_VIEW)
 func k_scale(l: Control = null) -> float:
+	return _k_base(l) * (zoom if _zoomed(l) else 1.0)
+
+func _zoomed(l: Control) -> bool:
+	return zoom != 1.0 and (l == null or l == layer)
+
+func _k_base(l: Control = null) -> float:
 	if _is_panel_layer(l):
 		return max(0.5, min(size.x / W, size.y * PANEL_TOP / (PANEL_VIEW.y - PANEL_VIEW.x)))
 	return max(0.5, min(size.x / W, max(size.y, 100.0) / (H * 0.9)))
@@ -296,7 +311,22 @@ func _is_panel_layer(l: Control) -> bool:
 
 # Centered across; the floor line sits at about 62% of the height (less empty floor below, room for the banner above)
 func world_origin(l: Control = null) -> Vector2:
-	var k := k_scale(l)
+	var o := _origin_base(l)
+	if _zoomed(l):   # zoom about zoom_at: that point stays where it was
+		var k := _k_base(l)
+		o += zoom_at * k * (1.0 - zoom)
+	return o
+
+# Zoom the current room in (z > 1) or back out (z = 1) toward a world point, over secs
+func set_zoom(z: float, at: Vector2, secs := 0.35) -> void:
+	zoom_at = at
+	if _zoom_tw and _zoom_tw.is_valid():
+		_zoom_tw.kill()
+	_zoom_tw = create_tween()
+	_zoom_tw.tween_method(func(v: float): zoom = v; _layout(), zoom, z, secs).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+func _origin_base(l: Control = null) -> Vector2:
+	var k := _k_base(l)
 	if _is_panel_layer(l):
 		return Vector2((size.x - W * k) / 2.0, size.y * PANEL_TOP - PANEL_VIEW.y * k)
 	var y := size.y * 0.62 - FLOOR_Y * k
@@ -364,7 +394,8 @@ func _banner(sc: Dictionary) -> void:
 		for n in sc.get("notes", []):
 			v.add_child(Kit.center(Kit.line(n)))
 	banner.add_child(v)
-	banner.visible = v.get_child_count() > 0 and scene_has_stage(sc) and not is_panel(str(sc.get("phase", "")))
+	var S = SCENES.get(str(sc.get("phase", "")))
+	banner.visible = v.get_child_count() > 0 and S != null and not _panel(S) and not S.get_script_constant_map().has("NO_BANNER")
 	Kit.fit_width(banner, v.custom_minimum_size.x + 24.0)
 	_layout.call_deferred()
 
