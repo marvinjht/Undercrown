@@ -26,6 +26,8 @@ var view: Dictionary = {}
 var skew_ms := 0.0               # server clock minus this machine's clock
 var server_version := ""
 var want_solo := false
+var _last_try := Callable()       # the button that failed to reach the server (Try again repeats it)
+var error_retry := false          # the error can be tried again
 var bot_level := "medium"
 var end_reason := ""
 var _beat := 0.0
@@ -77,13 +79,18 @@ func _hello(kind: String, extra := {}) -> void:
 	s = {}
 	view = {}
 	changed.emit("status")
+	error_retry = false
 	_pending_open = { "t": kind, "cid": cid, "name": player_name, "client": "godot" }
 	_pending_open.merge(extra)
-	# The server only takes clients on its own version: ask it which one it runs, then say hello
+	# The server only takes clients on its own version: ask it which one it runs, then say hello. A sleeping server
+	# can take a minute or more to answer: Net keeps asking for up to 90 seconds (the title shows "Waking up…")
 	Net.wake(func(ok, info):
+		if status != "connecting":
+			return   # cancelled meanwhile
 		if not ok or typeof(info) != TYPE_DICTIONARY:
 			status = "error"
-			error = "Couldn't reach the game server. It may be waking up: try again in a moment."
+			error = "The game server didn't answer for %d seconds. It may still be starting up, or your connection may be down." % int(Net.WAKE_LIMIT)
+			error_retry = true
 			changed.emit("status")
 			return
 		server_version = str(info.get("version", ""))
@@ -94,27 +101,37 @@ func _hello(kind: String, extra := {}) -> void:
 			status = "queue"
 			changed.emit("status"))
 
+# Try again after the server didn't answer: the same button again
+func retry() -> void:
+	if _last_try.is_valid():
+		_last_try.call()
+
 func find_match(n: String) -> void:
+	_last_try = func(): find_match(n)
 	save_name(n)
 	want_solo = false
 	_hello("queue")
 func create_room(n: String) -> void:
+	_last_try = func(): create_room(n)
 	save_name(n)
 	want_solo = false
 	_hello("create")
 func join_room(room_code: String, n: String) -> void:
+	_last_try = func(): join_room(room_code, n)
 	save_name(n)
 	want_solo = false
 	code = room_code.strip_edges().to_upper()
 	_hello("join", { "code": code })
 # Play solo: a room of your own with bots, started at once
 func play_solo(n: String) -> void:
+	_last_try = func(): play_solo(n)
 	save_name(n)
 	want_solo = true
 	_hello("create")
 func start_match() -> void:
 	Net.send({ "t": "startReq", "from": cid })
 func leave() -> void:
+	Net.cancel_wake()
 	if cid != "":
 		Net.send({ "t": "bye", "cid": cid, "from": cid })
 	Net.close()

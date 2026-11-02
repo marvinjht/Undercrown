@@ -7,18 +7,34 @@ var _code: LineEdit
 var _queue_label: Label
 var _server_label: Label
 var _shown := ""
+var _wait_label: Label           # the waking-up animation
+var _wait_icon: Control
+var _t := 0.0
 
 func _ready() -> void:
 	Game.changed.connect(func(_w): _build())
+	Net.wake_changed.connect(func(): _build(); _server_text())
 	_build()
-	Net.wake(_woke)
+	Net.wake()   # as soon as the title opens, so the server is usually awake by the time you pick Play
 
-func _process(_d: float) -> void:
+func _process(d: float) -> void:
+	_t += d
+	if Game.status == "connecting":
+		_build()   # shows the waking-up screen once the wait passes a second (it only rebuilds when that changes)
 	if _queue_label and Game.status == "queue":
 		_queue_label.text = _queue_text()
+	if is_instance_valid(_wait_label):
+		var dots := int(_t * 3.0) % 4
+		_wait_label.text = "%s%s  %ds" % [".".repeat(dots), " ".repeat(3 - dots), int(Net.wake_elapsed())]   # plain dots: the pixel font has no other glyphs (the web build has no fallback font)
+	if is_instance_valid(_wait_icon):
+		_wait_icon.position.y = -absf(sin(_t * 4.0)) * 8.0
+		_wait_icon.rotation = sin(_t * 2.0) * 0.15
+	if Game.status == "idle" and Net.wake_state == "waking" and is_instance_valid(_server_label) and int(_t * 2.0) % 2 == 0:
+		_server_text()
 
 func _build() -> void:
-	var key := Game.status + "|" + str(Game.lobby.hash()) + "|" + Game.error + "|" + str(Game.queue_info.get("n", -1))
+	var waking: bool = Game.status == "connecting" and Net.wake_state == "waking" and Net.wake_elapsed() > 1.0   # no flash when it's awake
+	var key := Game.status + "|" + str(Game.lobby.hash()) + "|" + Game.error + "|" + str(Game.queue_info.get("n", -1)) + "|" + str(waking)
 	if key == _shown:
 		return
 	_shown = key
@@ -36,13 +52,26 @@ func _build() -> void:
 	_box.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	mid.add_child(_box)
 	_queue_label = null
+	_wait_label = null
+	_wait_icon = null
 	match Game.status:
-		"connecting": _simple("Connecting…", "If the game server was asleep, this can take up to a minute.", [["Cancel", Game.leave]])
+		"connecting":
+			if waking:
+				_waking()
+			else:
+				_simple("Connecting…", "", [["Cancel", Game.leave]])
 		"queue": _queue()
 		"lobby": _lobby()
-		"error": _simple("Couldn’t join", Game.error, [["Back", Game.leave]])
+		"error":
+			if Game.error_retry:
+				_simple("Couldn’t reach the game server", Game.error, [["Try again", Game.retry], ["Back", Game.leave]])
+			else:
+				_simple("Couldn’t join", Game.error, [["Back", Game.leave]])
 		"ended": _simple("Match over", Game.end_reason, [["Back to the title", Game.leave]])
-		_: _title()
+		_:
+			_title()
+			if Net.wake_state == "idle":   # back on the title after Cancel: keep waking the server in the background
+				Net.wake()
 
 func _heading(eyebrow: String, title: String, text: String) -> void:
 	_box.add_child(Kit.center(Kit.label(eyebrow, "Muted")))
@@ -114,6 +143,7 @@ func _title() -> void:
 	v.add_child(row2)
 	_server_label = Kit.label("Game server: checking…", "Muted", true)
 	v.add_child(_server_label)
+	_server_text()
 	var snd := _btn("Sound off" if not Sfx.muted else "Sound on", func(): pass, "Ghost")
 	snd.pressed.connect(func(): snd.text = "Sound on" if Sfx.toggle() else "Sound off")
 	var opts := Kit.hbox(8)
@@ -144,9 +174,36 @@ func _level_name(level: String) -> String:
 			return l[1]
 	return level
 
-func _woke(ok, _info) -> void:
-	if is_instance_valid(_server_label):
-		_server_label.text = "Game server: online." if ok else "Game server: waking up (it sleeps when nobody is playing; this can take up to a minute)…"
+# The line under the Play buttons: is the server awake?
+func _server_text() -> void:
+	if not is_instance_valid(_server_label):
+		return
+	match Net.wake_state:
+		"awake": _server_label.text = "Game server: online."
+		"failed": _server_label.text = "Game server: not answering. Pressing Play tries again."
+		"waking": _server_label.text = "Game server: waking up (it sleeps when nobody plays; this can take up to a minute)%s %ds" % [".".repeat(1 + int(_t * 2.0) % 3), int(Net.wake_elapsed())]
+		_: _server_label.text = "Game server: checking…"
+
+# Waiting for a sleeping server: a little animation, how long so far, and Cancel
+func _waking() -> void:
+	_heading("UNDERCROWN", "Waking up", "Waking up the game server, this can take up to a minute...")
+	var holder := Control.new()
+	holder.custom_minimum_size = Vector2(48, 56)
+	holder.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var ic := Kit.icon(Art.icon("crown"), 40)
+	ic.pivot_offset = Vector2(20, 20)
+	ic.position = Vector2(4, 8)
+	holder.add_child(ic)
+	_wait_icon = ic
+	_box.add_child(holder)
+	_wait_label = Kit.label("", "Heading", false, Art.GOLD)
+	_box.add_child(Kit.center(_wait_label))
+	var note := Kit.label("The free server sleeps when nobody is playing. It keeps trying for up to %d seconds." % int(Net.WAKE_LIMIT), "Muted", true)
+	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_box.add_child(note)
+	var cancel := _btn("Cancel", Game.leave, "Ghost")
+	cancel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_box.add_child(cancel)
 
 func _find() -> void:
 	if _ok_name():
