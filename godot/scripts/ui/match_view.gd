@@ -608,6 +608,7 @@ func _build_watch_win() -> void:
 		return
 	if not is_instance_valid(watch_win):
 		watch_win = Kit.panel("")
+		watch_win.z_index = 30   # above the stage's labels and cards (they sit over the heroes on the stage)
 		watch_win.top_level = true
 		add_child(watch_win)
 		if _watch_pos.x < 0:

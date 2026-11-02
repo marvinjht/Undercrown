@@ -615,6 +615,26 @@ def prop_chest_open():
     s.ellipse(16, 12, 12, 3, hexc('#ffd860')); s.rect(14, 16, 4, 5, DSTEEL); s.rect(2, 12, 28, 1, OUT)
     return s.finish()
 
+# Duels and the tournament: the stone stands along the back of the arena hall (a crowd on them), a standing banner
+def prop_stands():
+    import random
+    rnd = random.Random(7)
+    s = Spr(320, 44)
+    for k, y in enumerate((0, 12, 24)):                          # three stone tiers, the front one lowest
+        s.rect(0, y, 320, 12, mix(STONE, -0.1 * (2 - k))); s.line(0, y, 319, y, mix(STONE, 0.15)); s.line(0, y + 11, 319, y + 11, STONE_D)
+        for x in range(0, 320, 16): s.line(x + (8 if k % 2 else 0), y + 1, x + (8 if k % 2 else 0), y + 10, STONE_D)
+        for x in range(3 + k * 2, 316, 7):                       # the crowd: heads and shoulders
+            if rnd.random() < 0.8:
+                c = hexc(rnd.choice(['#7a4a3a', '#4a5a7a', '#6a6a3a', '#5a3a5a', '#3a5a4a', '#8a6a4a']))
+                s.rect(x, y + 6, 5, 5, c); s.ellipse(x + 2, y + 4, 2, 2, hexc(rnd.choice(['#e0b090', '#c08a60', '#8a5a3a'])))
+    s.rect(0, 36, 320, 8, STONE_D); s.line(0, 36, 319, 36, mix(STONE, 0.2))  # the wall in front of the stands
+    return s.finish()
+def prop_banner():
+    s = Spr(16, 44); s.rect(7, 0, 2, 44, WOOD_D); s.rect(1, 2, 14, 2, GOLD)
+    s.poly([(2, 4), (14, 4), (14, 30), (8, 26), (2, 30)], hexc('#8a1f22')); s.line(2, 4, 2, 30, hexc('#5a1014'))
+    s.ellipse(8, 14, 3, 3, GOLD); s.px(8, 14, hexc('#8a1f22'))
+    return s.finish()
+
 def ui_bits():
     out = {}
     s = Spr(16); s.ellipse(8, 8, 5, 5, GOLD); s.rect(7, 5, 2, 6, hexc('#a07a2a')); out['coin'] = s.finish()
@@ -683,6 +703,7 @@ def main():
     save_strip([npc_quill(k) for k in range(3)], 'npcs/quill.png')   # idle, blink, frown
     save_strip([npc_dealer(0), npc_dealer(1)], 'npcs/dealer.png')
     for k in ('shrine', 'spring', 'cache', 'ambush'): save_strip([npc_mystery(k, 0), npc_mystery(k, 1)], f'npcs/mystery_{k}.png')
+    for k, f in (('stands', prop_stands), ('banner', prop_banner)): f().save(f'props/{k}.png')
     for k, f in (('banquet', prop_banquet), ('goldpile', prop_goldpile), ('chest_open', prop_chest_open)): f().save(f'props/{k}.png')
     for k, f in (('anvil', prop_anvil), ('furnace', prop_furnace), ('tools', prop_tools), ('counter', prop_counter), ('table', prop_table), ('candle', prop_candle)): f().save(f'props/{k}.png')
     for k in HYBRID_COLOR: icon_hybrid(k).save(f'icons/hybrid_{k.replace("+", "_")}.png')

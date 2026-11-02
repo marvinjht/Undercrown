@@ -27,7 +27,14 @@ const SCENES := {
 	"wager": preload("res://scripts/stage/npc_scene.gd"),
 	"mystery": preload("res://scripts/stage/npc_scene.gd"),
 	"shop": preload("res://scripts/stage/plunder_scene.gd"),
+	"duelWait": preload("res://scripts/stage/duel_scene.gd"),
+	"duelIntro": preload("res://scripts/stage/duel_scene.gd"),
+	"tournament": preload("res://scripts/stage/hall_scene.gd"),
+	"dead": preload("res://scripts/stage/end_scene.gd"),
+	"ending": preload("res://scripts/stage/end_scene.gd"),
+	"mpEnded": preload("res://scripts/stage/end_scene.gd"),
 }
+const DUEL_SCENE := preload("res://scripts/stage/duel_scene.gd")
 # A "panel" scene (const PANEL in its script) keeps the room in the top part of the stage and shows the screen's cards
 # in a panel that slides up over the lower part (the NPC rooms: everything present.js sends, nothing lost)
 const PANEL_TOP := 0.46      # where the panel starts (fraction of the stage's height)
@@ -54,6 +61,8 @@ var panel_mode := false        # the room on stage is a panel scene
 var zoom := 1.0                # the current room, zoomed in toward zoom_at (world coordinates); 1 = not zoomed
 var zoom_at := Vector2(W / 2.0, H / 2.0)
 var _zoom_tw: Tween
+var hold_panel := false        # a scene keeps its panel down for now (an aftermath plays first); show_panel() brings it up
+var last_fight: Dictionary = {}   # the fight that just played on stage: { kind (duel, tour, fight), won, draw, mirror, room, hearts }
 var _bg_full: StyleBoxFlat
 var _bg_panel: StyleBoxFlat
 
@@ -65,10 +74,12 @@ func _ready() -> void:
 	ui = Control.new()
 	ui.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui.z_index = 10   # labels and cards over the heroes (they're drawn at z 5 in the room)
 	add_child(ui)
 	banner = Kit.panel("")
 	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	banner.self_modulate = Color(1, 1, 1, 0.92)
+	banner.z_index = 10
 	add_child(banner)
 	resized.connect(_layout)
 
@@ -91,6 +102,7 @@ func setup(match_view, scroll: Control) -> void:
 	_bg_panel.corner_radius_top_right = 8
 	scroll.add_theme_stylebox_override("panel", _bg_full)
 	move_child(scroll, 0)
+	scroll.z_index = 8   # the card layout (and the panel under a room) covers the room's people
 	move_child(banner, get_child_count() - 1)
 	move_child(ui, get_child_count() - 1)
 	overlay.visible = false
@@ -99,15 +111,16 @@ func setup(match_view, scroll: Control) -> void:
 func present(sc: Dictionary) -> bool:
 	tint = TINTS.get(str(Game.view.get("top", {}).get("dayPhase", "")), Color(0.86, 0.82, 0.8))
 	var phase := str(sc.get("phase", ""))
-	var S = SCENES.get(phase)
+	var S = scene_for(sc)
 	var key := "%s|%s|%s" % [phase, Game.view.get("top", {}).get("room", 0), S.key_for(sc) if S else ""]
+	var M := _mode(S, sc)
 	if key == scene_key and is_instance_valid(layer):
 		_banner(sc)
 		if scene and scene.has_method("refresh"):
 			scene.refresh(sc)
 		layer.modulate = tint
-		overlay.visible = (S == null or _panel(S)) and not exiting
-		return S != null and not _panel(S)
+		overlay.visible = M != "" and not exiting and not hold_panel
+		return M == ""
 	scene_key = key
 	if exiting:
 		# The next room is ready: let the exit show for a moment (never longer than it has to), then slide on
@@ -118,16 +131,61 @@ func present(sc: Dictionary) -> bool:
 			get_tree().create_timer(left).timeout.connect(_after_exit)
 		else:
 			_after_exit()
-		return S != null and not _panel(S)
+		return M == ""
 	_enter(S, sc)
-	return S != null and not _panel(S)
+	return M == ""
+
+# The scene for a screen: by phase; the waiting room right after a duel is still the duel room (its aftermath plays there)
+func scene_for(sc: Dictionary):
+	var phase := str(sc.get("phase", ""))
+	var S = SCENES.get(phase)
+	if S == null and phase == "waiting" and DUEL_SCENE.claims(self):
+		return DUEL_SCENE
+	return S
+
+static func _has_const(S, c: String) -> bool:
+	var x = S
+	while x:
+		if x.get_script_constant_map().has(c):
+			return true
+		x = x.get_base_script()
+	return false
+
+static func _has_static(S, fn: String) -> bool:
+	for m in S.get_script_method_list():
+		if m.name == fn:
+			return true
+	return false
+
+# How a screen's card layout shows: "" (the scene draws it all), "panel" (in a panel under the room), "full" (no scene)
+static func _mode(S, sc: Dictionary) -> String:
+	if S == null:
+		return "full"
+	if _has_static(S, "overlay_for"):
+		return S.overlay_for(sc)
+	return "panel" if _has_const(S, "PANEL") else ""
 
 static func _panel(S) -> bool:
 	return S != null and S.get_script_constant_map().has("PANEL")
 
-# Is this phase drawn as a room with a panel of cards under it?
-func is_panel(phase: String) -> bool:
-	return _panel(SCENES.get(phase))
+# Is this screen drawn as a room with a panel of cards under it?
+func is_panel(_phase: String) -> bool:
+	var sc: Dictionary = Game.view.get("screen", {})
+	return _mode(scene_for(sc), sc) == "panel"
+
+# A scene that held its panel down brings it up: the view moves up to the strip above the panel, the panel slides in
+func show_panel(secs := 0.45) -> void:
+	if not hold_panel:
+		return
+	hold_panel = false
+	var l := layer
+	var tw := create_tween()
+	tw.tween_method(func(v: float):
+		if is_instance_valid(l):
+			l.set_meta("panel_t", v)
+			_layout(), 0.0, 1.0, secs).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
+	if not exiting:
+		_show_overlay(true)
 
 func _after_exit() -> void:
 	if _pending == null:
@@ -135,7 +193,7 @@ func _after_exit() -> void:
 	var sc = _pending
 	_pending = null
 	exiting = false
-	_enter(SCENES.get(str(sc.get("phase", ""))), sc)
+	_enter(scene_for(sc), sc)
 
 # A scene asks to leave (the hero went through a door): the next room slides in as soon as the server sends it
 func begin_exit(min_time := MIN_EXIT) -> void:
@@ -159,7 +217,8 @@ func _enter(S, sc: Dictionary) -> void:
 		c.queue_free()
 	var old := layer
 	var same: bool = S != null and S.same_room(prev_phase)   # e.g. the loot after a fight: no new room
-	panel_mode = _panel(S)
+	panel_mode = _mode(S, sc) == "panel"
+	hold_panel = false
 	if _zoom_tw and _zoom_tw.is_valid():
 		_zoom_tw.kill()
 	if zoom != 1.0:
@@ -167,6 +226,7 @@ func _enter(S, sc: Dictionary) -> void:
 		_fit_layer(layer)   # the old room slides out un-zoomed
 	layer = _new_layer(S != null and S.use_full_floor(prev_phase))   # a fight's room is all floor, like the arena
 	layer.set_meta("panel", panel_mode)
+	layer.set_meta("panel_t", 1.0 if panel_mode else 0.0)
 	add_child(layer)
 	move_child(layer, 0)
 	actors = {}
@@ -180,15 +240,18 @@ func _enter(S, sc: Dictionary) -> void:
 	else:
 		scene = null
 		spawn_hero("me", Vector2(W * 0.3, HERO_Y))   # an empty room: you stand in it while the cards are up
+	if hold_panel:   # the scene shows its panel later (show_panel): the room keeps its own view until then
+		layer.set_meta("panel_t", 0.0)
 	layer.modulate = tint
 	_layout()
 	_place_overlay()
 	overlay.visible = false
-	if panel_mode:
+	if panel_mode and not hold_panel:
 		_show_overlay(true)   # the panel comes up at once, while the room slides in
 	if old and is_instance_valid(old) and same:
 		old.queue_free()
-		_show_overlay(false)
+		if not panel_mode:
+			_show_overlay(false)
 	elif old and is_instance_valid(old):
 		var w := size.x
 		layer.position.x = w
@@ -301,13 +364,22 @@ func _zoomed(l: Control) -> bool:
 	return zoom != 1.0 and (l == null or l == layer)
 
 func _k_base(l: Control = null) -> float:
-	if _is_panel_layer(l):
-		return max(0.5, min(size.x / W, size.y * PANEL_TOP / (PANEL_VIEW.y - PANEL_VIEW.x)))
-	return max(0.5, min(size.x / W, max(size.y, 100.0) / (H * 0.9)))
+	var kf: float = max(0.5, min(size.x / W, max(size.y, 100.0) / (H * 0.9)))
+	var t := _panel_t(l)
+	if t <= 0.0:
+		return kf
+	var kp: float = max(0.5, min(size.x / W, size.y * PANEL_TOP / (PANEL_VIEW.y - PANEL_VIEW.x)))
+	return lerpf(kf, kp, t)
+
+# How far a room's view has moved to the strip above the panel (0: its own view, 1: above the panel)
+func _panel_t(l: Control) -> float:
+	var x := l if l else layer
+	if not is_instance_valid(x) or not bool(x.get_meta("panel", false)):
+		return 0.0
+	return float(x.get_meta("panel_t", 1.0))
 
 func _is_panel_layer(l: Control) -> bool:
-	var x := l if l else layer
-	return is_instance_valid(x) and bool(x.get_meta("panel", false))
+	return _panel_t(l) > 0.0
 
 # Centered across; the floor line sits at about 62% of the height (less empty floor below, room for the banner above)
 func world_origin(l: Control = null) -> Vector2:
@@ -326,12 +398,16 @@ func set_zoom(z: float, at: Vector2, secs := 0.35) -> void:
 	_zoom_tw.tween_method(func(v: float): zoom = v; _layout(), zoom, z, secs).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 func _origin_base(l: Control = null) -> Vector2:
-	var k := _k_base(l)
-	if _is_panel_layer(l):
-		return Vector2((size.x - W * k) / 2.0, size.y * PANEL_TOP - PANEL_VIEW.y * k)
-	var y := size.y * 0.62 - FLOOR_Y * k
-	y = clampf(y, size.y - H * k, 0.0) if size.y < H * k else clampf(y, 0.0, size.y - H * k)
-	return Vector2((size.x - W * k) / 2.0, y)
+	var t := _panel_t(l)
+	var kf: float = max(0.5, min(size.x / W, max(size.y, 100.0) / (H * 0.9)))
+	var y := size.y * 0.62 - FLOOR_Y * kf
+	y = clampf(y, size.y - H * kf, 0.0) if size.y < H * kf else clampf(y, 0.0, size.y - H * kf)
+	var of := Vector2((size.x - W * kf) / 2.0, y)
+	if t <= 0.0:
+		return of
+	var kp: float = max(0.5, min(size.x / W, size.y * PANEL_TOP / (PANEL_VIEW.y - PANEL_VIEW.x)))
+	var op := Vector2((size.x - W * kp) / 2.0, size.y * PANEL_TOP - PANEL_VIEW.y * kp)
+	return of.lerp(op, t)
 
 func _fit_layer(l: Control) -> void:
 	if not is_instance_valid(l):
@@ -394,10 +470,10 @@ func _banner(sc: Dictionary) -> void:
 		for n in sc.get("notes", []):
 			v.add_child(Kit.center(Kit.line(n)))
 	banner.add_child(v)
-	var S = SCENES.get(str(sc.get("phase", "")))
-	banner.visible = v.get_child_count() > 0 and S != null and not _panel(S) and not S.get_script_constant_map().has("NO_BANNER")
+	var S = scene_for(sc)
+	banner.visible = v.get_child_count() > 0 and S != null and _mode(S, sc) == "" and not _has_const(S, "NO_BANNER")
 	Kit.fit_width(banner, v.custom_minimum_size.x + 24.0)
 	_layout.call_deferred()
 
 func scene_has_stage(sc: Dictionary) -> bool:
-	return SCENES.has(str(sc.get("phase", "")))
+	return scene_for(sc) != null

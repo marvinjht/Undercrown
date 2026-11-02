@@ -86,6 +86,10 @@ Once the match starts (`start`), a client's connection carries only these, plus 
   On the Plunder screen (`shop`), each row of the `list` section (the pick order) also carries `id`, `look` (as
   `me.look`), `pick` (the name of the item they took, or null) and `pass` (true when they passed for gold): the stage
   sees who took what by comparing two screens.
+  The `opponent` section (duels, the tournament) also carries `gear` (their items, as item cards, for hovering). The
+  tournament screens (and `ending`) also send `hall`: `{ entrants: [{ id, name, me, bot, look, hearts, out, place,
+  champion }], opp: { id } | { ghost, of } | null, round }`, who is in the hall and who you fight next. In `watch.fight`,
+  `mirror` is also true when the player you watch is side b of a duel or tournament fight (they're always on the left).
   Section kinds: `doors`, `cards`, `buttons`, `list`, `review`, `timer`, `skip`, `tree`, `character`, `opponent`,
   `bracket`, `places`, `arena` (play `s.battle.res` there). Every button is
   `{ label, act, args, enabled, style, hold, mp, note, confirm }`: send it as `act` (or handle `ui_…` acts

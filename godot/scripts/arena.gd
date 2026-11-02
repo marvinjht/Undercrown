@@ -33,6 +33,8 @@ var world: Node2D
 var bars: Node2D
 var events: Array = []
 var ring: Dictionary = {}
+var fit_stage: Control       # on the stage: fighters stand exactly where the stage puts people (its scale and origin)
+var bare := false             # on the stage: no floor, shade or torches of its own (the room around it is the stage's)
 
 class Bars extends Node2D:
 	var arena
@@ -83,7 +85,11 @@ func _ready() -> void:
 	resized.connect(_fit)
 
 func _fit() -> void:
-	if world:
+	if world and is_instance_valid(fit_stage):
+		var k: float = fit_stage.k_scale()
+		world.scale = Vector2(k, k)
+		world.position = fit_stage.world_origin()
+	elif world:
 		var k: float = min(size.x / W, size.y / H)
 		world.scale = Vector2(k, k)
 		world.position = Vector2((size.x - W * k) / 2.0, (size.y - H * k) / 2.0)
@@ -102,6 +108,17 @@ func play(b: Dictionary) -> void:
 	F = {}; lane_i = 0; ally_i = 0; ring = {}
 	world = Node2D.new()
 	add_child(world)
+	if not bare:
+		_backdrop()
+	bars = Bars.new()
+	bars.arena = self
+	for m in res.get("fighters", []):
+		if float(m.get("bornAt", 0)) == 0.0:
+			_make(m)
+	world.add_child(bars)
+	_fit()
+
+func _backdrop() -> void:
 	var floor := TextureRect.new()
 	floor.texture = Art.tex("res://art/ui/floor.png")
 	floor.stretch_mode = TextureRect.STRETCH_TILE
@@ -123,13 +140,6 @@ func play(b: Dictionary) -> void:
 		var tw: Tween = tch.create_tween().set_loops()
 		tw.tween_property(tch, "modulate", Color(1.2, 1.05, 0.9), 0.4 + randf() * 0.3)
 		tw.tween_property(tch, "modulate", Color(0.85, 0.8, 0.75), 0.4 + randf() * 0.3)
-	bars = Bars.new()
-	bars.arena = self
-	for m in res.get("fighters", []):
-		if float(m.get("bornAt", 0)) == 0.0:
-			_make(m)
-	world.add_child(bars)
-	_fit()
 
 func stop() -> void:
 	playing = false
@@ -259,6 +269,8 @@ func _place(f: Dictionary) -> void:
 		f.body.modulate = f.tint
 
 func _process(delta: float) -> void:
+	if is_instance_valid(fit_stage):
+		_fit()
 	if not playing or done:
 		return
 	# Fight time comes from the real clock (double speed after FAST_AFTER), so slow or skipped frames (an unfocused or

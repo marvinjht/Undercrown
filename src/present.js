@@ -437,7 +437,7 @@ window.G = window.G || {};
       case 'dead': return { title: 'You\'re out of hearts', lede: (s.notice || 'The dungeon took your last heart.') + (mp ? ' Pick a player on the left to watch their game live. You\'ll see the tournament when it starts.' : ''),
         sections: [{ kind: 'buttons', buttons: [btn('Leave the match', 'ui_leave', [], { style: 'ghost' })] }] };
       case 'mpEnded': return { title: /inactivity/.test(s.notice || '') ? 'Removed for inactivity' : 'Match over', lede: s.notice || 'The connection to the room was lost.', sections: [{ kind: 'buttons', buttons: [btn('Back to the title', 'ui_title', [], { style: 'primary' })] }] };
-      case 'ending': return { title: s.tour && s.tour.champion ? `${s.tour.champion.hero.name} won the tournament` : 'Nobody made it out', lede: '', sections: s.tour ? [{ kind: 'places', places: placesView(s.tour) }, { kind: 'bracket', bracket: bracketView(s.tour) }] : [] };
+      case 'ending': return { title: s.tour && s.tour.champion ? `${s.tour.champion.hero.name} won the tournament` : 'Nobody made it out', lede: '', hall: s.tour ? hallView(s.tour, null) : null, sections: s.tour ? [{ kind: 'places', places: placesView(s.tour) }, { kind: 'bracket', bracket: bracketView(s.tour) }] : [] };
       default: return { title: '', lede: '', sections: [] };
     }
   }
@@ -457,7 +457,8 @@ window.G = window.G || {};
     const h = opp.ghost ? opp.of : opp.hero;
     const ov = opp.ghost ? { s: opp.s, hp: opp.hp } : opp.hp != null ? { s: G.Stats.compute(h), hp: opp.hp } : null;
     return { name: opp.ghost ? opp.name : h.name, ghost: !!opp.ghost, bot: !opp.ghost && !!h.bot, hearts: h.hearts, level: h.level, build: buildLabel(h),
-      spec: h.spec ? G.SPECS[h.spec].name : 'No spec yet', gem: h.gem && !opp.ghost ? G.GEMS[h.gem].name : null, look: look(h), stats: statCols(h, ov), sets: setBonus(h) };
+      spec: h.spec ? G.SPECS[h.spec].name : 'No spec yet', gem: h.gem && !opp.ghost ? G.GEMS[h.gem].name : null, look: look(h), stats: statCols(h, ov), sets: setBonus(h),
+      gear: G.SLOTS.map(sl => itemView(h.gear[sl], null)) };   // their gear, for the item cards on hover (display only)
   }
   function shopScreen(s, p, S) {
     const sh = s.shop;
@@ -521,6 +522,12 @@ window.G = window.G || {};
     const out = T.entrants.filter(e => e.out).sort((a, b) => a.place - b.place).map(e => `${e.hero.isPlayer ? 'You' : e.hero.name} (${ord(e.place)})`);
     return { rounds, champion: T.champion ? { name: T.champion.hero.isPlayer ? 'You' : T.champion.hero.name, hearts: T.champion.hero.hearts } : null, out };
   }
+  // The tournament hall on the Godot stage (display only): everyone in it, who is out, who you fight next
+  function hallView(T, opp) {
+    return { entrants: T.entrants.map(e => ({ id: e.hero.id, name: e.hero.isPlayer ? 'You' : e.hero.name, me: !!e.hero.isPlayer, bot: !!e.hero.bot, look: look(e.hero),
+      hearts: e.hero.hearts, out: !!e.out, place: e.out || T.champion ? ord(e.place) : null, champion: !!(T.champion && T.champion.hero && T.champion.hero.id === e.hero.id) })),
+      opp: opp ? (opp.ghost ? { ghost: true, of: opp.of ? opp.of.id : null } : { id: opp.hero.id }) : null, round: T.rounds.length };
+  }
   const placesView = T => T.entrants.slice().sort((a, b) => a.place - b.place).map(e => ({ place: ord(e.place), name: e.hero.isPlayer ? 'You' : e.hero.name, me: !!e.hero.isPlayer }));
   function tournamentScreen(s, p, MP) {
     const T = s.tour, C = CFG();
@@ -533,6 +540,7 @@ window.G = window.G || {};
       return { title: won ? 'You are the last one standing' : `${T.champion.hero.name} wins the tournament`,
         lede: T.entrants.length === 1 ? 'Everyone else ran out of hearts in the dungeon.' : won ? 'Thirty rooms, a tournament, and nobody could stop you.' : 'You made it to the end. Next time, the crown.',
         notes: MP && MP.saveStatus ? [line(`Match database: ${MP.saveStatus === 'saved' ? 'this match was saved.' : MP.saveStatus === 'saving' ? 'saving…' : MP.saveStatus}`, 'hint')] : [],
+        hall: hallView(T, null),
         sections: [{ kind: 'places', places: placesView(T) }, { kind: 'bracket', bracket: bracketView(T) }, ...(!matched && !owner ? [{ kind: 'timer', label: 'The host can start a rematch in this room.' }] : []), { kind: 'buttons', buttons }] };
     }
     const round = G.Tournament.currentRound(T);
@@ -543,7 +551,7 @@ window.G = window.G || {};
     sections.push({ kind: 'bracket', bracket: bracketView(T) });
     sections.push(s.tourPhase === 'fight' ? { kind: 'timer', label: 'Fights in progress…' } : s.tourPhase === 'plunder' ? { kind: 'timer', label: 'Tournament Plunder in progress…' }
       : { kind: 'timer', label: m ? 'Your fight starts in' : 'Next fights start in', ends: s.roundEnds || 0 });
-    return { title: 'The Tournament', lede: !meE || meE.out ? 'You\'re out, so you\'re watching.' : 'Last one with hearts wins. Each round everyone is paired up again and starts the fight at full health. Losers lose a heart, against a ghost too. Fights go to the death; past one minute, both lose a heart.', sections };
+    return { title: 'The Tournament', hall: hallView(T, meE && !meE.out ? opp : null), lede: !meE || meE.out ? 'You\'re out, so you\'re watching.' : 'Last one with hearts wins. Each round everyone is paired up again and starts the fight at full health. Losers lose a heart, against a ghost too. Fights go to the death; past one minute, both lose a heart.', sections };
   }
 
   // ---------- Everything for one client ----------
@@ -598,7 +606,9 @@ window.G = window.G || {};
     const f = MP.lastFight[slot];
     if (vst.phase === 'battle' && f) {
       if (!watchFightMemo || watchFightMemo.f !== f) watchFightMemo = { f, res: f.res || G.simulateFight(...JSON.parse(JSON.stringify(f.args))) };
-      out.fight = { key: `${slot}:${f.at}`, title: f.title || (vst.battle && vst.battle.title) || 'Fight', res: watchFightMemo.res, visual: f.visual || {}, names: f.names || {}, mirror: !!f.mirror };
+      out.fight = { key: `${slot}:${f.at}`, title: f.title || (vst.battle && vst.battle.title) || 'Fight', res: watchFightMemo.res, visual: f.visual || {}, names: f.names || {},
+        // The one you watch is always on the left: in a duel or tournament fight where they're side b, mirror it
+        mirror: !!f.mirror || !!(f.names && f.names.b0 && f.names.b0 === out.name && f.names.a !== out.name) };
       return out;
     }
     // Their screen, built as if you were them ("You" means them)
