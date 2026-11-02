@@ -5,6 +5,10 @@
 extends Control
 
 const FULL_FLOOR := false
+static func use_full_floor(_prev: String) -> bool:
+	return false
+static func same_room(_prev: String) -> bool:
+	return false
 const DOOR_W := 96.0            # door sprites are 48x64, drawn at 2x
 const DOOR_H := 128.0
 var stage: StageView

@@ -8,6 +8,7 @@ var seen: Dictionary = {}
 var t := 0.0
 var started := false
 var shot_count := 0
+var picking := false   # an item pick (keys, waits) is in progress
 
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
@@ -21,6 +22,8 @@ func _ready() -> void:
 		DirAccess.make_dir_recursive_absolute(shots_dir)
 
 func _process(delta: float) -> void:
+	if picking:
+		return
 	t += delta
 	if "--title" in OS.get_cmdline_user_args():
 		if t > 2.0 and not started:
@@ -93,6 +96,8 @@ func _process(delta: float) -> void:
 	for style in ["primary", "normal", "ghost"]:
 		for b in btns:
 			if b.get("enabled", false) and str(b.get("style", "")) == style and not str(b.act).begins_with("ui_"):
+				if await _item_room_pick(b):
+					return
 				Game.act(str(b.act), b.get("args", []), b.get("mp", false))
 				return
 
@@ -107,3 +112,25 @@ func _key(code: Key) -> void:
 		k.keycode = code
 		k.pressed = down
 		get_viewport().push_input(k)
+
+# In an item room on the stage (armory, rewards, spoils): pick the item's number, then Enter, as a player would
+func _item_room_pick(b: Dictionary) -> bool:
+	picking = true
+	var r: bool = await _item_room_pick2(b)
+	picking = false
+	return r
+
+func _item_room_pick2(b: Dictionary) -> bool:
+	var mv = get_tree().root.find_child("Match", true, false)
+	var scene = mv.stage_view.scene if mv and mv.stage_view else null
+	if scene == null or not ("entries" in scene) or scene.gone:
+		return false
+	for e in scene.entries:
+		for x in e.c.get("buttons", []):
+			if str(x.get("act")) == str(b.act) and str(x.get("args")) == str(b.get("args")):
+				_key(KEY_1 + int(e.i))
+				await get_tree().create_timer(0.3).timeout
+				if is_instance_valid(scene) and not scene.gone:
+					_key(KEY_ENTER)
+				return true
+	return false

@@ -3,6 +3,10 @@
 extends Control
 
 const FULL_FLOOR := true
+static func use_full_floor(_prev: String) -> bool:
+	return true
+static func same_room(_prev: String) -> bool:
+	return false
 var stage: StageView
 var log_panel: PanelContainer
 
@@ -10,6 +14,8 @@ static func key_for(_sc: Dictionary) -> String:
 	return str(Game.s.get("battle", {}).get("title", "")) if Game.s.get("battle") is Dictionary else ""
 
 func build(_sc: Dictionary) -> void:
+	var me: Dictionary = Game.view.get("me", {})   # what you have now; after the fight the loot room shows what you got
+	stage.pre_battle = { "gold": me.get("gold", 0), "xp": me.get("xp", 0), "level": me.get("level", 1), "xpNeed": me.get("xpNeed", 0) }
 	var a: Control = stage.mv.arena
 	if a.get_parent():
 		a.get_parent().remove_child(a)

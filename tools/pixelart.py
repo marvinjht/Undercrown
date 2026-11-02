@@ -431,6 +431,37 @@ def door_sprite(kind):
     if kind != 'open': DOOR_DRAW[kind](s)
     return s.finish(shade=True, outline=True)
 
+# Room props for item rooms (props/<kind>.png, drawn at 2x): where an item sits in the armory and similar rooms
+def prop_rack():        # a weapon rack: two posts, a crossbar and pegs (the weapon hangs in front)
+    s = Spr(40, 48)
+    s.rect(3, 4, 4, 44, WOOD); s.rect(33, 4, 4, 44, WOOD)
+    s.rect(3, 10, 34, 3, WOOD_D); s.rect(3, 34, 34, 3, WOOD_D)
+    for x in (12, 20, 28): s.rect(x, 13, 2, 3, DSTEEL)
+    s.rect(1, 45, 38, 3, WOOD_D)
+    return s.finish()
+def prop_stand():       # a mannequin on a pole (armor is shown on it)
+    s = Spr(32, 56)
+    s.rect(15, 26, 2, 26, WOOD); s.rect(8, 51, 16, 4, WOOD_D)
+    s.ellipse(16, 8, 4, 4, hexc('#c8b090')); s.rect(9, 13, 14, 15, hexc('#b89a78')); s.rect(6, 14, 3, 9, hexc('#b89a78')); s.rect(23, 14, 3, 9, hexc('#b89a78'))
+    return s.finish()
+def prop_shelf():       # a small wooden shelf (bag items sit on it)
+    s = Spr(40, 32)
+    s.rect(2, 2, 36, 3, WOOD); s.rect(2, 17, 36, 3, WOOD); s.rect(2, 29, 36, 3, WOOD_D)
+    s.rect(2, 2, 3, 30, WOOD_D); s.rect(35, 2, 3, 30, WOOD_D)
+    return s.finish()
+def prop_pedestal():    # a stone pedestal (relics rest on it)
+    s = Spr(28, 28)
+    s.rect(4, 2, 20, 4, STONE); s.rect(7, 6, 14, 16, STONE_D); s.rect(3, 22, 22, 5, STONE)
+    return s.finish()
+def glow():             # a soft round glow, white (tinted in the game: red for artifacts)
+    from PIL import Image as _I
+    im = _I.new('RGBA', (32, 32), (0, 0, 0, 0))
+    for y in range(32):
+        for x in range(32):
+            d = math.hypot(x - 15.5, y - 15.5) / 16.0
+            if d < 1: im.putpixel((x, y), (255, 255, 255, int(200 * (1 - d) ** 2)))
+    return im
+
 def ui_bits():
     out = {}
     s = Spr(16); s.ellipse(8, 8, 5, 5, GOLD); s.rect(7, 5, 2, 6, hexc('#a07a2a')); out['coin'] = s.finish()
@@ -493,6 +524,8 @@ def main():
     for k in CLASS_DRAW: icon_class(k).save(f'icons/class_{k}.png')
     for k in SCRAP_COLOR: icon_scrap(k).save(f'icons/scrap_{k}.png')
     for k in list(DOOR_DRAW) + ['open']: door_sprite(k).save(f'doors/{k}.png')
+    for k, f in (('rack', prop_rack), ('stand', prop_stand), ('shelf', prop_shelf), ('pedestal', prop_pedestal)): f().save(f'props/{k}.png')
+    g = glow(); os.makedirs(os.path.join(ROOT, 'ui'), exist_ok=True); g.save(os.path.join(ROOT, 'ui', 'glow.png'))
     for k in HYBRID_COLOR: icon_hybrid(k).save(f'icons/hybrid_{k.replace("+", "_")}.png')
     frame(hexc('#1f1915'), hexc('#0e0b09'), hexc('#3d322a')).save('ui/panel.png', 2)
     frame(hexc('#2a221c'), hexc('#0e0b09'), hexc('#4d3f33')).save('ui/card.png', 2)

@@ -19,6 +19,9 @@ const MIN_EXIT := 0.22       # an exit animation (door opening) shows at least t
 const SCENES := {
 	"doors": preload("res://scripts/stage/doors_scene.gd"),
 	"battle": preload("res://scripts/stage/battle_scene.gd"),
+	"armory": preload("res://scripts/stage/armory_scene.gd"),
+	"reward": preload("res://scripts/stage/loot_scene.gd"),
+	"spoils": preload("res://scripts/stage/loot_scene.gd"),
 }
 const TINTS := { "Morning": Color(1.0, 0.97, 0.9), "Evening": Color(1.0, 0.83, 0.68), "Night": Color(0.64, 0.72, 1.0) }
 
@@ -34,6 +37,10 @@ var actors := {}               # heroes on the stage by id ("me" for now; rivals
 var exiting := false           # the hero is on the way out (door opening); the next room slides in when it arrives
 var _exit_at := 0
 var _pending = null            # a screen that arrived during the exit
+var _exit_min := MIN_EXIT
+var phase_now := ""            # the phase on stage now, and the one before it (loot after a fight stays in the fight room)
+var prev_phase := ""
+var pre_battle: Dictionary = {}   # your gold and XP when the last fight started (what you got shows up after it)
 
 func _ready() -> void:
 	clip_contents = true
@@ -84,7 +91,7 @@ func present(sc: Dictionary) -> bool:
 		# The next room is ready: let the exit show for a moment (never longer than it has to), then slide on
 		_pending = sc
 		overlay.visible = false
-		var left := MIN_EXIT - float(Time.get_ticks_msec() - _exit_at) / 1000.0
+		var left := _exit_min - float(Time.get_ticks_msec() - _exit_at) / 1000.0
 		if left > 0.0:
 			get_tree().create_timer(left).timeout.connect(_after_exit)
 		else:
@@ -102,9 +109,10 @@ func _after_exit() -> void:
 	_enter(SCENES.get(str(sc.get("phase", ""))), sc)
 
 # A scene asks to leave (the hero went through a door): the next room slides in as soon as the server sends it
-func begin_exit() -> void:
+func begin_exit(min_time := MIN_EXIT) -> void:
 	exiting = true
 	_exit_at = Time.get_ticks_msec()
+	_exit_min = min_time
 
 func _process(_d: float) -> void:
 	# Safety: if the server never moves on (a refused choice), come back after a few seconds
@@ -115,11 +123,14 @@ func _process(_d: float) -> void:
 		mv._on_changed("stage")
 
 func _enter(S, sc: Dictionary) -> void:
+	prev_phase = phase_now
+	phase_now = str(sc.get("phase", ""))
 	_banner(sc)
 	for c in ui.get_children():
 		c.queue_free()
 	var old := layer
-	layer = _new_layer(S != null and S.FULL_FLOOR)   # a fight's room is all floor, like the arena
+	var same: bool = S != null and S.same_room(prev_phase)   # e.g. the loot after a fight: no new room
+	layer = _new_layer(S != null and S.use_full_floor(prev_phase))   # a fight's room is all floor, like the arena
 	add_child(layer)
 	move_child(layer, 0)
 	actors = {}
@@ -136,7 +147,10 @@ func _enter(S, sc: Dictionary) -> void:
 	layer.modulate = tint
 	_layout()
 	overlay.visible = false
-	if old and is_instance_valid(old):
+	if old and is_instance_valid(old) and same:
+		old.queue_free()
+		_show_overlay(false)
+	elif old and is_instance_valid(old):
 		var w := size.x
 		layer.position.x = w
 		var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -186,12 +200,13 @@ func _new_layer(full_floor: bool) -> Control:
 	world.size = Vector2(W, H)
 	world.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	l.add_child(world)
-	if not full_floor:
-		for x in [40.0, W - 56.0]:
+	var torches := [Vector2(46, 22), Vector2(W - 62, 22), Vector2(46, H - 66), Vector2(W - 62, H - 66)] if full_floor else [Vector2(40, 110), Vector2(W - 56, 110)]
+	if true:
+		for tp in torches:
 			var tch := Sprite2D.new()
 			tch.texture = Art.tex("res://art/ui/torch.png")
 			tch.centered = false
-			tch.position = Vector2(x, 110)
+			tch.position = tp
 			tch.scale = Vector2(2, 2)
 			world.add_child(tch)
 			var tw := tch.create_tween().set_loops()

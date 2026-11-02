@@ -307,6 +307,8 @@ window.G = window.G || {};
   const nameOf = e => (e.ghost ? e.name : e.hero.isPlayer ? 'You' : e.hero.name);
 
   // A door's plaque: a few words always visible above it on the Godot stage ("Fight · Wolf Pack ×3", "Study · +15 XP")
+  // What each Spoils of war choice looks like when it lies on the floor (Godot stage)
+  const SPOIL_ICON = { gold: 'coin', xp: 'potion_tome', dmg: 'potion_fury', hp: 'heart', gear: 'chest' };
   function doorPlaque(d) {
     const C = CFG(), D = G.Dungeon;
     switch (d.type) {
@@ -353,7 +355,7 @@ window.G = window.G || {};
             { kind: 'buttons', buttons: [btn(o.gold ? `Leave the items, take ${o.gold} gold` : 'Take nothing', 'takeGold', [], { style: 'ghost' })] }, { kind: 'character' }] };
       }
       case 'spoils': return { title: 'Victory', lede: s.spoilsText || '',
-        sections: [{ kind: 'cards', cards: s.spoils.map(o => textCard(o.title, [o.text], [btn('Take it', 'takeSpoils', [o.id], { style: 'primary' })])) }, { kind: 'character' }] };
+        sections: [{ kind: 'cards', cards: s.spoils.map(o => textCard(o.title, [o.text], [btn('Take it', 'takeSpoils', [o.id], { style: 'primary' })], { icon: SPOIL_ICON[o.id] || 'gem' })) }, { kind: 'character' }] };
       case 'mystery': {
         const m = s.mystery, b = [];
         if (m.id === 'spring') b.push(btn(`Drink (+${C.springHeal} health)`, 'mysteryAct', ['spring'], { style: 'primary' }));

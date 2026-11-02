@@ -11,6 +11,7 @@ extends MarginContainer
 
 var arena: Control
 var stage_view: StageView      # the center column: the persistent stage (rooms, doors, fights)
+var char_panel: Control        # your character panel (left column): gold and XP fly to it
 var battle_key := ""
 var _last_res = null            # the fight result on screen (a new result object = a new fight)
 var _battle_n := 0
@@ -284,7 +285,8 @@ func _build_left() -> void:
 	p.add_child(v)
 	left.add_child(p)
 	# You: your character panel (full column width)
-	left.add_child(Kit.character_panel(V.get("me", {})))
+	char_panel = Kit.character_panel(V.get("me", {}))
+	left.add_child(char_panel)
 
 # Crafting (CONFIG.scrap): pick the scrap, then Weapon or Armor, then exactly what. One craft spends `cost` scraps.
 func _craft_box(bv: VBoxContainer, scrap: Dictionary, locked: bool) -> void:
